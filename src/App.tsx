@@ -195,8 +195,8 @@ type Resolution = '2k' | '4k' | '8k';
 interface HistoryItem {
   id: string;
   prompt: string;
-  url: string;           
-  originalUrl: string;   
+  url: string;           // Result URL or Placeholder Blob
+  originalUrl: string;   // For the Slider
   date: string;
   status: 'loading' | 'completed' | 'failed';
   mode: AppMode;
@@ -290,17 +290,10 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedHistoryItem) return;
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsFlipped(prev => !prev);
-      } else if (e.code === 'ArrowRight') {
-        handleNextHistory();
-      } else if (e.code === 'ArrowLeft') {
-        handlePrevHistory();
-      } else if (e.code === 'Escape') {
-        setSelectedHistoryItem(null);
-      }
+      if (e.code === 'Space') { e.preventDefault(); setIsFlipped(prev => !prev); }
+      else if (e.code === 'Escape') { setSelectedHistoryItem(null); }
+      else if (e.code === 'ArrowRight') { handleNextHistory(); }
+      else if (e.code === 'ArrowLeft') { handlePrevHistory(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -339,17 +332,14 @@ export default function App() {
 
     const taskId = Date.now().toString();
     const base64ImageRaw = await fileToBase64(selectedFile);
-    
-    // Create a temporary object URL for the placeholder to avoid storing massive Base64 strings in DB
-    const temporaryUrl = URL.createObjectURL(selectedFile);
-    const executionPrompt = mode === 'upscaler' ? `Upscaled to ${(targetResolution || '4k').toUpperCase()}` : prompt;
+    const executionPrompt = mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt;
 
-    // 1. Inject Placeholder into History
+    // 1. Inject Placeholder into History using Base64 for Persistence
     const placeholderItem: HistoryItem = {
       id: taskId,
       prompt: executionPrompt,
-      url: temporaryUrl,
-      originalUrl: temporaryUrl,
+      url: base64ImageRaw,
+      originalUrl: base64ImageRaw,
       date: new Date().toISOString(),
       status: 'loading',
       mode: mode,
@@ -359,6 +349,9 @@ export default function App() {
     setHistory(prev => [placeholderItem, ...prev]);
     setCurrentViewId(taskId);
     setActiveTasks(prev => ({ ...prev, [taskId]: 5 }));
+    
+    // Save to Disk right away
+    await saveHistoryItem(placeholderItem);
 
     // 2. Reset UI for next concurrent request
     setSelectedFile(null);
@@ -366,10 +359,10 @@ export default function App() {
     if (mode === 'editor') setPrompt('');
 
     // 3. Fire Background Process (Non-Blocking)
-    runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution, temporaryUrl);
+    runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution);
   };
 
-  const runBackgroundTask = async (id: string, base64: string, appMode: AppMode, execPrompt: string, resolution: Resolution, tempUrl: string) => {
+  const runBackgroundTask = async (id: string, base64: string, appMode: AppMode, execPrompt: string, resolution: Resolution) => {
     try {
       let finalUrl = '';
       if (appMode === 'upscaler') {
@@ -378,13 +371,13 @@ export default function App() {
         finalUrl = await triggerWavespeed(id, base64, execPrompt);
       }
 
-      // Success - Update History Item and save FINAL URL to IndexedDB
+      // Success - Update History Item and replace base64 with real URL
       setHistory(prev => prev.map(h => {
         if (h.id === id) {
           const finished: HistoryItem = { 
             ...h, 
             url: finalUrl, 
-            originalUrl: finalUrl, // Replace the original URL with the final URL so we don't rely on the object URL
+            originalUrl: finalUrl, // Keep it synced
             status: 'completed' 
           };
           saveHistoryItem(finished); // Async save to infinite DB
@@ -393,11 +386,10 @@ export default function App() {
         return h;
       }));
 
-      // Cleanup Task Queue
       setActiveTasks(prev => { const next = {...prev}; delete next[id]; return next; });
 
     } catch (err: any) {
-      console.error(err);
+      console.error("Background task failed:", err);
       setHistory(prev => prev.map(h => {
         if (h.id === id) {
           const failedTask: HistoryItem = { ...h, status: 'failed' };
@@ -410,6 +402,7 @@ export default function App() {
     }
   };
 
+  // --- IRONCLAD SAFE PARSER FOR UPSCALER ---
   const triggerWavespeedUpscale = async (id: string, base64Image: string, resTarget: Resolution): Promise<string> => {
     const res = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/image-upscaler", {
       method: "POST",
@@ -417,8 +410,14 @@ export default function App() {
       body: JSON.stringify({ enable_base64_output: false, image: base64Image, target_resolution: resTarget })
     });
     
+    const text = await res.text();
     let triggerData;
-    try { triggerData = await res.json(); } catch (e) { throw new Error(`Failed to parse server response.`); }
+    try { 
+      triggerData = JSON.parse(text); 
+    } catch (e) { 
+      throw new Error(`Invalid API Response`); 
+    }
+    
     if (!res.ok) throw new Error(triggerData.message || triggerData.error || 'API Error');
 
     const remoteId = triggerData.id || triggerData.request_id || triggerData.data?.id;
@@ -429,24 +428,41 @@ export default function App() {
     while (!isCompleted && pollCount < 150) {
       await new Promise(r => setTimeout(r, 2000));
       pollCount++;
+      
       const poll = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${remoteId}`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
-      const pollData = await poll.json();
+      const pollText = await poll.text();
+      
+      let pollData;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch (e) {
+        if (poll.status === 404) continue; // Server database is catching up. Skip this tick.
+        continue; // Bad response, skip this tick.
+      }
+
       const status = (pollData.status || pollData.data?.status || '').toLowerCase();
 
       if (status === "completed" || status === "succeeded") {
         setActiveTasks(prev => ({...prev, [id]: 95}));
+        
         const result = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${remoteId}/result`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
-        const resData = await result.json();
+        const resText = await result.text();
+        
+        let resData;
+        try { resData = JSON.parse(resText); } catch(e) { throw new Error("Failed to parse result"); }
+
         const outputs = resData.outputs || resData.data?.outputs || pollData.outputs;
-        if (outputs?.[0]) return outputs[0];
+        if (outputs?.[0]) return typeof outputs[0] === 'string' ? outputs[0] : outputs[0].url;
         throw new Error("Upscale succeeded but no URL was returned.");
-      } else if (status === "failed") {
-        throw new Error(pollData.error || "Upscale failed.");
+        
+      } else if (status === "failed" || status === "error") {
+        throw new Error(pollData.error || pollData.data?.error || "Upscale failed.");
       }
     }
     throw new Error('Polling timed out.');
   };
 
+  // --- IRONCLAD SAFE PARSER FOR EDITOR ---
   const triggerWavespeed = async (id: string, base64Image: string, execPrompt: string): Promise<string> => {
     const res = await fetch('https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit', {
       method: 'POST',
@@ -461,11 +477,17 @@ export default function App() {
       })
     });
     
-    let data;
-    try { data = await res.json(); } catch (e) { throw new Error(`Failed to parse server response.`); }
-    if (!res.ok) throw new Error(data.message || data.error || 'Trigger failed.');
+    const text = await res.text();
+    let triggerData;
+    try { 
+      triggerData = JSON.parse(text); 
+    } catch (e) { 
+      throw new Error(`Invalid API Response`); 
+    }
 
-    const remoteId = data.id || data.request_id || data.data?.id;
+    if (!res.ok) throw new Error(triggerData.message || triggerData.error || 'Trigger failed.');
+
+    const remoteId = triggerData.id || triggerData.request_id || triggerData.data?.id;
     if (!remoteId) throw new Error(`Server responded but no ID was found.`);
 
     let isCompleted = false;
@@ -474,12 +496,21 @@ export default function App() {
       await new Promise(r => setTimeout(r, 2000));
       pollCount++;
       
-      const pollUrl = data.request_id 
+      const pollUrl = triggerData.request_id 
         ? `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${remoteId}/status`
         : `https://api.wavespeed.ai/api/v3/predictions/${remoteId}`;
 
       const poll = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
-      const pollData = await poll.json();
+      const pollText = await poll.text();
+      
+      let pollData;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch (e) {
+        if (poll.status === 404) continue; // Server database is catching up. Skip this tick.
+        continue; // Bad response, skip this tick.
+      }
+
       const status = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
 
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
@@ -538,7 +569,7 @@ export default function App() {
 
   // --- Active State Helpers ---
   const activeViewItem = history.find(h => h.id === currentViewId) || history[0];
-  const activeTaskIds = Object.keys(activeTasks);
+  const activeTaskIds = history.filter(h => h.status === 'loading').map(h => h.id).reverse();
   const activeTaskCount = activeTaskIds.length;
 
   return (
@@ -633,7 +664,14 @@ export default function App() {
                       <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-black/20">
                         <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-20 blur-xl" />
                         <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6">
-                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} pos={activeTaskIds.indexOf(activeViewItem.id) + 1} total={activeTaskCount} />
+                          
+                          {/* UPDATED: Pass positional props directly to the ProcessingBar */}
+                          <ProcessingBar 
+                            progress={activeTasks[activeViewItem.id] || 5} 
+                            pos={activeTaskIds.indexOf(activeViewItem.id) + 1}
+                            total={activeTaskCount}
+                          />
+                          
                           <div className="flex items-center gap-3 bg-black/60 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
                             <Loader2 className="w-4 h-4 text-accent animate-spin" />
                             <span className="text-[10px] font-mono text-white uppercase tracking-widest">
@@ -723,7 +761,7 @@ export default function App() {
                   </div>
                 )}
                 
-                <img src={item.status === 'completed' ? item.url : item.originalUrl} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
+                <img src={item.url} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
                 
                 <button 
                   onClick={(e) => handleDeleteHistory(item.id, e)} 
@@ -733,7 +771,7 @@ export default function App() {
                 </button>
                 
                 <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode?.toUpperCase()}</p>
+                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode.toUpperCase()}</p>
                 </div>
               </div>
             ))}
