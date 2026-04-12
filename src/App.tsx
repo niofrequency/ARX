@@ -107,7 +107,7 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const ProcessingBar = ({ progress }: { progress: number }) => {
+const ProcessingBar = ({ progress, pos, total }: { progress: number, pos?: number, total?: number }) => {
   const totalSegments = 10;
   const litSegments = (progress / 100) * totalSegments;
 
@@ -133,9 +133,9 @@ const ProcessingBar = ({ progress }: { progress: number }) => {
           );
         })}
       </div>
-      <div className="absolute z-10 px-4 py-1 bg-[#0a0f14]/80 backdrop-blur-md border border-accent/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+      <div className="absolute z-10 px-5 py-1.5 bg-[#0a0f14]/80 backdrop-blur-md border border-accent/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
         <span className="text-[10px] sm:text-xs font-mono tracking-widest text-accent font-bold drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
-          {Math.round(progress)}%
+          {Math.round(progress)}%{total && total > 1 ? ` • QUEUE: ${pos}/${total}` : ''}
         </span>
       </div>
     </div>
@@ -195,8 +195,8 @@ type Resolution = '2k' | '4k' | '8k';
 interface HistoryItem {
   id: string;
   prompt: string;
-  url: string;           // Result URL or Placeholder Blob
-  originalUrl: string;   // For the Slider
+  url: string;           
+  originalUrl: string;   
   date: string;
   status: 'loading' | 'completed' | 'failed';
   mode: AppMode;
@@ -234,6 +234,20 @@ export default function App() {
     getHistoryDB().then(data => {
       setHistory(data);
       if (data.length > 0) setCurrentViewId(data[0].id);
+
+      // Clean up orphaned loading tasks from previous sessions
+      const orphanedTasks = data.filter(item => item.status === 'loading');
+      if (orphanedTasks.length > 0) {
+        const cleanup = async () => {
+          for (const task of orphanedTasks) {
+            const failedTask = { ...task, status: 'failed' as const };
+            await saveHistoryItem(failedTask);
+          }
+          const newData = await getHistoryDB();
+          setHistory(newData);
+        };
+        cleanup();
+      }
     }).catch(console.error);
   }, []);
 
@@ -276,17 +290,27 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedHistoryItem) return;
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-      if (e.code === 'Space') { e.preventDefault(); setIsFlipped(prev => !prev); }
-      else if (e.code === 'Escape') { setSelectedHistoryItem(null); }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsFlipped(prev => !prev);
+      } else if (e.code === 'ArrowRight') {
+        handleNextHistory();
+      } else if (e.code === 'ArrowLeft') {
+        handlePrevHistory();
+      } else if (e.code === 'Escape') {
+        setSelectedHistoryItem(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedHistoryItem]);
+  }, [selectedHistoryItem, history]);
 
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) { setError('Invalid image file.'); return; }
+    const url = URL.createObjectURL(file);
     setSelectedFile(file); 
-    setPreviewUrl(URL.createObjectURL(file)); 
+    setPreviewUrl(url); 
     setError(null);
   };
 
@@ -315,15 +339,17 @@ export default function App() {
 
     const taskId = Date.now().toString();
     const base64ImageRaw = await fileToBase64(selectedFile);
-    const objectUrl = previewUrl || '';
-    const executionPrompt = mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt;
+    
+    // Create a temporary object URL for the placeholder to avoid storing massive Base64 strings in DB
+    const temporaryUrl = URL.createObjectURL(selectedFile);
+    const executionPrompt = mode === 'upscaler' ? `Upscaled to ${(targetResolution || '4k').toUpperCase()}` : prompt;
 
     // 1. Inject Placeholder into History
     const placeholderItem: HistoryItem = {
       id: taskId,
       prompt: executionPrompt,
-      url: objectUrl,
-      originalUrl: objectUrl,
+      url: temporaryUrl,
+      originalUrl: temporaryUrl,
       date: new Date().toISOString(),
       status: 'loading',
       mode: mode,
@@ -340,10 +366,10 @@ export default function App() {
     if (mode === 'editor') setPrompt('');
 
     // 3. Fire Background Process (Non-Blocking)
-    runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution);
+    runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution, temporaryUrl);
   };
 
-  const runBackgroundTask = async (id: string, base64: string, appMode: AppMode, execPrompt: string, resolution: Resolution) => {
+  const runBackgroundTask = async (id: string, base64: string, appMode: AppMode, execPrompt: string, resolution: Resolution, tempUrl: string) => {
     try {
       let finalUrl = '';
       if (appMode === 'upscaler') {
@@ -352,10 +378,15 @@ export default function App() {
         finalUrl = await triggerWavespeed(id, base64, execPrompt);
       }
 
-      // Success - Update History Item
+      // Success - Update History Item and save FINAL URL to IndexedDB
       setHistory(prev => prev.map(h => {
         if (h.id === id) {
-          const finished: HistoryItem = { ...h, url: finalUrl, status: 'completed' };
+          const finished: HistoryItem = { 
+            ...h, 
+            url: finalUrl, 
+            originalUrl: finalUrl, // Replace the original URL with the final URL so we don't rely on the object URL
+            status: 'completed' 
+          };
           saveHistoryItem(finished); // Async save to infinite DB
           return finished;
         }
@@ -367,7 +398,14 @@ export default function App() {
 
     } catch (err: any) {
       console.error(err);
-      setHistory(prev => prev.map(h => h.id === id ? { ...h, status: 'failed' } : h));
+      setHistory(prev => prev.map(h => {
+        if (h.id === id) {
+          const failedTask: HistoryItem = { ...h, status: 'failed' };
+          saveHistoryItem(failedTask);
+          return failedTask;
+        }
+        return h;
+      }));
       setActiveTasks(prev => { const next = {...prev}; delete next[id]; return next; });
     }
   };
@@ -423,7 +461,8 @@ export default function App() {
       })
     });
     
-    const data = await res.json();
+    let data;
+    try { data = await res.json(); } catch (e) { throw new Error(`Failed to parse server response.`); }
     if (!res.ok) throw new Error(data.message || data.error || 'Trigger failed.');
 
     const remoteId = data.id || data.request_id || data.data?.id;
@@ -483,6 +522,20 @@ export default function App() {
     if (currentViewId === id) setCurrentViewId(history.find(h => h.id !== id)?.id || null);
   };
 
+  const handleNextHistory = () => {
+    if (history.length < 2) return;
+    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
+    setSelectedHistoryItem(history[(idx + 1) % history.length]);
+    setIsFlipped(false);
+  };
+
+  const handlePrevHistory = () => {
+    if (history.length < 2) return;
+    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
+    setSelectedHistoryItem(history[(idx - 1 + history.length) % history.length]);
+    setIsFlipped(false);
+  };
+
   // --- Active State Helpers ---
   const activeViewItem = history.find(h => h.id === currentViewId) || history[0];
   const activeTaskIds = Object.keys(activeTasks);
@@ -505,10 +558,10 @@ export default function App() {
         {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-10">
           <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner">
-            <button onClick={() => setMode('editor')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'editor' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'text-text-secondary hover:text-white'}`}>
+            <button onClick={() => setMode('editor')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${mode === 'editor' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}>
               <Sparkles className="w-4 h-4 inline mr-2" /> Editor
             </button>
-            <button onClick={() => setMode('upscaler')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'upscaler' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'text-text-secondary hover:text-white'}`}>
+            <button onClick={() => setMode('upscaler')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${mode === 'upscaler' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}>
               <Maximize className="w-4 h-4 inline mr-2" /> Upscaler
             </button>
           </div>
@@ -526,7 +579,7 @@ export default function App() {
               {mode === 'upscaler' ? (
                 <div className="bg-white/[0.02] p-5 border border-border rounded-2xl grid grid-cols-3 gap-3">
                   {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
-                    <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'}`}>{res}</button>
+                    <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'}`}>{res}</button>
                   ))}
                 </div>
               ) : (
@@ -580,7 +633,7 @@ export default function App() {
                       <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-black/20">
                         <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-20 blur-xl" />
                         <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6">
-                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} />
+                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} pos={activeTaskIds.indexOf(activeViewItem.id) + 1} total={activeTaskCount} />
                           <div className="flex items-center gap-3 bg-black/60 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
                             <Loader2 className="w-4 h-4 text-accent animate-spin" />
                             <span className="text-[10px] font-mono text-white uppercase tracking-widest">
@@ -612,7 +665,7 @@ export default function App() {
                           </div>
                         </div>
                         <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white">
-                          Enhanced ({activeViewItem.resolution || '4K'})
+                          Enhanced ({activeViewItem.resolution?.toUpperCase() || '4K'})
                         </div>
                         <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
                           Original
@@ -670,7 +723,7 @@ export default function App() {
                   </div>
                 )}
                 
-                <img src={item.url} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
+                <img src={item.status === 'completed' ? item.url : item.originalUrl} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
                 
                 <button 
                   onClick={(e) => handleDeleteHistory(item.id, e)} 
@@ -680,7 +733,7 @@ export default function App() {
                 </button>
                 
                 <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode.toUpperCase()}</p>
+                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode?.toUpperCase()}</p>
                 </div>
               </div>
             ))}
@@ -727,6 +780,8 @@ export default function App() {
                     )}
                   </div>
                 </motion.div>
+                <button onClick={handlePrevHistory} className="fixed left-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/10 text-white/70 hover:text-white transition-all hover:scale-110"><ChevronLeft className="w-8 h-8" /></button>
+                <button onClick={handleNextHistory} className="fixed right-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/10 text-white/70 hover:text-white transition-all hover:scale-110"><ChevronRight className="w-8 h-8" /></button>
               </div>
             </div>
           </>
