@@ -107,7 +107,8 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const ProcessingBar = ({ progress }: { progress: number }) => {
+// Added pos and total props to track the queue inside the bar
+const ProcessingBar = ({ progress, pos, total }: { progress: number, pos?: number, total?: number }) => {
   const totalSegments = 10;
   const litSegments = (progress / 100) * totalSegments;
 
@@ -133,9 +134,9 @@ const ProcessingBar = ({ progress }: { progress: number }) => {
           );
         })}
       </div>
-      <div className="absolute z-10 px-4 py-1 bg-[#0a0f14]/80 backdrop-blur-md border border-accent/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+      <div className="absolute z-10 px-5 py-1.5 bg-[#0a0f14]/80 backdrop-blur-md border border-accent/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
         <span className="text-[10px] sm:text-xs font-mono tracking-widest text-accent font-bold drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
-          {Math.round(progress)}%
+          {Math.round(progress)}%{total && total > 1 ? ` • QUEUE: ${pos}/${total}` : ''}
         </span>
       </div>
     </div>
@@ -575,18 +576,23 @@ export default function App() {
                 {activeViewItem ? (
                   <motion.div key={activeViewItem.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-4">
                     
-                    {/* LOADING STATE WITH TRACKER */}
+                    {/* LOADING STATE WITH QUEUE TRACKER */}
                     {activeViewItem.status === 'loading' && (
                       <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-black/20">
                         <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-20 blur-xl" />
                         <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6">
-                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} />
+                          
+                          {/* UPDATED: Pass positional props directly to the ProcessingBar */}
+                          <ProcessingBar 
+                            progress={activeTasks[activeViewItem.id] || 5} 
+                            pos={activeTaskIds.indexOf(activeViewItem.id) + 1}
+                            total={activeTaskCount}
+                          />
+                          
                           <div className="flex items-center gap-3 bg-black/60 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
                             <Loader2 className="w-4 h-4 text-accent animate-spin" />
                             <span className="text-[10px] font-mono text-white uppercase tracking-widest">
-                              {activeTaskCount > 1 
-                                ? `Processing Task ${activeTaskIds.indexOf(activeViewItem.id) + 1}/${activeTaskCount}`
-                                : `Processing Task...`}
+                              Processing Task {activeViewItem.id.slice(-4)}
                             </span>
                           </div>
                         </div>
