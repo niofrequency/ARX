@@ -438,7 +438,7 @@ export default function App() {
       headers: {
         "Authorization": `Bearer ${wavespeedKey}`
       },
-      // Note: Do NOT set Content-Type header when using FormData; the browser sets it automatically with the correct boundary
+      // Note: Do NOT set Content-Type header when using FormData
       body: formData 
     });
 
@@ -493,11 +493,25 @@ export default function App() {
       throw new Error(`API Rejected Request: ${errorReason}`);
     }
 
+    // Fix for 404 Endpoint Mismatch: Dynamically route the polling URL
+    let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
+    let targetResultUrl = triggerData.response_url;
+
+    if (!pollUrl) {
+      if (triggerData.request_id || triggerData.data?.request_id) {
+        pollUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/image-upscaler/requests/${id}/status`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/image-upscaler/requests/${id}`;
+      } else {
+        pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
+      }
+    }
+
     setRequestId(id);
     setStatus('processing');
     setStatusMessage('Enhancing Resolution & Details...');
 
-    // 3. Polling Loop
+    // 3. Robust Polling Loop (Handles early 404 propagation delays)
     let isCompleted = false;
     let pollCount = 0;
     let finalImageUri = '';
@@ -507,40 +521,51 @@ export default function App() {
       await new Promise(r => setTimeout(r, 2000));
       pollCount++;
 
-      const pollResponse = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}`, {
+      const pollResponse = await fetch(pollUrl, {
         headers: { "Authorization": `Bearer ${wavespeedKey}` }
       });
 
-      if (!pollResponse.ok) throw new Error('Wavespeed polling failed.');
+      if (!pollResponse.ok) {
+        // If the task hasn't propagated to the worker DB yet, it throws a temporary 404. Let it retry.
+        if (pollResponse.status === 404 && pollCount < 10) {
+          continue;
+        }
+        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
+      }
 
       const pollData = await pollResponse.json();
-      const currentStatus = (pollData.status || pollData.data?.status || '').toLowerCase();
+      const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
 
-      if (currentStatus === "completed" || currentStatus === "succeeded") {
+      if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
         setProgress(90);
         setStatusMessage('Fetching final high-res image...');
 
         // Check if outputs are returned directly in the polling response first
-        let outputs = pollData.outputs || pollData.data?.outputs;
+        let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
 
         if (!outputs || outputs.length === 0) {
           // Fallback to the dedicated result endpoint
-          const resultResponse = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}/result`, {
+          const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
+          const resultResponse = await fetch(fetchTarget, {
             headers: { "Authorization": `Bearer ${wavespeedKey}` }
           });
           
           if (!resultResponse.ok) throw new Error('Failed to fetch final upscale result.');
           const resultData = await resultResponse.json();
-          outputs = resultData.outputs || resultData.data?.outputs;
+          outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
         }
 
         if (outputs && outputs.length > 0) {
-          finalImageUri = outputs[0];
+          let finalImage = outputs[0];
+          if (typeof finalImage === 'object' && finalImage !== null) {
+              finalImage = finalImage.url || finalImage.file?.url;
+          }
+          finalImageUri = finalImage;
           isCompleted = true;
         } else {
           throw new Error("Upscale succeeded but no output URL was found in the result data.");
         }
-      } else if (currentStatus === "failed" || currentStatus === "error") {
+      } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
         throw new Error(pollData.error || pollData.data?.error || "Upscaling task failed on the server.");
       } else {
         setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
@@ -584,7 +609,7 @@ export default function App() {
     if (!id) throw new Error(`Server responded successfully but no ID was found.`);
 
     if (!pollUrl) {
-      if (triggerData.request_id) {
+      if (triggerData.request_id || triggerData.data?.request_id) {
         pollUrl = `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${id}/status`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${id}`;
       } else {
@@ -610,7 +635,13 @@ export default function App() {
         headers: { 'Authorization': `Bearer ${wavespeedKey}` } 
       });
       
-      if (!pollResponse.ok) throw new Error('Wavespeed polling failed.');
+      if (!pollResponse.ok) {
+        // Handle 404 propagation delay
+        if (pollResponse.status === 404 && pollCount < 10) {
+          continue;
+        }
+        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
+      }
 
       const pollData = await pollResponse.json();
       const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
@@ -673,7 +704,8 @@ export default function App() {
       a.click();
       document.body.removeChild(a);
       
-      window.URL.revokeObjectURL(blobUrl);
+      // Delay blob revoke to prevent ERR_FILE_NOT_FOUND in the browser downloader
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
       window.open(url, '_blank');
     }
