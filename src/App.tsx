@@ -391,12 +391,12 @@ export default function App() {
         }
       }, 100);
 
-      const base64ImageRaw = await fileToBase64(selectedFile);
-      setProgress(15);
-      
+      // Branch logic: Upscaler uses binary upload, Editor uses Base64
       if (mode === 'upscaler') {
-        await triggerWavespeedUpscale(base64ImageRaw);
+        await triggerWavespeedUpscale(selectedFile);
       } else {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        setProgress(15);
         await triggerWavespeed(base64ImageRaw);
       } 
     } catch (err: any) {
@@ -425,11 +425,42 @@ export default function App() {
   };
 
   // --- WAVESPEED LOGIC (Upscaler API) ---
-  const triggerWavespeedUpscale = async (base64Image: string) => {
+  const triggerWavespeedUpscale = async (file: File) => {
+    // 1. Upload File as Binary (Best Practice for large upscaling assets)
+    setStatusMessage('Uploading Asset to Secure CDN...');
+    setProgress(10);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadRes = await fetch("https://api.wavespeed.ai/api/v3/media/upload/binary", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${wavespeedKey}`
+      },
+      // Note: Do NOT set Content-Type header when using FormData; the browser sets it automatically with the correct boundary
+      body: formData 
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error('Asset upload failed. Please try a smaller file or check your connection.');
+    }
+
+    const uploadData = await uploadRes.json();
+    const cdnUrl = uploadData.data?.download_url || uploadData.url;
+
+    if (!cdnUrl) {
+      throw new Error('Failed to retrieve CDN URL after upload.');
+    }
+
+    // 2. Trigger Upscaler Endpoint
+    setStatusMessage('Initiating Resolution Enhancement...');
+    setProgress(25);
+
     const payload = {
       enable_base64_output: false,
       enable_sync_mode: false,
-      image: base64Image,
+      image: cdnUrl,
       output_format: "jpeg",
       target_resolution: targetResolution
     };
@@ -455,8 +486,6 @@ export default function App() {
       throw new Error(`Wavespeed API Error: ${serverMsg}`);
     }
 
-    setProgress(25);
-
     const id = triggerData.id || triggerData.request_id || triggerData.task_id || triggerData.uuid || triggerData.data?.id || triggerData.data?.request_id;
 
     if (!id) {
@@ -468,6 +497,7 @@ export default function App() {
     setStatus('processing');
     setStatusMessage('Enhancing Resolution & Details...');
 
+    // 3. Polling Loop
     let isCompleted = false;
     let pollCount = 0;
     let finalImageUri = '';
@@ -490,14 +520,19 @@ export default function App() {
         setProgress(90);
         setStatusMessage('Fetching final high-res image...');
 
-        const resultResponse = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}/result`, {
-          headers: { "Authorization": `Bearer ${wavespeedKey}` }
-        });
-        
-        if (!resultResponse.ok) throw new Error('Failed to fetch final upscale result.');
-        const resultData = await resultResponse.json();
-        
-        const outputs = resultData.outputs || resultData.data?.outputs || pollData.outputs || pollData.data?.outputs;
+        // Check if outputs are returned directly in the polling response first
+        let outputs = pollData.outputs || pollData.data?.outputs;
+
+        if (!outputs || outputs.length === 0) {
+          // Fallback to the dedicated result endpoint
+          const resultResponse = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}/result`, {
+            headers: { "Authorization": `Bearer ${wavespeedKey}` }
+          });
+          
+          if (!resultResponse.ok) throw new Error('Failed to fetch final upscale result.');
+          const resultData = await resultResponse.json();
+          outputs = resultData.outputs || resultData.data?.outputs;
+        }
 
         if (outputs && outputs.length > 0) {
           finalImageUri = outputs[0];
