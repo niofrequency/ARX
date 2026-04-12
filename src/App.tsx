@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Trash2,
   Maximize,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -171,7 +172,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
           <img src={preview} alt="Preview" className="max-h-[140px] w-full object-cover rounded-xl" />
           <div className="absolute inset-0 bg-bg/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
             <span className="text-accent text-[10px] sm:text-xs font-bold uppercase tracking-widest bg-black/40 px-3 py-1.5 rounded-full border border-white/5">Replace Asset</span>
-            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-bold uppercase tracking-widest bg-black/60 border border-white/10 px-4 py-1.5 rounded-full hover:bg-red-50 hover:text-white transition-colors">Clear</button>
+            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-bold uppercase tracking-widest bg-black/60 border border-white/10 px-4 py-1.5 rounded-full hover:bg-red-500 hover:text-white transition-colors">Clear</button>
           </div>
         </div>
       ) : (
@@ -188,15 +189,18 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 };
 
 // --- Types ---
-type GenerationStatus = 'idle' | 'uploading' | 'triggering' | 'processing' | 'fetching' | 'completed' | 'failed';
 type AppMode = 'editor' | 'upscaler';
 type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
   id: string;
   prompt: string;
-  url: string;
+  url: string;           // Result URL or Placeholder Blob
+  originalUrl: string;   // For the Slider
   date: string;
+  status: 'loading' | 'completed' | 'failed';
+  mode: AppMode;
+  resolution?: Resolution;
 }
 
 export default function App() {
@@ -204,18 +208,16 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [prompt, setPrompt] = useState<string>('');
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
-  const [batchSize, setBatchSize] = useState<number>(1);
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const [status, setStatus] = useState<GenerationStatus>('idle');
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  // --- Background Task Management ---
+  const [activeTasks, setActiveTasks] = useState<Record<string, number>>({});
+  const [currentViewId, setCurrentViewId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
 
+  // --- UI State ---
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
@@ -225,26 +227,35 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
 
+  // --- Initialization ---
   useEffect(() => {
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setWavespeedKey(localStorage.getItem('arx_wavespeed_key') || '');
-    getHistoryDB().then(setHistory).catch(console.error);
+    getHistoryDB().then(data => {
+      setHistory(data);
+      if (data.length > 0) setCurrentViewId(data[0].id);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
 
+  // --- Concurrent Progress Simulator ---
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (status === 'processing' || status === 'triggering') {
-      interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 90) return 90;
-          return prev + Math.max(0.5, (90 - prev) * 0.03); // Smooth scaling up to 90%
-        });
-      }, 500);
-    }
+    const interval = setInterval(() => {
+      setActiveTasks(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const id in next) {
+          if (next[id] < 90) {
+            next[id] = next[id] + Math.max(0.5, (90 - next[id]) * 0.05);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 500);
     return () => clearInterval(interval);
-  }, [status]);
+  }, []);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -265,31 +276,18 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedHistoryItem) return;
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsFlipped(prev => !prev);
-      } else if (e.code === 'ArrowRight') {
-        handleNextHistory();
-      } else if (e.code === 'ArrowLeft') {
-        handlePrevHistory();
-      } else if (e.code === 'Escape') {
-        setSelectedHistoryItem(null);
-      }
+      if (e.code === 'Space') { e.preventDefault(); setIsFlipped(prev => !prev); }
+      else if (e.code === 'Escape') { setSelectedHistoryItem(null); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedHistoryItem, history]);
+  }, [selectedHistoryItem]);
 
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) { setError('Invalid image file.'); return; }
-    const url = URL.createObjectURL(file);
     setSelectedFile(file); 
-    setPreviewUrl(url); 
-    setResultUrl(null);
+    setPreviewUrl(URL.createObjectURL(file)); 
     setError(null);
-    setStatus('idle');
-    setProgress(0);
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -306,97 +304,104 @@ export default function App() {
     setShowSettings(false);
   };
 
-  const handleFinalSuccess = async (finalImages: string[], prompts: string[]) => {
-    setResultUrl(finalImages[finalImages.length - 1]);
-    setProgress(100); 
-    setStatus('completed');
-
-    const newItems: HistoryItem[] = finalImages.map((img, i) => ({
-      id: Date.now().toString() + '-' + i,
-      prompt: prompts[i],
-      url: img,
-      date: new Date().toISOString()
-    }));
-    
-    // Unlimited History Addition
-    setHistory(prev => [...newItems, ...prev]);
-    for (const item of newItems) {
-      await saveHistoryItem(item);
-    }
-  };
-
+  // --- CONCURRENT GENERATION ENGINE ---
   const generateEdit = async () => {
     if (!wavespeedKey) { setError('Missing API Key.'); setShowSettings(true); return; }
     if (mode === 'editor' && !prompt) { setError('Missing prompt.'); return; }
     if (!selectedFile) { setError('No image uploaded.'); return; }
 
+    setError(null); 
+    setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+
+    const taskId = Date.now().toString();
+    const base64ImageRaw = await fileToBase64(selectedFile);
+    const objectUrl = previewUrl || '';
+    const executionPrompt = mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt;
+
+    // 1. Inject Placeholder into History
+    const placeholderItem: HistoryItem = {
+      id: taskId,
+      prompt: executionPrompt,
+      url: objectUrl,
+      originalUrl: objectUrl,
+      date: new Date().toISOString(),
+      status: 'loading',
+      mode: mode,
+      resolution: targetResolution
+    };
+
+    setHistory(prev => [placeholderItem, ...prev]);
+    setCurrentViewId(taskId);
+    setActiveTasks(prev => ({ ...prev, [taskId]: 5 }));
+
+    // 2. Reset UI for next concurrent request
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if (mode === 'editor') setPrompt('');
+
+    // 3. Fire Background Process (Non-Blocking)
+    runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution);
+  };
+
+  const runBackgroundTask = async (id: string, base64: string, appMode: AppMode, execPrompt: string, resolution: Resolution) => {
     try {
-      setError(null); setResultUrl(null); setRequestId(null); setStatus('triggering'); setProgress(5); 
-      setStatusMessage('Initiating ARX Pipeline...');
-      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-
-      const base64ImageRaw = await fileToBase64(selectedFile);
-      
-      if (mode === 'upscaler') {
-        const finalUrl = await triggerWavespeedUpscale(base64ImageRaw);
-        await handleFinalSuccess([finalUrl], [`Upscaled to ${targetResolution.toUpperCase()}`]);
+      let finalUrl = '';
+      if (appMode === 'upscaler') {
+        finalUrl = await triggerWavespeedUpscale(id, base64, resolution);
       } else {
-        // Run Batched Editor Variations Concurrently
-        setStatusMessage(`Generating ${batchSize} Variation${batchSize > 1 ? 's' : ''}...`);
-        const promises = Array.from({ length: batchSize }).map(() => triggerWavespeed(base64ImageRaw));
-        const results = await Promise.allSettled(promises);
-        
-        const successfulUrls = results
-          .filter((res): res is PromiseFulfilledResult<string> => res.status === 'fulfilled')
-          .map(res => res.value);
+        finalUrl = await triggerWavespeed(id, base64, execPrompt);
+      }
 
-        if (successfulUrls.length === 0) {
-          const firstError = results.find((res): res is PromiseRejectedResult => res.status === 'rejected')?.reason;
-          throw new Error(firstError?.message || 'All generation requests failed.');
+      // Success - Update History Item
+      setHistory(prev => prev.map(h => {
+        if (h.id === id) {
+          const finished: HistoryItem = { ...h, url: finalUrl, status: 'completed' };
+          saveHistoryItem(finished); // Async save to infinite DB
+          return finished;
         }
+        return h;
+      }));
 
-        await handleFinalSuccess(successfulUrls, Array(successfulUrls.length).fill(prompt));
-      } 
+      // Cleanup Task Queue
+      setActiveTasks(prev => { const next = {...prev}; delete next[id]; return next; });
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Error occurred.');
-      setStatus('failed'); 
-      setProgress(0); 
+      setHistory(prev => prev.map(h => h.id === id ? { ...h, status: 'failed' } : h));
+      setActiveTasks(prev => { const next = {...prev}; delete next[id]; return next; });
     }
   };
 
-  const triggerWavespeedUpscale = async (base64Image: string): Promise<string> => {
+  const triggerWavespeedUpscale = async (id: string, base64Image: string, resTarget: Resolution): Promise<string> => {
     const res = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/image-upscaler", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${wavespeedKey}` },
-      body: JSON.stringify({ enable_base64_output: false, image: base64Image, target_resolution: targetResolution })
+      body: JSON.stringify({ enable_base64_output: false, image: base64Image, target_resolution: resTarget })
     });
     
     let triggerData;
-    try { triggerData = await res.json(); } catch (e) { throw new Error(`Failed to parse Wavespeed response.`); }
+    try { triggerData = await res.json(); } catch (e) { throw new Error(`Failed to parse server response.`); }
     if (!res.ok) throw new Error(triggerData.message || triggerData.error || 'API Error');
 
-    const id = triggerData.id || triggerData.request_id || triggerData.data?.id;
-    if (!id) throw new Error(`API Rejected Request: ${triggerData.message || 'No task ID returned.'}`);
+    const remoteId = triggerData.id || triggerData.request_id || triggerData.data?.id;
+    if (!remoteId) throw new Error(`API Rejected Request.`);
 
-    setRequestId(id);
-    setStatus('processing');
-    
     let isCompleted = false;
     let pollCount = 0;
     while (!isCompleted && pollCount < 150) {
       await new Promise(r => setTimeout(r, 2000));
       pollCount++;
-      const poll = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
+      const poll = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${remoteId}`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
       const pollData = await poll.json();
       const status = (pollData.status || pollData.data?.status || '').toLowerCase();
 
       if (status === "completed" || status === "succeeded") {
-        const result = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}/result`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
+        setActiveTasks(prev => ({...prev, [id]: 95}));
+        const result = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${remoteId}/result`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
         const resData = await result.json();
         const outputs = resData.outputs || resData.data?.outputs || pollData.outputs;
         if (outputs?.[0]) return outputs[0];
-        throw new Error("Upscale succeeded but no output URL was returned.");
+        throw new Error("Upscale succeeded but no URL was returned.");
       } else if (status === "failed") {
         throw new Error(pollData.error || "Upscale failed.");
       }
@@ -404,30 +409,25 @@ export default function App() {
     throw new Error('Polling timed out.');
   };
 
-  const triggerWavespeed = async (base64Image: string): Promise<string> => {
-    const payload: any = { 
-        enable_prompt_expansion: false, 
-        images: [base64Image], 
-        prompt: prompt, 
-        seed: Math.floor(Math.random() * 1000000000), // Ensures diverse concurrent variations
-        guidance_scale: 7.5,
-        num_inference_steps: 30
-    };
-
+  const triggerWavespeed = async (id: string, base64Image: string, execPrompt: string): Promise<string> => {
     const res = await fetch('https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ 
+        enable_prompt_expansion: false, 
+        images: [base64Image], 
+        prompt: execPrompt, 
+        seed: Math.floor(Math.random() * 1000000000), 
+        guidance_scale: 7.5, 
+        num_inference_steps: 30 
+      })
     });
     
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || data.error || 'Trigger failed.');
 
-    const id = data.id || data.request_id || data.data?.id;
-    if (!id) throw new Error(`Server responded successfully but no ID was found.`);
-    
-    setRequestId(id); 
-    setStatus('processing'); 
+    const remoteId = data.id || data.request_id || data.data?.id;
+    if (!remoteId) throw new Error(`Server responded but no ID was found.`);
 
     let isCompleted = false;
     let pollCount = 0;
@@ -436,14 +436,15 @@ export default function App() {
       pollCount++;
       
       const pollUrl = data.request_id 
-        ? `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${id}/status`
-        : `https://api.wavespeed.ai/api/v3/predictions/${id}`;
+        ? `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${remoteId}/status`
+        : `https://api.wavespeed.ai/api/v3/predictions/${remoteId}`;
 
       const poll = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
       const pollData = await poll.json();
       const status = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
 
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
+        setActiveTasks(prev => ({...prev, [id]: 95}));
         const outputs = pollData.outputs || pollData.data?.outputs || pollData.output;
         if (outputs?.[0]) return typeof outputs[0] === 'string' ? outputs[0] : outputs[0].url;
         throw new Error('No output image found in result.');
@@ -479,26 +480,17 @@ export default function App() {
     if (e) e.stopPropagation();
     setHistory(prev => prev.filter(item => item.id !== id));
     await deleteHistoryItemDB(id);
-    if (selectedHistoryItem?.id === id) setSelectedHistoryItem(null);
+    if (currentViewId === id) setCurrentViewId(history.find(h => h.id !== id)?.id || null);
   };
 
-  const handleNextHistory = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
-    setSelectedHistoryItem(history[(idx + 1) % history.length]);
-    setIsFlipped(false);
-  };
-
-  const handlePrevHistory = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
-    setSelectedHistoryItem(history[(idx - 1 + history.length) % history.length]);
-    setIsFlipped(false);
-  };
+  // --- Active State Helpers ---
+  const activeViewItem = history.find(h => h.id === currentViewId) || history[0];
+  const activeTaskIds = Object.keys(activeTasks);
+  const activeTaskCount = activeTaskIds.length;
 
   return (
     <div className="min-h-screen bg-bg text-text-primary font-sans flex flex-col selection:bg-accent/20">
-      <nav className="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <TechApexIcon className="text-accent w-7 h-7" />
           <h1 className="text-2xl font-bold tracking-tight">ARX</h1>
@@ -509,8 +501,9 @@ export default function App() {
       </nav>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12">
+        
+        {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-10">
-          
           <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner">
             <button onClick={() => setMode('editor')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'editor' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'text-text-secondary hover:text-white'}`}>
               <Sparkles className="w-4 h-4 inline mr-2" /> Editor
@@ -528,104 +521,174 @@ export default function App() {
           </section>
 
           <section>
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-6">02 // Parameters</h2>
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-6">02 // Generation Parameters</h2>
             <div className="space-y-6">
-              
               {mode === 'upscaler' ? (
                 <div className="bg-white/[0.02] p-5 border border-border rounded-2xl grid grid-cols-3 gap-3">
                   {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
-                    <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'bg-black/30 border border-white/10 text-text-secondary'}`}>{res}</button>
+                    <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'}`}>{res}</button>
                   ))}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe modifications (e.g. 'change outfit to a red jacket')..." className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">Wan-2.6 Editor</div>
-                  </div>
-                  
-                  <div className="bg-white/[0.02] p-5 border border-border rounded-2xl">
-                    <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">Output Variations (Batch Size)</label>
-                    <div className="grid grid-cols-4 gap-3">
-                      {[1, 2, 3, 4].map(num => (
-                        <button key={num} onClick={() => setBatchSize(num)} className={`py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${batchSize === num ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'}`}>
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="relative">
+                  <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe modifications (e.g. 'change outfit to a red jacket')..." className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed shadow-inner" />
+                  <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">Wan-2.6 Editor</div>
                 </div>
               )}
 
-              {status === 'idle' || status === 'completed' || status === 'failed' ? (
-                <button onClick={generateEdit} className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)]">
-                  Execute {mode === 'upscaler' ? 'Enhancement' : 'AI Edit'}
-                </button>
-              ) : (
-                <ProcessingBar progress={progress} />
-              )}
+              <button disabled={!selectedFile} onClick={generateEdit} className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] disabled:opacity-50 disabled:hover:shadow-none disabled:cursor-not-allowed">
+                Queue {mode === 'upscaler' ? 'Enhancement' : 'AI Edit'} Task
+              </button>
             </div>
           </section>
+
+          {error && (
+            <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-4 text-red-400 text-[11px] font-mono uppercase">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
         </div>
 
+        {/* Right Column (Live Viewer) */}
         <div className="lg:col-span-7" id="result-section" ref={resultRef}>
           <div className="lg:sticky lg:top-28">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">Prediction // Output</h2>
-              {resultUrl && (
-                <button onClick={(e) => handleDownload(resultUrl, prompt, e)} className="text-[10px] font-bold uppercase text-accent flex items-center gap-2">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
+                Live Output Viewer
+                {activeTaskCount > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-accent/20 text-accent rounded-full text-[9px] border border-accent/30 animate-pulse flex items-center gap-1">
+                    <Activity className="w-3 h-3" /> {activeTaskCount} Active
+                  </span>
+                )}
+              </h2>
+              {activeViewItem?.status === 'completed' && (
+                <button onClick={(e) => handleDownload(activeViewItem.url, activeViewItem.prompt, e)} className="text-[10px] font-bold uppercase text-accent flex items-center gap-2 hover:text-white transition-colors">
                   <Download className="w-4 h-4" /> Export Asset
                 </button>
               )}
             </div>
             
-            <div className="relative aspect-square sm:aspect-[4/3] bg-white/[0.02] rounded-[2.5rem] overflow-hidden border border-border shadow-2xl flex items-center justify-center">
+            <div className="relative aspect-square sm:aspect-[4/3] bg-white/[0.01] rounded-[2.5rem] overflow-hidden border border-border shadow-2xl flex items-center justify-center group">
               <AnimatePresence mode="wait">
-                {resultUrl ? (
-                  <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-4">
-                    {mode === 'upscaler' && previewUrl && !selectedHistoryItem ? (
-                      <div ref={sliderContainerRef} className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden" onMouseMove={handleSliderMove} onTouchMove={handleSliderMove}>
-                        <img src={previewUrl} className="absolute inset-0 w-full h-full object-contain opacity-80" />
-                        <img src={resultUrl} className="absolute inset-0 w-full h-full object-contain" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }} />
+                {activeViewItem ? (
+                  <motion.div key={activeViewItem.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-4">
+                    
+                    {/* LOADING STATE WITH TRACKER */}
+                    {activeViewItem.status === 'loading' && (
+                      <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-black/20">
+                        <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-20 blur-xl" />
+                        <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6">
+                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} />
+                          <div className="flex items-center gap-3 bg-black/60 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
+                            <Loader2 className="w-4 h-4 text-accent animate-spin" />
+                            <span className="text-[10px] font-mono text-white uppercase tracking-widest">
+                              {activeTaskCount > 1 
+                                ? `Processing Task ${activeTaskIds.indexOf(activeViewItem.id) + 1}/${activeTaskCount}`
+                                : `Processing Task...`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* FAILED STATE */}
+                    {activeViewItem.status === 'failed' && (
+                      <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-red-900/10 border border-red-500/20">
+                        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                        <p className="text-red-500 font-mono text-xs uppercase tracking-widest">Generation Task Failed</p>
+                      </div>
+                    )}
+
+                    {/* COMPLETED STATE - UPSCALER (SLIDER) */}
+                    {activeViewItem.status === 'completed' && activeViewItem.mode === 'upscaler' && activeViewItem.originalUrl && !activeViewItem.originalUrl.includes('undefined') ? (
+                      <div ref={sliderContainerRef} className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden shadow-2xl" onMouseMove={handleSliderMove} onTouchMove={handleSliderMove}>
+                        <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-80" />
+                        <img src={activeViewItem.url} className="absolute inset-0 w-full h-full object-contain" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }} />
                         <div className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-[0_0_10px_rgba(0,242,255,1)]" style={{ left: `${sliderPosition}%` }}>
                           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-bg border-2 border-accent rounded-full flex items-center justify-center shadow-xl">
                             <SlidersHorizontal className="w-4 h-4 text-accent" />
                           </div>
                         </div>
+                        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white">
+                          Enhanced ({activeViewItem.resolution || '4K'})
+                        </div>
+                        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+                          Original
+                        </div>
                       </div>
-                    ) : (
-                      <div className="w-full h-full cursor-pointer" onClick={() => { setSelectedHistoryItem(history.find(h => h.url === resultUrl) || null); setIsFlipped(false); }}>
-                        <img src={resultUrl} className="w-full h-full object-contain rounded-[2rem] shadow-2xl" />
+                    ) : activeViewItem.status === 'completed' ? (
+                      /* COMPLETED STATE - STANDARD IMAGE */
+                      <div className="w-full h-full cursor-pointer relative rounded-[2rem] overflow-hidden" onClick={() => { setSelectedHistoryItem(activeViewItem); setIsFlipped(false); }}>
+                        <img src={activeViewItem.url} className="w-full h-full object-contain shadow-2xl transition-transform duration-500 hover:scale-[1.02]" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
+                          <div className="bg-black/60 px-4 py-2 rounded-full border border-white/10 shadow-xl backdrop-blur-sm">
+                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Click to Expand Data</span>
+                          </div>
+                        </div>
                       </div>
-                    )}
+                    ) : null}
                   </motion.div>
-                ) : status !== 'idle' ? (
-                  <div className="flex flex-col items-center text-center p-12">
-                    <Loader2 className="w-10 h-10 text-accent animate-spin mb-4" />
-                    <p className="text-lg font-bold">{statusMessage}</p>
+                ) : (
+                  <div className="flex flex-col items-center justify-center opacity-30">
+                    <ImageIcon className="w-16 h-16 mb-4" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest">Awaiting Tasks</span>
                   </div>
-                ) : <ImageIcon className="w-20 h-20 text-text-secondary/20" />}
+                )}
               </AnimatePresence>
             </div>
           </div>
         </div>
       </main>
 
+      {/* Unlimited History Grid */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-6 pt-16 border-t border-border/50 pb-12">
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-8">03 // Generation Log (Unlimited)</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-8 flex items-center justify-between">
+            <span>03 // Action Log (Unlimited)</span>
+            <span className="bg-accent/10 text-accent px-3 py-1 rounded-full">{history.length} Assets</span>
+          </h2>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
             {history.map((item) => (
-              <div key={item.id} className="relative group rounded-2xl overflow-hidden border border-border bg-white/[0.02] aspect-square">
-                <img src={item.url} className="w-full h-full object-cover cursor-pointer" onClick={() => { setSelectedHistoryItem(item); setIsFlipped(false); }} />
-                <button onClick={(e) => handleDeleteHistory(item.id, e)} className="absolute top-2 left-2 p-2 bg-black/60 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>
+              <div 
+                key={item.id} 
+                onClick={() => setCurrentViewId(item.id)}
+                className={`relative group rounded-2xl overflow-hidden border bg-white/[0.02] aspect-square cursor-pointer transition-all duration-300 ${currentViewId === item.id ? 'border-accent shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105 z-10' : 'border-border hover:border-white/20'}`}
+              >
+                {/* Visual State Mapping */}
+                {item.status === 'loading' && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <Loader2 className="w-5 h-5 text-accent animate-spin mb-2" />
+                    <span className="text-[8px] font-mono text-accent">{Math.round(activeTasks[item.id] || 0)}%</span>
+                  </div>
+                )}
+                {item.status === 'failed' && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-900/40 backdrop-blur-sm">
+                    <AlertCircle className="w-6 h-6 text-red-500" />
+                  </div>
+                )}
+                
+                <img src={item.url} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
+                
+                <button 
+                  onClick={(e) => handleDeleteHistory(item.id, e)} 
+                  className="absolute top-2 left-2 p-2 bg-black/60 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-500 hover:text-white"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                
+                <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode.toUpperCase()}</p>
+                </div>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* History Modal */}
+      {/* History 3D Flip Modal */}
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
@@ -633,18 +696,37 @@ export default function App() {
             <div className="fixed inset-0 z-[90] flex items-center justify-center p-8 pointer-events-none">
               <div className="pointer-events-auto relative flex items-center justify-center" style={{ perspective: 2000 }}>
                 <motion.div className="relative flex items-center justify-center" style={{ transformStyle: 'preserve-3d' }} animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} onDoubleClick={() => setIsFlipped(!isFlipped)}>
+                  
+                  {/* Front */}
                   <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-border bg-[#0a0f14] flex" style={{ backfaceVisibility: 'hidden' }}>
                     <img src={selectedHistoryItem.url} className="max-w-[90vw] max-h-[80vh] object-contain" />
-                    <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 p-2 bg-bg/60 backdrop-blur-md rounded-full"><X className="w-5 h-5" /></button>
+                    <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 p-2 bg-bg/60 backdrop-blur-md rounded-full text-text-secondary hover:text-white"><X className="w-5 h-5" /></button>
+                    <motion.div 
+                      initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ delay: 2.5, duration: 0.8 }}
+                      className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none"
+                    >
+                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-xl">
+                        <RefreshCw className="w-3.5 h-3.5 text-accent animate-spin-slow" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Double tap to flip</span>
+                      </div>
+                    </motion.div>
                   </div>
+
+                  {/* Back */}
                   <div className="absolute inset-0 rounded-[2rem] shadow-2xl bg-[#0d0d10] border border-border p-8 flex flex-col items-center justify-center text-center overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                    <h3 className="text-accent font-mono text-[10px] uppercase tracking-[0.2em] mb-4">Modification Log</h3>
-                    <p className="text-lg text-text-primary mb-6">"{selectedHistoryItem.prompt}"</p>
-                    <button onClick={() => { setPrompt(selectedHistoryItem.prompt); setSelectedHistoryItem(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="py-4 px-8 bg-accent text-bg rounded-xl font-bold uppercase tracking-widest text-[10px]">Use This Prompt</button>
+                    <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 p-2 text-text-secondary hover:text-white"><X className="w-5 h-5" /></button>
+                    <History className="w-8 h-8 text-accent/30 mb-6" />
+                    <h3 className="text-accent font-mono text-[10px] uppercase tracking-[0.2em] mb-4">Task Parameters</h3>
+                    <div className="flex-1 w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6">
+                      <p className="text-lg text-text-primary leading-relaxed px-4">"{selectedHistoryItem.prompt}"</p>
+                    </div>
+                    {selectedHistoryItem.mode === 'editor' && (
+                      <button onClick={() => { setPrompt(selectedHistoryItem.prompt); setSelectedHistoryItem(null); setMode('editor'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="py-4 px-8 bg-accent text-bg rounded-xl font-bold uppercase tracking-widest text-[10px] hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
+                        Use This Prompt
+                      </button>
+                    )}
                   </div>
                 </motion.div>
-                <button onClick={handlePrevHistory} className="fixed left-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 rounded-full border border-white/10"><ChevronLeft /></button>
-                <button onClick={handleNextHistory} className="fixed right-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 rounded-full border border-white/10"><ChevronRight /></button>
               </div>
             </div>
           </>
@@ -659,14 +741,16 @@ export default function App() {
             <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-bg border-l border-border z-[70] p-10 flex flex-col shadow-2xl">
               <div className="flex justify-between items-center mb-16">
                 <h2 className="text-2xl font-bold">ARX <span className="text-accent">Config</span></h2>
-                <button onClick={handleSaveSettings}><X /></button>
+                <button onClick={handleSaveSettings} className="text-text-secondary hover:text-white"><X /></button>
               </div>
               <div className="flex-1 space-y-6">
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary">Wavespeed API Key</label>
-                <input type="password" value={wavespeedKey} onChange={(e) => setWavespeedKey(e.target.value)} className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" />
-                <button onClick={async () => { await clearHistoryDB(); setHistory([]); }} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold uppercase text-[10px] border border-red-500/20">Wipe Local Log</button>
+                <input type="password" value={wavespeedKey} onChange={(e) => setWavespeedKey(e.target.value)} className="w-full p-4 bg-black/30 border border-white/10 rounded-2xl focus:border-accent outline-none transition-all" />
+                <div className="pt-8 border-t border-white/10">
+                  <button onClick={async () => { await clearHistoryDB(); setHistory([]); }} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold uppercase text-[10px] border border-red-500/20 hover:bg-red-500/20 transition-all">Wipe Action Log</button>
+                </div>
               </div>
-              <button onClick={handleSaveSettings} className="mt-8 py-5 bg-accent text-bg rounded-2xl font-bold uppercase tracking-[0.2em] text-xs">Commit Config</button>
+              <button onClick={handleSaveSettings} className="mt-8 py-5 bg-accent text-bg rounded-2xl font-bold uppercase tracking-[0.2em] text-xs hover:shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-all">Commit Config</button>
             </motion.div>
           </>
         )}
