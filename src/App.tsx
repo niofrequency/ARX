@@ -62,7 +62,9 @@ const getHistoryDB = async (): Promise<HistoryItem[]> => {
     const request = store.getAll();
     request.onsuccess = () => {
       const data = request.result as HistoryItem[];
-      resolve(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      // Filter out any corrupted items to prevent black screens
+      const validData = data.filter(item => item && item.id);
+      resolve(validData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     };
     request.onerror = () => reject(request.error);
   });
@@ -107,7 +109,6 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-// Added pos and total props to track the queue inside the bar
 const ProcessingBar = ({ progress, pos, total }: { progress: number, pos?: number, total?: number }) => {
   const totalSegments = 10;
   const litSegments = (progress / 100) * totalSegments;
@@ -196,8 +197,8 @@ type Resolution = '2k' | '4k' | '8k';
 interface HistoryItem {
   id: string;
   prompt: string;
-  url: string;           // Result URL or Placeholder Blob
-  originalUrl: string;   // For the Slider
+  url: string;           // Result URL
+  originalUrl: string;   // Saved Base64 for Slider persistence
   date: string;
   status: 'loading' | 'completed' | 'failed';
   mode: AppMode;
@@ -206,7 +207,7 @@ interface HistoryItem {
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
-  const [wavespeedKey, setWavespeedKey] = useState<string>('');
+  const [wavespeedKey, setWavespeedKey] = useState<string>(localStorage.getItem('arx_wavespeed_key') || '');
   const [prompt, setPrompt] = useState<string>('');
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
   
@@ -230,15 +231,18 @@ export default function App() {
 
   // --- Initialization ---
   useEffect(() => {
-    setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
-    setWavespeedKey(localStorage.getItem('arx_wavespeed_key') || '');
+    const savedMode = localStorage.getItem('arx_mode') as AppMode;
+    if (savedMode) setMode(savedMode);
+    
     getHistoryDB().then(data => {
       setHistory(data);
       if (data.length > 0) setCurrentViewId(data[0].id);
     }).catch(console.error);
   }, []);
 
+  // --- Persistence Listeners ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
+  useEffect(() => { localStorage.setItem('arx_wavespeed_key', wavespeedKey); }, [wavespeedKey]);
 
   // --- Concurrent Progress Simulator ---
   useEffect(() => {
@@ -258,6 +262,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle global paste
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -272,17 +277,6 @@ export default function App() {
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedHistoryItem) return;
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-      if (e.code === 'Space') { e.preventDefault(); setIsFlipped(prev => !prev); }
-      else if (e.code === 'Escape') { setSelectedHistoryItem(null); }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedHistoryItem]);
 
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) { setError('Invalid image file.'); return; }
@@ -316,15 +310,16 @@ export default function App() {
 
     const taskId = Date.now().toString();
     const base64ImageRaw = await fileToBase64(selectedFile);
-    const objectUrl = previewUrl || '';
+    
+    // We use the base64 for originalUrl so the slider works after refresh
+    const objectUrl = previewUrl || ''; 
     const executionPrompt = mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt;
 
-    // 1. Inject Placeholder into History
     const placeholderItem: HistoryItem = {
       id: taskId,
       prompt: executionPrompt,
-      url: objectUrl,
-      originalUrl: objectUrl,
+      url: objectUrl, 
+      originalUrl: base64ImageRaw, // Saving actual data, not just a temporary URL
       date: new Date().toISOString(),
       status: 'loading',
       mode: mode,
@@ -335,12 +330,10 @@ export default function App() {
     setCurrentViewId(taskId);
     setActiveTasks(prev => ({ ...prev, [taskId]: 5 }));
 
-    // 2. Reset UI for next concurrent request
     setSelectedFile(null);
     setPreviewUrl(null);
     if (mode === 'editor') setPrompt('');
 
-    // 3. Fire Background Process (Non-Blocking)
     runBackgroundTask(taskId, base64ImageRaw, mode, executionPrompt, targetResolution);
   };
 
@@ -353,17 +346,15 @@ export default function App() {
         finalUrl = await triggerWavespeed(id, base64, execPrompt);
       }
 
-      // Success - Update History Item
       setHistory(prev => prev.map(h => {
         if (h.id === id) {
           const finished: HistoryItem = { ...h, url: finalUrl, status: 'completed' };
-          saveHistoryItem(finished); // Async save to infinite DB
+          saveHistoryItem(finished); 
           return finished;
         }
         return h;
       }));
 
-      // Cleanup Task Queue
       setActiveTasks(prev => { const next = {...prev}; delete next[id]; return next; });
 
     } catch (err: any) {
@@ -380,9 +371,8 @@ export default function App() {
       body: JSON.stringify({ enable_base64_output: false, image: base64Image, target_resolution: resTarget })
     });
     
-    let triggerData;
-    try { triggerData = await res.json(); } catch (e) { throw new Error(`Failed to parse server response.`); }
-    if (!res.ok) throw new Error(triggerData.message || triggerData.error || 'API Error');
+    const triggerData = await res.json();
+    if (!res.ok) throw new Error(triggerData.message || 'API Error');
 
     const remoteId = triggerData.id || triggerData.request_id || triggerData.data?.id;
     if (!remoteId) throw new Error(`API Rejected Request.`);
@@ -397,15 +387,11 @@ export default function App() {
       const status = (pollData.status || pollData.data?.status || '').toLowerCase();
 
       if (status === "completed" || status === "succeeded") {
-        setActiveTasks(prev => ({...prev, [id]: 95}));
         const result = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${remoteId}/result`, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
         const resData = await result.json();
         const outputs = resData.outputs || resData.data?.outputs || pollData.outputs;
         if (outputs?.[0]) return outputs[0];
-        throw new Error("Upscale succeeded but no URL was returned.");
-      } else if (status === "failed") {
-        throw new Error(pollData.error || "Upscale failed.");
-      }
+      } else if (status === "failed") throw new Error("Upscale failed.");
     }
     throw new Error('Polling timed out.');
   };
@@ -425,10 +411,10 @@ export default function App() {
     });
     
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error || 'Trigger failed.');
+    if (!res.ok) throw new Error(data.message || 'Trigger failed.');
 
     const remoteId = data.id || data.request_id || data.data?.id;
-    if (!remoteId) throw new Error(`Server responded but no ID was found.`);
+    if (!remoteId) throw new Error(`No ID found.`);
 
     let isCompleted = false;
     let pollCount = 0;
@@ -445,15 +431,11 @@ export default function App() {
       const status = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
 
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
-        setActiveTasks(prev => ({...prev, [id]: 95}));
         const outputs = pollData.outputs || pollData.data?.outputs || pollData.output;
         if (outputs?.[0]) return typeof outputs[0] === 'string' ? outputs[0] : outputs[0].url;
-        throw new Error('No output image found in result.');
-      } else if (status === 'failed' || status === 'error' || status === 'canceled') {
-        throw new Error(pollData.error || pollData.data?.error || 'Editor failed.');
-      }
+      } else if (status === 'failed') throw new Error('Editor failed.');
     }
-    throw new Error('Polling timed out.');
+    throw new Error('Timeout.');
   };
 
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
@@ -463,8 +445,7 @@ export default function App() {
       const blob = await response.blob();
       const a = document.createElement('a');
       a.href = window.URL.createObjectURL(blob);
-      const cleanPrompt = promptText.substring(0, 20).replace(/[^a-z0-9]/gi, '_');
-      a.download = `ARX_${cleanPrompt}.png`;
+      a.download = `ARX_Result.png`;
       a.click();
     } catch (err) { window.open(url, '_blank'); }
   };
@@ -484,7 +465,20 @@ export default function App() {
     if (currentViewId === id) setCurrentViewId(history.find(h => h.id !== id)?.id || null);
   };
 
-  // --- Active State Helpers ---
+  const handleNextHistory = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
+    setSelectedHistoryItem(history[(idx + 1) % history.length]);
+    setIsFlipped(false);
+  };
+
+  const handlePrevHistory = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const idx = history.findIndex(h => h.id === selectedHistoryItem?.id);
+    setSelectedHistoryItem(history[(idx - 1 + history.length) % history.length]);
+    setIsFlipped(false);
+  };
+
   const activeViewItem = history.find(h => h.id === currentViewId) || history[0];
   const activeTaskIds = Object.keys(activeTasks);
   const activeTaskCount = activeTaskIds.length;
@@ -502,8 +496,6 @@ export default function App() {
       </nav>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12">
-        
-        {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-10">
           <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner">
             <button onClick={() => setMode('editor')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'editor' ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'text-text-secondary hover:text-white'}`}>
@@ -522,7 +514,7 @@ export default function App() {
           </section>
 
           <section>
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-6">02 // Generation Parameters</h2>
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-6">02 // Parameters</h2>
             <div className="space-y-6">
               {mode === 'upscaler' ? (
                 <div className="bg-white/[0.02] p-5 border border-border rounded-2xl grid grid-cols-3 gap-3">
@@ -532,37 +524,24 @@ export default function App() {
                 </div>
               ) : (
                 <div className="relative">
-                  <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe modifications (e.g. 'change outfit to a red jacket')..." className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed shadow-inner" />
+                  <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe modifications..." className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed shadow-inner" />
                   <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">Wan-2.6 Editor</div>
                 </div>
               )}
 
-              <button disabled={!selectedFile} onClick={generateEdit} className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] disabled:opacity-50 disabled:hover:shadow-none disabled:cursor-not-allowed">
+              <button disabled={!selectedFile} onClick={generateEdit} className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] disabled:opacity-50">
                 Queue {mode === 'upscaler' ? 'Enhancement' : 'AI Edit'} Task
               </button>
             </div>
           </section>
-
-          {error && (
-            <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-4 text-red-400 text-[11px] font-mono uppercase">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>{error}</p>
-            </div>
-          )}
         </div>
 
-        {/* Right Column (Live Viewer) */}
         <div className="lg:col-span-7" id="result-section" ref={resultRef}>
           <div className="lg:sticky lg:top-28">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
-                Live Output Viewer
-                {activeTaskCount > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-accent/20 text-accent rounded-full text-[9px] border border-accent/30 animate-pulse flex items-center gap-1">
-                    <Activity className="w-3 h-3" /> {activeTaskCount} Active
-                  </span>
-                )}
+                Live Viewer {activeTaskCount > 0 && <span className="ml-2 px-2 py-0.5 bg-accent/20 text-accent rounded-full text-[9px] border border-accent/30 animate-pulse"><Activity className="w-3 h-3 inline mr-1" /> {activeTaskCount} Active</span>}
               </h2>
               {activeViewItem?.status === 'completed' && (
                 <button onClick={(e) => handleDownload(activeViewItem.url, activeViewItem.prompt, e)} className="text-[10px] font-bold uppercase text-accent flex items-center gap-2 hover:text-white transition-colors">
@@ -575,40 +554,27 @@ export default function App() {
               <AnimatePresence mode="wait">
                 {activeViewItem ? (
                   <motion.div key={activeViewItem.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-4">
-                    
-                    {/* LOADING STATE WITH QUEUE TRACKER */}
                     {activeViewItem.status === 'loading' && (
                       <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-black/20">
                         <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-20 blur-xl" />
                         <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6">
-                          
-                          {/* UPDATED: Pass positional props directly to the ProcessingBar */}
-                          <ProcessingBar 
-                            progress={activeTasks[activeViewItem.id] || 5} 
-                            pos={activeTaskIds.indexOf(activeViewItem.id) + 1}
-                            total={activeTaskCount}
-                          />
-                          
+                          <ProcessingBar progress={activeTasks[activeViewItem.id] || 5} pos={activeTaskIds.indexOf(activeViewItem.id) + 1} total={activeTaskCount} />
                           <div className="flex items-center gap-3 bg-black/60 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
                             <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                            <span className="text-[10px] font-mono text-white uppercase tracking-widest">
-                              Processing Task {activeViewItem.id.slice(-4)}
-                            </span>
+                            <span className="text-[10px] font-mono text-white uppercase tracking-widest">Processing Task {activeViewItem.id.slice(-4)}</span>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* FAILED STATE */}
                     {activeViewItem.status === 'failed' && (
-                      <div className="relative w-full h-full flex flex-col items-center justify-center p-8 rounded-[2rem] overflow-hidden bg-red-900/10 border border-red-500/20">
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-red-900/10 rounded-[2rem] border border-red-500/20">
                         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                        <p className="text-red-500 font-mono text-xs uppercase tracking-widest">Generation Task Failed</p>
+                        <p className="text-red-500 font-mono text-xs uppercase tracking-widest">Task Failed</p>
                       </div>
                     )}
 
-                    {/* COMPLETED STATE - UPSCALER (SLIDER) */}
-                    {activeViewItem.status === 'completed' && activeViewItem.mode === 'upscaler' && activeViewItem.originalUrl && !activeViewItem.originalUrl.includes('undefined') ? (
+                    {activeViewItem.status === 'completed' && activeViewItem.mode === 'upscaler' && activeViewItem.originalUrl ? (
                       <div ref={sliderContainerRef} className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden shadow-2xl" onMouseMove={handleSliderMove} onTouchMove={handleSliderMove}>
                         <img src={activeViewItem.originalUrl} className="absolute inset-0 w-full h-full object-contain opacity-80" />
                         <img src={activeViewItem.url} className="absolute inset-0 w-full h-full object-contain" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }} />
@@ -617,15 +583,10 @@ export default function App() {
                             <SlidersHorizontal className="w-4 h-4 text-accent" />
                           </div>
                         </div>
-                        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white">
-                          Enhanced ({activeViewItem.resolution || '4K'})
-                        </div>
-                        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
-                          Original
-                        </div>
+                        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white">Enhanced ({activeViewItem.resolution || '4K'})</div>
+                        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-text-secondary">Original</div>
                       </div>
                     ) : activeViewItem.status === 'completed' ? (
-                      /* COMPLETED STATE - STANDARD IMAGE */
                       <div className="w-full h-full cursor-pointer relative rounded-[2rem] overflow-hidden" onClick={() => { setSelectedHistoryItem(activeViewItem); setIsFlipped(false); }}>
                         <img src={activeViewItem.url} className="w-full h-full object-contain shadow-2xl transition-transform duration-500 hover:scale-[1.02]" />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
@@ -648,22 +609,15 @@ export default function App() {
         </div>
       </main>
 
-      {/* Unlimited History Grid */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-6 pt-16 border-t border-border/50 pb-12">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono mb-8 flex items-center justify-between">
             <span>03 // Action Log (Unlimited)</span>
             <span className="bg-accent/10 text-accent px-3 py-1 rounded-full">{history.length} Assets</span>
           </h2>
-          
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
             {history.map((item) => (
-              <div 
-                key={item.id} 
-                onClick={() => setCurrentViewId(item.id)}
-                className={`relative group rounded-2xl overflow-hidden border bg-white/[0.02] aspect-square cursor-pointer transition-all duration-300 ${currentViewId === item.id ? 'border-accent shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105 z-10' : 'border-border hover:border-white/20'}`}
-              >
-                {/* Visual State Mapping */}
+              <div key={item.id} onClick={() => setCurrentViewId(item.id)} className={`relative group rounded-2xl overflow-hidden border bg-white/[0.02] aspect-square cursor-pointer transition-all duration-300 ${currentViewId === item.id ? 'border-accent shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105 z-10' : 'border-border hover:border-white/20'}`}>
                 {item.status === 'loading' && (
                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
                     <Loader2 className="w-5 h-5 text-accent animate-spin mb-2" />
@@ -675,18 +629,10 @@ export default function App() {
                     <AlertCircle className="w-6 h-6 text-red-500" />
                   </div>
                 )}
-                
                 <img src={item.url} className={`w-full h-full object-cover ${item.status !== 'completed' ? 'opacity-20' : ''}`} />
-                
-                <button 
-                  onClick={(e) => handleDeleteHistory(item.id, e)} 
-                  className="absolute top-2 left-2 p-2 bg-black/60 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-500 hover:text-white"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-                
+                <button onClick={(e) => handleDeleteHistory(item.id, e)} className="absolute top-2 left-2 p-2 bg-black/60 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-500 hover:text-white"><Trash2 className="w-3.5 h-3.5" /></button>
                 <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode.toUpperCase()}</p>
+                  <p className="text-[8px] font-mono text-white/70 truncate">{item.mode?.toUpperCase() || 'TASK'}</p>
                 </div>
               </div>
             ))}
@@ -694,7 +640,7 @@ export default function App() {
         </section>
       )}
 
-      {/* History 3D Flip Modal */}
+      {/* History Modal */}
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
@@ -702,44 +648,26 @@ export default function App() {
             <div className="fixed inset-0 z-[90] flex items-center justify-center p-8 pointer-events-none">
               <div className="pointer-events-auto relative flex items-center justify-center" style={{ perspective: 2000 }}>
                 <motion.div className="relative flex items-center justify-center" style={{ transformStyle: 'preserve-3d' }} animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} onDoubleClick={() => setIsFlipped(!isFlipped)}>
-                  
-                  {/* Front */}
                   <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-border bg-[#0a0f14] flex" style={{ backfaceVisibility: 'hidden' }}>
                     <img src={selectedHistoryItem.url} className="max-w-[90vw] max-h-[80vh] object-contain" />
                     <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 p-2 bg-bg/60 backdrop-blur-md rounded-full text-text-secondary hover:text-white"><X className="w-5 h-5" /></button>
-                    <motion.div 
-                      initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ delay: 2.5, duration: 0.8 }}
-                      className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none"
-                    >
-                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-xl">
-                        <RefreshCw className="w-3.5 h-3.5 text-accent animate-spin-slow" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Double tap to flip</span>
-                      </div>
-                    </motion.div>
                   </div>
-
-                  {/* Back */}
                   <div className="absolute inset-0 rounded-[2rem] shadow-2xl bg-[#0d0d10] border border-border p-8 flex flex-col items-center justify-center text-center overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                     <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 p-2 text-text-secondary hover:text-white"><X className="w-5 h-5" /></button>
                     <History className="w-8 h-8 text-accent/30 mb-6" />
                     <h3 className="text-accent font-mono text-[10px] uppercase tracking-[0.2em] mb-4">Task Parameters</h3>
-                    <div className="flex-1 w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6">
-                      <p className="text-lg text-text-primary leading-relaxed px-4">"{selectedHistoryItem.prompt}"</p>
-                    </div>
-                    {selectedHistoryItem.mode === 'editor' && (
-                      <button onClick={() => { setPrompt(selectedHistoryItem.prompt); setSelectedHistoryItem(null); setMode('editor'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="py-4 px-8 bg-accent text-bg rounded-xl font-bold uppercase tracking-widest text-[10px] hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
-                        Use This Prompt
-                      </button>
-                    )}
+                    <div className="flex-1 w-full max-w-2xl mx-auto flex items-center justify-center mb-6"><p className="text-lg text-text-primary px-4">"{selectedHistoryItem.prompt}"</p></div>
+                    {selectedHistoryItem.mode === 'editor' && <button onClick={() => { setPrompt(selectedHistoryItem.prompt); setSelectedHistoryItem(null); setMode('editor'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="py-4 px-8 bg-accent text-bg rounded-xl font-bold uppercase tracking-widest text-[10px] hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">Use This Prompt</button>}
                   </div>
                 </motion.div>
+                <button onClick={handlePrevHistory} className="fixed left-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 rounded-full border border-white/10 hover:text-accent transition-all"><ChevronLeft /></button>
+                <button onClick={handleNextHistory} className="fixed right-6 top-1/2 -translate-y-1/2 z-[100] p-4 bg-black/50 rounded-full border border-white/10 hover:text-accent transition-all"><ChevronRight /></button>
               </div>
             </div>
           </>
         )}
       </AnimatePresence>
 
-      {/* Settings Modal */}
       <AnimatePresence>
         {showSettings && (
           <>
@@ -747,13 +675,13 @@ export default function App() {
             <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-bg border-l border-border z-[70] p-10 flex flex-col shadow-2xl">
               <div className="flex justify-between items-center mb-16">
                 <h2 className="text-2xl font-bold">ARX <span className="text-accent">Config</span></h2>
-                <button onClick={handleSaveSettings} className="text-text-secondary hover:text-white"><X /></button>
+                <button onClick={handleSaveSettings} className="text-text-secondary hover:text-white transition-all"><X /></button>
               </div>
               <div className="flex-1 space-y-6">
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary">Wavespeed API Key</label>
                 <input type="password" value={wavespeedKey} onChange={(e) => setWavespeedKey(e.target.value)} className="w-full p-4 bg-black/30 border border-white/10 rounded-2xl focus:border-accent outline-none transition-all" />
                 <div className="pt-8 border-t border-white/10">
-                  <button onClick={async () => { await clearHistoryDB(); setHistory([]); }} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold uppercase text-[10px] border border-red-500/20 hover:bg-red-500/20 transition-all">Wipe Action Log</button>
+                  <button onClick={async () => { if(confirm('Clear history forever?')) { await clearHistoryDB(); setHistory([]); } }} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold uppercase text-[10px] border border-red-500/20 hover:bg-red-500/20 transition-all">Wipe Action Log</button>
                 </div>
               </div>
               <button onClick={handleSaveSettings} className="mt-8 py-5 bg-accent text-bg rounded-2xl font-bold uppercase tracking-[0.2em] text-xs hover:shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-all">Commit Config</button>
