@@ -23,7 +23,9 @@ import {
   Trash2,
   Wand2,
   Sliders,
-  Key
+  Key,
+  Maximize,
+  SlidersHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -242,7 +244,8 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 
 // --- Types ---
 type GenerationStatus = 'idle' | 'uploading' | 'triggering' | 'processing' | 'fetching' | 'completed' | 'failed';
-type EngineProvider = 'wavespeed' | 'runpod_flux' | 'runpod_zimage';
+type EngineProvider = 'wavespeed' | 'wavespeed_upscale' | 'runpod_flux' | 'runpod_zimage';
+type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
   id: string;
@@ -265,6 +268,7 @@ export default function App() {
   // --- Advanced Generation State ---
   const [cfgScale, setCfgScale] = useState<number>(7.5);
   const [steps, setSteps] = useState<number>(30);
+  const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
   
   // --- LoRA State ---
   const [loras, setLoras] = useState<{name: string, url: string, scale: number}[]>([{ name: '', url: '', scale: 0.8 }]);
@@ -288,12 +292,15 @@ export default function App() {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // --- UI State ---
+  // --- UI State (Slider & Modals) ---
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
+  
+  const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
+  const sliderContainerRef = useRef<HTMLDivElement>(null);
 
   // --- Initialization Effects ---
   useEffect(() => {
@@ -325,17 +332,9 @@ export default function App() {
   }, []);
 
   // --- Auto-Save Advanced Settings ---
-  useEffect(() => {
-    localStorage.setItem('arx_cfg_scale', cfgScale.toString());
-  }, [cfgScale]);
-
-  useEffect(() => {
-    localStorage.setItem('arx_steps', steps.toString());
-  }, [steps]);
-
-  useEffect(() => {
-    localStorage.setItem('arx_loras', JSON.stringify(loras));
-  }, [loras]);
+  useEffect(() => { localStorage.setItem('arx_cfg_scale', cfgScale.toString()); }, [cfgScale]);
+  useEffect(() => { localStorage.setItem('arx_steps', steps.toString()); }, [steps]);
+  useEffect(() => { localStorage.setItem('arx_loras', JSON.stringify(loras)); }, [loras]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -377,8 +376,6 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedHistoryItem) return;
-      
-      // Don't intercept if typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
       if (e.code === 'Space') {
@@ -449,10 +446,8 @@ export default function App() {
   const handleNextHistory = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!selectedHistoryItem || history.length === 0) return;
-    
     const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
     const nextIndex = (currentIndex + 1) % history.length;
-    
     setSelectedHistoryItem(history[nextIndex]);
     setIsFlipped(false);
   };
@@ -460,20 +455,16 @@ export default function App() {
   const handlePrevHistory = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!selectedHistoryItem || history.length === 0) return;
-    
     const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
     const prevIndex = (currentIndex - 1 + history.length) % history.length;
-    
     setSelectedHistoryItem(history[prevIndex]);
     setIsFlipped(false);
   };
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
     setHistory(prev => prev.filter(item => item.id !== id));
     await deleteHistoryItemDB(id);
-    
     if (selectedHistoryItem?.id === id) {
       setSelectedHistoryItem(null);
     }
@@ -482,7 +473,7 @@ export default function App() {
   // --- THE UNIFIED GENERATION ENGINE ---
   const generateEdit = async () => {
     // 1. Validation Logic
-    if (provider === 'wavespeed' && !wavespeedKey) {
+    if ((provider === 'wavespeed' || provider === 'wavespeed_upscale') && !wavespeedKey) {
       setError('Please enter your Wavespeed API Key in settings.');
       setShowSettings(true); 
       return;
@@ -506,13 +497,13 @@ export default function App() {
       return;
     }
 
-    if (!prompt) {
+    if (provider !== 'wavespeed_upscale' && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
 
     if (provider !== 'runpod_flux' && !selectedFile) {
-      setError('Please upload a primary image for Image-to-Image editing.');
+      setError('Please upload a primary image for the Engine to process.');
       return;
     }
 
@@ -536,6 +527,11 @@ export default function App() {
         setProgress(15);
         await triggerRunpodFlux();
       } 
+      else if (provider === 'wavespeed_upscale' && selectedFile) {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        setProgress(15);
+        await triggerWavespeedUpscale(base64ImageRaw);
+      }
       else if (provider === 'wavespeed' && selectedFile) {
         const base64ImageRaw = await fileToBase64(selectedFile);
         setProgress(15);
@@ -546,7 +542,6 @@ export default function App() {
         setProgress(15);
         
         const pureBase64 = base64ImageRaw.split(',')[1] || base64ImageRaw;
-        
         let pureBase64_2 = undefined;
         let pureBase64_3 = undefined;
         
@@ -590,6 +585,77 @@ export default function App() {
     setHistory(prev => [newItem, ...prev].slice(0, 50));
     await saveHistoryItem(newItem);
     await pruneHistoryDB(50);
+  };
+
+  // --- WAVESPEED LOGIC (Upscaler API) ---
+  const triggerWavespeedUpscale = async (base64Image: string) => {
+    const payload = {
+      enable_base64_output: false,
+      enable_sync_mode: false,
+      image: base64Image,
+      output_format: "jpeg",
+      target_resolution: targetResolution
+    };
+
+    const triggerResponse = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/image-upscaler", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${wavespeedKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!triggerResponse.ok) {
+      throw new Error(`Failed to trigger Upscaler: ${await triggerResponse.text()}`);
+    }
+
+    setProgress(25);
+    const triggerData = await triggerResponse.json();
+    const id = triggerData.id;
+
+    if (!id) throw new Error("No task ID returned from Wavespeed.");
+
+    setRequestId(id);
+    setStatus('processing');
+    setStatusMessage('Enhancing Resolution & Details...');
+    
+    // Save the resolution choice as the prompt for the history log
+    setPrompt(`Upscaled to ${targetResolution.toUpperCase()}`);
+
+    let isCompleted = false;
+    let pollCount = 0;
+    let finalImageUri = '';
+
+    while (!isCompleted) {
+      if (pollCount >= 150) throw new Error('Polling timed out.');
+      await new Promise(r => setTimeout(r, 2000));
+      pollCount++;
+
+      const pollResponse = await fetch(`https://api.wavespeed.ai/api/v3/predictions/${id}`, {
+        headers: { "Authorization": `Bearer ${wavespeedKey}` }
+      });
+
+      if (!pollResponse.ok) throw new Error('Wavespeed polling failed.');
+
+      const pollData = await pollResponse.json();
+
+      if (pollData.status === "completed") {
+        isCompleted = true;
+        setProgress(90);
+        if (pollData.outputs && pollData.outputs.length > 0) {
+          finalImageUri = pollData.outputs[0];
+        } else {
+          throw new Error("Upscale succeeded but no output URL was returned.");
+        }
+      } else if (pollData.status === "failed") {
+        throw new Error(pollData.error || "Upscaling task failed on the server.");
+      } else {
+        setStatusMessage(`Status: ${pollData.status || 'Processing'}...`);
+      }
+    }
+
+    handleFinalSuccess(finalImageUri, id);
   };
 
   // --- WAVESPEED LOGIC (Wan-2.6 I2I + Multi-LoRA) ---
@@ -910,9 +976,19 @@ export default function App() {
   };
 
   const getEngineLabel = () => {
+    if (provider === 'wavespeed_upscale') return 'AI Image Upscaler';
     if (provider === 'wavespeed') return 'Wan-2.6 Engine';
     if (provider === 'runpod_flux') return 'Flux Krea (T2I)';
     return 'Z-Image Edit (RunPod)';
+  };
+
+  // --- Custom Before/After Slider Interaction ---
+  const handleSliderMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!sliderContainerRef.current) return;
+    const rect = sliderContainerRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const percentage = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    setSliderPosition(percentage);
   };
 
   return (
@@ -930,7 +1006,7 @@ export default function App() {
           onClick={() => setShowSettings(!showSettings)} 
           className="p-2.5 hover:bg-white/5 rounded-xl border border-transparent hover:border-border transition-all group"
         >
-          <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey && provider === 'wavespeed') ? 'text-orange-500 animate-pulse' : ''}`} />
+          <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey && (provider === 'wavespeed' || provider === 'wavespeed_upscale')) ? 'text-orange-500 animate-pulse' : ''}`} />
         </button>
       </nav>
 
@@ -958,6 +1034,14 @@ export default function App() {
                   No source asset required for Flux.
                 </p>
               </div>
+            ) : provider === 'wavespeed_upscale' ? (
+              <UploadZone 
+                label="Image to Upscale" 
+                file={selectedFile} 
+                preview={previewUrl} 
+                onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
+                onProcess={(f: File) => handleFileProcess(f, 1)} 
+              />
             ) : (
               <div className="grid gap-4">
                 <UploadZone 
@@ -999,158 +1083,183 @@ export default function App() {
             
             <div className="space-y-6">
               
-              <div className="relative">
-                <textarea 
-                  value={prompt} 
-                  onChange={(e) => setPrompt(e.target.value)} 
-                  placeholder="Describe your vision..." 
-                  className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
-                />
-                <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
-                  {getEngineLabel()}
-                </div>
-              </div>
-
-              {/* LoRA PANEL - FULL WIDTH ON DESKTOP/EDGE */}
-              {provider === 'wavespeed' && (
-                <div className="w-full border border-border bg-white/[0.01] rounded-2xl overflow-hidden block">
-                  <button 
-                    onClick={() => setShowAdvanced(!showAdvanced)} 
-                    className="w-full p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sliders className="w-4 h-4 text-accent" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-primary">
-                        Advanced // Configuration
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-text-secondary">
-                      {showAdvanced ? '[-]' : '[+]'}
-                    </span>
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showAdvanced && (
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }} 
-                        animate={{ height: 'auto', opacity: 1 }} 
-                        exit={{ height: 0, opacity: 0 }} 
-                        className="px-4 pb-5 border-t border-border space-y-6 pt-4 overflow-hidden"
+              {provider === 'wavespeed_upscale' ? (
+                <div className="space-y-4 bg-white/[0.02] p-5 border border-border rounded-2xl">
+                  <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">
+                    Target Output Resolution
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
+                      <button
+                        key={res}
+                        onClick={() => setTargetResolution(res)}
+                        className={`py-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                          targetResolution === res 
+                            ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
+                            : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
+                        }`}
                       >
-                        {/* Core Settings Grid */}
-                        <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
-                          <div>
-                            <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                              <span>CFG Scale</span>
-                              <span className="text-accent">{cfgScale.toFixed(1)}</span>
-                            </div>
-                            <input 
-                              type="range" 
-                              min="1" 
-                              max="20" 
-                              step="0.5" 
-                              value={cfgScale} 
-                              onChange={(e) => setCfgScale(parseFloat(e.target.value))} 
-                              className="w-full accent-accent" 
-                            />
-                          </div>
-                          <div>
-                            <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                              <span>Steps</span>
-                              <span className="text-accent">{steps}</span>
-                            </div>
-                            <input 
-                              type="range" 
-                              min="10" 
-                              max="100" 
-                              step="1" 
-                              value={steps} 
-                              onChange={(e) => setSteps(parseInt(e.target.value, 10))} 
-                              className="w-full accent-accent" 
-                            />
-                          </div>
+                        {res}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <textarea 
+                      value={prompt} 
+                      onChange={(e) => setPrompt(e.target.value)} 
+                      placeholder="Describe your vision..." 
+                      className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
+                    />
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
+                      {getEngineLabel()}
+                    </div>
+                  </div>
+
+                  {/* LoRA PANEL - FULL WIDTH ON DESKTOP/EDGE */}
+                  {provider === 'wavespeed' && (
+                    <div className="w-full border border-border bg-white/[0.01] rounded-2xl overflow-hidden block">
+                      <button 
+                        onClick={() => setShowAdvanced(!showAdvanced)} 
+                        className="w-full p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-accent" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-text-primary">
+                            Advanced // Configuration
+                          </span>
                         </div>
-
-                        {/* LoRA List */}
-                        <div className="space-y-4">
-                          {loras.map((lora, index) => (
-                            <div key={index} className="space-y-4 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
-                              {loras.length > 1 && (
-                                <button 
-                                  onClick={() => setLoras(loras.filter((_, i) => i !== index))}
-                                  className="absolute top-3 right-3 text-text-secondary hover:text-red-400 transition-colors"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              )}
-                              
-                              <div>
-                                <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
-                                  LoRA Custom Name
-                                </label>
-                                <input 
-                                  type="text" 
-                                  value={lora.name} 
-                                  onChange={(e) => {
-                                    const newLoras = [...loras];
-                                    newLoras[index].name = e.target.value;
-                                    setLoras(newLoras);
-                                  }} 
-                                  placeholder="e.g. Cyberpunk Style" 
-                                  className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-text-primary focus:border-accent transition-colors" 
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
-                                  LoRA Download URL (.safetensors)
-                                </label>
-                                <input 
-                                  type="text" 
-                                  value={lora.url} 
-                                  onChange={(e) => {
-                                    const newLoras = [...loras];
-                                    newLoras[index].url = e.target.value;
-                                    setLoras(newLoras);
-                                  }} 
-                                  placeholder="https://civitai.com/api/download/models/..." 
-                                  className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-accent focus:border-accent transition-colors" 
-                                />
-                              </div>
-                              
+                        <span className="text-[10px] font-mono text-text-secondary">
+                          {showAdvanced ? '[-]' : '[+]'}
+                        </span>
+                      </button>
+                      
+                      <AnimatePresence>
+                        {showAdvanced && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }} 
+                            animate={{ height: 'auto', opacity: 1 }} 
+                            exit={{ height: 0, opacity: 0 }} 
+                            className="px-4 pb-5 border-t border-border space-y-6 pt-4 overflow-hidden"
+                          >
+                            {/* Core Settings Grid */}
+                            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
                               <div>
                                 <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                                  <span>Strength / Scale</span>
-                                  <span className="text-accent">{lora.scale.toFixed(2)}</span>
+                                  <span>CFG Scale</span>
+                                  <span className="text-accent">{cfgScale.toFixed(1)}</span>
                                 </div>
                                 <input 
                                   type="range" 
-                                  min="0" 
-                                  max="1.5" 
-                                  step="0.05" 
-                                  value={lora.scale} 
-                                  onChange={(e) => {
-                                    const newLoras = [...loras];
-                                    newLoras[index].scale = parseFloat(e.target.value);
-                                    setLoras(newLoras);
-                                  }} 
+                                  min="1" 
+                                  max="20" 
+                                  step="0.5" 
+                                  value={cfgScale} 
+                                  onChange={(e) => setCfgScale(parseFloat(e.target.value))} 
+                                  className="w-full accent-accent" 
+                                />
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
+                                  <span>Steps</span>
+                                  <span className="text-accent">{steps}</span>
+                                </div>
+                                <input 
+                                  type="range" 
+                                  min="10" 
+                                  max="100" 
+                                  step="1" 
+                                  value={steps} 
+                                  onChange={(e) => setSteps(parseInt(e.target.value, 10))} 
                                   className="w-full accent-accent" 
                                 />
                               </div>
                             </div>
-                          ))}
-                        </div>
-                        
-                        <button 
-                          onClick={() => setLoras([...loras, { name: '', url: '', scale: 0.8 }])}
-                          className="w-full py-3 flex items-center justify-center gap-2 border border-dashed border-white/10 hover:border-accent/50 hover:bg-accent/5 rounded-xl transition-all text-text-secondary hover:text-accent text-[10px] font-bold uppercase tracking-widest"
-                        >
-                          <span className="text-lg leading-none mb-0.5">+</span> Add Another LoRA
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+
+                            {/* LoRA List */}
+                            <div className="space-y-4">
+                              {loras.map((lora, index) => (
+                                <div key={index} className="space-y-4 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
+                                  {loras.length > 1 && (
+                                    <button 
+                                      onClick={() => setLoras(loras.filter((_, i) => i !== index))}
+                                      className="absolute top-3 right-3 text-text-secondary hover:text-red-400 transition-colors"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  
+                                  <div>
+                                    <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
+                                      LoRA Custom Name
+                                    </label>
+                                    <input 
+                                      type="text" 
+                                      value={lora.name} 
+                                      onChange={(e) => {
+                                        const newLoras = [...loras];
+                                        newLoras[index].name = e.target.value;
+                                        setLoras(newLoras);
+                                      }} 
+                                      placeholder="e.g. Cyberpunk Style" 
+                                      className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-text-primary focus:border-accent transition-colors" 
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
+                                      LoRA Download URL (.safetensors)
+                                    </label>
+                                    <input 
+                                      type="text" 
+                                      value={lora.url} 
+                                      onChange={(e) => {
+                                        const newLoras = [...loras];
+                                        newLoras[index].url = e.target.value;
+                                        setLoras(newLoras);
+                                      }} 
+                                      placeholder="https://civitai.com/api/download/models/..." 
+                                      className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-accent focus:border-accent transition-colors" 
+                                    />
+                                  </div>
+                                  
+                                  <div>
+                                    <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
+                                      <span>Strength / Scale</span>
+                                      <span className="text-accent">{lora.scale.toFixed(2)}</span>
+                                    </div>
+                                    <input 
+                                      type="range" 
+                                      min="0" 
+                                      max="1.5" 
+                                      step="0.05" 
+                                      value={lora.scale} 
+                                      onChange={(e) => {
+                                        const newLoras = [...loras];
+                                        newLoras[index].scale = parseFloat(e.target.value);
+                                        setLoras(newLoras);
+                                      }} 
+                                      className="w-full accent-accent" 
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <button 
+                              onClick={() => setLoras([...loras, { name: '', url: '', scale: 0.8 }])}
+                              className="w-full py-3 flex items-center justify-center gap-2 border border-dashed border-white/10 hover:border-accent/50 hover:bg-accent/5 rounded-xl transition-all text-text-secondary hover:text-accent text-[10px] font-bold uppercase tracking-widest"
+                            >
+                              <span className="text-lg leading-none mb-0.5">+</span> Add Another LoRA
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </>
               )}
 
               {status === 'idle' || status === 'completed' || status === 'failed' ? (
@@ -1158,8 +1267,8 @@ export default function App() {
                   onClick={generateEdit} 
                   className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)]"
                 >
-                  <Sparkles className="w-5 h-5" /> 
-                  Initialize ARX Pipeline
+                  {provider === 'wavespeed_upscale' ? <Maximize className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />} 
+                  {provider === 'wavespeed_upscale' ? 'Initialize Upscaler' : 'Initialize ARX Pipeline'}
                 </button>
               ) : (
                 <ProcessingBar progress={progress} />
@@ -1206,32 +1315,76 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }} 
                     className="w-full h-full p-2 sm:p-4"
                   >
-                    <div 
-                      className="relative w-full h-full cursor-pointer group/result" 
-                      onClick={() => {
-                        const match = history.find(h => h.url === resultUrl);
-                        setSelectedHistoryItem(match || { 
-                          id: requestId || Date.now().toString(), 
-                          prompt: prompt, 
-                          url: resultUrl, 
-                          date: new Date().toISOString() 
-                        });
-                        setIsFlipped(false);
-                      }}
-                    >
-                      <img 
-                        src={resultUrl} 
-                        alt="Result" 
-                        className="w-full h-full object-contain rounded-2xl shadow-2xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300">
-                        <div className="bg-black/60 px-4 py-2 rounded-full border border-white/10 shadow-xl backdrop-blur-sm">
-                          <span className="text-[10px] font-bold text-white uppercase tracking-widest">
-                            Click to Expand Data
-                          </span>
+                    {provider === 'wavespeed_upscale' && previewUrl && !selectedHistoryItem ? (
+                      /* --- INTERACTIVE BEFORE/AFTER SLIDER FOR UPSCALER --- */
+                      <div 
+                        ref={sliderContainerRef}
+                        className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden group/result"
+                        onMouseMove={handleSliderMove}
+                        onTouchMove={handleSliderMove}
+                      >
+                        {/* Image 1: Original (Bottom Layer) */}
+                        <img 
+                          src={previewUrl} 
+                          alt="Original" 
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80" 
+                        />
+                        
+                        {/* Image 2: Upscaled (Top Layer, Clipped) */}
+                        <img 
+                          src={resultUrl} 
+                          alt="Upscaled" 
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                        />
+
+                        {/* The Slider Divider Line */}
+                        <div 
+                          className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-[0_0_10px_rgba(0,242,255,1)] pointer-events-none transition-all duration-75"
+                          style={{ left: `${sliderPosition}%` }}
+                        >
+                          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-bg border-2 border-accent rounded-full flex items-center justify-center shadow-xl">
+                            <SlidersHorizontal className="w-4 h-4 text-accent" />
+                          </div>
+                        </div>
+
+                        {/* Floating Labels */}
+                        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white pointer-events-none">
+                          Enhanced ({targetResolution})
+                        </div>
+                        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-text-secondary pointer-events-none">
+                          Original
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      /* --- STANDARD IMAGE VIEWER --- */
+                      <div 
+                        className="relative w-full h-full cursor-pointer group/result" 
+                        onClick={() => {
+                          const match = history.find(h => h.url === resultUrl);
+                          setSelectedHistoryItem(match || { 
+                            id: requestId || Date.now().toString(), 
+                            prompt: prompt, 
+                            url: resultUrl, 
+                            date: new Date().toISOString() 
+                          });
+                          setIsFlipped(false);
+                        }}
+                      >
+                        <img 
+                          src={resultUrl} 
+                          alt="Result" 
+                          className="w-full h-full object-contain rounded-[2rem] shadow-2xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300">
+                          <div className="bg-black/60 px-4 py-2 rounded-full border border-white/10 shadow-xl backdrop-blur-sm">
+                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">
+                              Click to Expand Data
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 ) : status !== 'idle' ? (
                   <div className="flex flex-col items-center text-center p-12">
@@ -1287,7 +1440,7 @@ export default function App() {
         </section>
       )}
 
-      {/* History Card Modal (Front & Back) - SHRINK-WRAPPED VERSION */}
+      {/* History Card Modal (Front & Back) */}
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
@@ -1399,12 +1552,12 @@ export default function App() {
                     <History className="w-8 h-8 text-accent/30 mb-6" />
                     
                     <h3 className="text-accent font-mono text-[10px] uppercase tracking-[0.2em] mb-4">
-                      Modification Prompt
+                      Modification Log
                     </h3>
                     
                     <div className="flex-1 w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6">
                       <p className="text-sm sm:text-lg text-text-primary leading-relaxed px-4">
-                        "{selectedHistoryItem.prompt}"
+                        {selectedHistoryItem.prompt}
                       </p>
                     </div>
                     
@@ -1468,13 +1621,14 @@ export default function App() {
                     onChange={(e) => setProvider(e.target.value as EngineProvider)} 
                     className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl text-text-primary outline-none transition-all focus:border-accent appearance-none cursor-pointer"
                   >
-                    <option value="wavespeed">Wavespeed (Wan-2.6)</option>
+                    <option value="wavespeed">Wavespeed (Wan-2.6 I2I)</option>
+                    <option value="wavespeed_upscale">Wavespeed (AI Upscaler)</option>
                     <option value="runpod_flux">RunPod (Flux T2I)</option>
                     <option value="runpod_zimage">RunPod (Z-Image Edit)</option>
                   </select>
                 </div>
                 
-                {provider === 'wavespeed' && (
+                {(provider === 'wavespeed' || provider === 'wavespeed_upscale') && (
                   <div className="space-y-6">
                     <div>
                       <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
@@ -1487,18 +1641,20 @@ export default function App() {
                         className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" 
                       />
                     </div>
-                    <div>
-                      <label className="flex items-center gap-2 block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
-                        <Key className="w-3 h-3" /> Civitai API Key (For LoRAs)
-                      </label>
-                      <input 
-                        type="password" 
-                        value={civitaiKey} 
-                        onChange={(e) => setCivitaiKey(e.target.value)} 
-                        placeholder="Optional (Auto-injects token)" 
-                        className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all text-accent" 
-                      />
-                    </div>
+                    {provider === 'wavespeed' && (
+                      <div>
+                        <label className="flex items-center gap-2 block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
+                          <Key className="w-3 h-3" /> Civitai API Key (For LoRAs)
+                        </label>
+                        <input 
+                          type="password" 
+                          value={civitaiKey} 
+                          onChange={(e) => setCivitaiKey(e.target.value)} 
+                          placeholder="Optional (Auto-injects token)" 
+                          className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all text-accent" 
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
                 
