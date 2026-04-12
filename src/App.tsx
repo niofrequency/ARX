@@ -9,19 +9,15 @@ import {
   Sparkles,
   Settings, 
   Loader2, 
-  CheckCircle2, 
   AlertCircle, 
   Download,
   Image as ImageIcon,
   X,
   History,
   RefreshCw,
-  Server,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Trash2,
-  Wand2,
   Sliders,
   Key,
   Maximize,
@@ -116,9 +112,10 @@ const TechApexIcon = ({ className }: { className?: string }) => (
     strokeLinejoin="round" 
     className={className}
   >
-    <path d="M12 2L2 22h20L12 2z" />
-    <path d="M12 2v20" />
-    <path d="M2 22l10-10 10 10" />
+    {/* Flipped Upside-Down Pyramid */}
+    <path d="M12 22L2 2h20L12 22z" />
+    <path d="M12 22V2" />
+    <path d="M2 2l10 10 10-10" />
   </svg>
 );
 
@@ -244,7 +241,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 
 // --- Types ---
 type GenerationStatus = 'idle' | 'uploading' | 'triggering' | 'processing' | 'fetching' | 'completed' | 'failed';
-type EngineProvider = 'wavespeed' | 'wavespeed_upscale' | 'runpod_flux' | 'runpod_zimage';
+type AppMode = 'editor' | 'upscaler';
 type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
@@ -256,13 +253,9 @@ interface HistoryItem {
 
 export default function App() {
   // --- Core State ---
-  const [provider, setProvider] = useState<EngineProvider>('wavespeed');
+  const [mode, setMode] = useState<AppMode>('editor');
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
-  const [runpodKey, setRunpodKey] = useState<string>('');
-  const [runpodFluxEndpointId, setRunpodFluxEndpointId] = useState<string>('');
-  const [runpodZImageEndpointId, setRunpodZImageEndpointId] = useState<string>('');
   const [civitaiKey, setCivitaiKey] = useState<string>('');
-  
   const [prompt, setPrompt] = useState<string>('');
   
   // --- Advanced Generation State ---
@@ -274,15 +267,9 @@ export default function App() {
   const [loras, setLoras] = useState<{name: string, url: string, scale: number}[]>([{ name: '', url: '', scale: 0.8 }]);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
-  // --- Multi-Image State ---
+  // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  
-  const [selectedFile2, setSelectedFile2] = useState<File | null>(null);
-  const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
-  
-  const [selectedFile3, setSelectedFile3] = useState<File | null>(null);
-  const [previewUrl3, setPreviewUrl3] = useState<string | null>(null);
 
   // --- Engine State ---
   const [status, setStatus] = useState<GenerationStatus>('idle');
@@ -304,34 +291,26 @@ export default function App() {
 
   // --- Initialization Effects ---
   useEffect(() => {
-    setProvider((localStorage.getItem('arx_provider') as EngineProvider) || 'wavespeed');
+    setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setWavespeedKey(localStorage.getItem('arx_wavespeed_key') || '');
-    setRunpodKey(localStorage.getItem('arx_runpod_key') || '');
-    setRunpodFluxEndpointId(localStorage.getItem('arx_runpod_flux_endpoint') || '');
-    setRunpodZImageEndpointId(localStorage.getItem('arx_runpod_zimage_endpoint') || '');
     setCivitaiKey(localStorage.getItem('arx_civitai_key') || '');
     
-    // Load Advanced Settings
     const savedCfg = localStorage.getItem('arx_cfg_scale');
     if (savedCfg) setCfgScale(parseFloat(savedCfg));
     
     const savedSteps = localStorage.getItem('arx_steps');
     if (savedSteps) setSteps(parseInt(savedSteps, 10));
     
-    // Load Saved LoRAs
     const savedLoras = localStorage.getItem('arx_loras');
     if (savedLoras) {
-      try {
-        setLoras(JSON.parse(savedLoras));
-      } catch (e) {
-        console.error("Failed to parse saved LoRAs", e);
-      }
+      try { setLoras(JSON.parse(savedLoras)); } catch (e) { console.error("Failed to parse saved LoRAs", e); }
     }
     
     getHistoryDB().then(setHistory).catch(console.error);
   }, []);
 
-  // --- Auto-Save Advanced Settings ---
+  // --- Auto-Save Settings ---
+  useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_cfg_scale', cfgScale.toString()); }, [cfgScale]);
   useEffect(() => { localStorage.setItem('arx_steps', steps.toString()); }, [steps]);
   useEffect(() => { localStorage.setItem('arx_loras', JSON.stringify(loras)); }, [loras]);
@@ -352,25 +331,21 @@ export default function App() {
   // --- Global Paste Listener ---
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      if (provider === 'runpod_flux') return; // Disable paste intercept for Text-to-Image mode
-      
       const items = e.clipboardData?.items;
       if (!items) return;
-      
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
           if (file) { 
-            handleFileProcess(file, 1); 
+            handleFileProcess(file); 
             break; 
           }
         }
       }
     };
-    
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [provider]);
+  }, []);
 
   // --- Carousel Keyboard Listener ---
   useEffect(() => {
@@ -389,33 +364,19 @@ export default function App() {
         setSelectedHistoryItem(null);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
   // --- Core Handlers ---
-  const handleFileProcess = (file: File, index: number) => {
+  const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please provide a valid image file.');
       return;
     }
-    
     const url = URL.createObjectURL(file);
-    
-    if (index === 1) { 
-      setSelectedFile(file); 
-      setPreviewUrl(url); 
-    }
-    if (index === 2) { 
-      setSelectedFile2(file); 
-      setPreviewUrl2(url); 
-    }
-    if (index === 3) { 
-      setSelectedFile3(file); 
-      setPreviewUrl3(url); 
-    }
-    
+    setSelectedFile(file); 
+    setPreviewUrl(url); 
     setResultUrl(null);
     setError(null);
     setStatus('idle');
@@ -434,11 +395,7 @@ export default function App() {
   };
 
   const handleSaveSettings = () => {
-    localStorage.setItem('arx_provider', provider);
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
-    localStorage.setItem('arx_runpod_key', runpodKey);
-    localStorage.setItem('arx_runpod_flux_endpoint', runpodFluxEndpointId);
-    localStorage.setItem('arx_runpod_zimage_endpoint', runpodZImageEndpointId);
     localStorage.setItem('arx_civitai_key', civitaiKey);
     setShowSettings(false);
   };
@@ -472,42 +429,22 @@ export default function App() {
 
   // --- THE UNIFIED GENERATION ENGINE ---
   const generateEdit = async () => {
-    // 1. Validation Logic
-    if ((provider === 'wavespeed' || provider === 'wavespeed_upscale') && !wavespeedKey) {
+    if (!wavespeedKey) {
       setError('Please enter your Wavespeed API Key in settings.');
       setShowSettings(true); 
       return;
     }
-    
-    if ((provider === 'runpod_flux' || provider === 'runpod_zimage') && !runpodKey) {
-      setError('Please enter your RunPod API Key in settings.');
-      setShowSettings(true); 
-      return;
-    }
-    
-    if (provider === 'runpod_flux' && !runpodFluxEndpointId) {
-      setError('Please enter your Flux Endpoint ID in settings.');
-      setShowSettings(true); 
-      return;
-    }
-    
-    if (provider === 'runpod_zimage' && !runpodZImageEndpointId) {
-      setError('Please enter your Z-Image Endpoint ID in settings.');
-      setShowSettings(true); 
-      return;
-    }
 
-    if (provider !== 'wavespeed_upscale' && !prompt) {
+    if (mode === 'editor' && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
 
-    if (provider !== 'runpod_flux' && !selectedFile) {
-      setError('Please upload a primary image for the Engine to process.');
+    if (!selectedFile) {
+      setError('Please upload a primary image to process.');
       return;
     }
 
-    // 2. Preparation Logic
     try {
       setError(null); 
       setResultUrl(null); 
@@ -522,46 +459,14 @@ export default function App() {
         }
       }, 100);
 
-      // 3. Routing Logic
-      if (provider === 'runpod_flux') {
-        setProgress(15);
-        await triggerRunpodFlux();
-      } 
-      else if (provider === 'wavespeed_upscale' && selectedFile) {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        setProgress(15);
+      const base64ImageRaw = await fileToBase64(selectedFile);
+      setProgress(15);
+      
+      if (mode === 'upscaler') {
         await triggerWavespeedUpscale(base64ImageRaw);
-      }
-      else if (provider === 'wavespeed' && selectedFile) {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        setProgress(15);
+      } else {
         await triggerWavespeed(base64ImageRaw);
       } 
-      else if (provider === 'runpod_zimage' && selectedFile) {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        setProgress(15);
-        
-        const pureBase64 = base64ImageRaw.split(',')[1] || base64ImageRaw;
-        let pureBase64_2 = undefined;
-        let pureBase64_3 = undefined;
-        
-        if (selectedFile2) {
-          const raw2 = await fileToBase64(selectedFile2);
-          pureBase64_2 = raw2.split(',')[1] || raw2;
-        }
-        if (selectedFile3) {
-          const raw3 = await fileToBase64(selectedFile3);
-          pureBase64_3 = raw3.split(',')[1] || raw3;
-        }
-
-        await triggerRunpodI2I(
-          runpodZImageEndpointId, 
-          'Z-Image Edit', 
-          pureBase64, 
-          pureBase64_2, 
-          pureBase64_3
-        );
-      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An unexpected error occurred.');
@@ -577,7 +482,7 @@ export default function App() {
 
     const newItem: HistoryItem = { 
       id: id, 
-      prompt: prompt, 
+      prompt: mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt, 
       url: finalImage, 
       date: new Date().toISOString() 
     };
@@ -620,9 +525,6 @@ export default function App() {
     setStatus('processing');
     setStatusMessage('Enhancing Resolution & Details...');
     
-    // Save the resolution choice as the prompt for the history log
-    setPrompt(`Upscaled to ${targetResolution.toUpperCase()}`);
-
     let isCompleted = false;
     let pollCount = 0;
     let finalImageUri = '';
@@ -660,7 +562,6 @@ export default function App() {
 
   // --- WAVESPEED LOGIC (Wan-2.6 I2I + Multi-LoRA) ---
   const triggerWavespeed = async (base64Image: string) => {
-    // Dynamic Payload construction
     const payload: any = { 
         enable_prompt_expansion: false, 
         images: [base64Image], 
@@ -670,13 +571,10 @@ export default function App() {
         num_inference_steps: steps
     };
 
-    // Auto-Inject Multi-LoRA parameters & Civitai API Key
     const activeLoras = loras.filter(l => l.url.trim() !== '');
-    
     if (activeLoras.length > 0) {
       const processedLoras = activeLoras.map(l => {
         let finalUrl = l.url.trim();
-        
         if (finalUrl.includes('civitai.com') && civitaiKey.trim() !== '') {
           const separator = finalUrl.includes('?') ? '&' : '?';
           if (!finalUrl.includes('token=')) {
@@ -725,9 +623,7 @@ export default function App() {
       targetResultUrl = triggerData.response_url;
     }
 
-    if (!id) {
-      throw new Error(`Server responded successfully but no ID was found in the payload.`);
-    }
+    if (!id) throw new Error(`Server responded successfully but no ID was found.`);
 
     if (!pollUrl) {
       if (triggerData.request_id) {
@@ -802,156 +698,6 @@ export default function App() {
     }
   };
 
-  // --- RUNPOD LOGIC (Unified I2I for Z-Image Edit) ---
-  const triggerRunpodI2I = async (endpointId: string, engineName: string, pureBase64: string, pureBase64_2?: string, pureBase64_3?: string) => {
-    const payloadInput: any = { 
-      prompt: prompt, 
-      image_base64: pureBase64, 
-      seed: Math.floor(Math.random() * 1000000), 
-      width: 1024, 
-      height: 1024,
-      guidance_scale: cfgScale,
-      num_inference_steps: steps
-    };
-    
-    if (pureBase64_2) payloadInput.image_base64_2 = pureBase64_2;
-    if (pureBase64_3) payloadInput.image_base64_3 = pureBase64_3;
-
-    const triggerResponse = await fetch(`https://api.runpod.ai/v2/${endpointId}/run`, {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${runpodKey}`, 
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify({ input: payloadInput })
-    });
-
-    if (!triggerResponse.ok) {
-      throw new Error(`RunPod trigger failed: ${await triggerResponse.text()}`);
-    }
-
-    setProgress(25);
-    const triggerData = await triggerResponse.json();
-    const id = triggerData.id;
-    
-    if (!id) throw new Error('RunPod responded but no job ID was found.');
-
-    setRequestId(id); 
-    setStatus('processing'); 
-    setStatusMessage(`${engineName} Serverless is processing...`);
-
-    let isCompleted = false;
-    let pollCount = 0;
-    let finalImageUri = '';
-
-    while (!isCompleted) {
-      if (pollCount >= 150) throw new Error('RunPod polling timed out.');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      pollCount++;
-
-      const pollResponse = await fetch(`https://api.runpod.ai/v2/${endpointId}/status/${id}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${runpodKey}` }
-      });
-
-      if (!pollResponse.ok) throw new Error('RunPod status polling failed.');
-      
-      const pollData = await pollResponse.json();
-
-      if (pollData.status === 'COMPLETED') {
-        isCompleted = true; 
-        setProgress(90);
-        
-        if (pollData.output?.error) {
-          throw new Error(pollData.output.error);
-        } else if (pollData.output?.image) {
-          let rawData = pollData.output.image;
-          finalImageUri = rawData.startsWith('data:') ? rawData : `data:image/png;base64,${rawData}`;
-        } else {
-          throw new Error("Invalid output format from RunPod template.");
-        }
-      } else if (pollData.status === 'FAILED') {
-        throw new Error("RunPod generation failed.");
-      } else {
-        setStatusMessage(`Status: ${pollData.status || 'IN_QUEUE'}...`);
-      }
-    }
-    handleFinalSuccess(finalImageUri, id);
-  };
-
-  // --- RUNPOD LOGIC (Flux T2I) ---
-  const triggerRunpodFlux = async () => {
-    const payloadInput: any = { 
-      prompt: prompt, 
-      seed: Math.floor(Math.random() * 1000000), 
-      guidance: cfgScale,
-      num_inference_steps: steps,
-      width: 1024, 
-      height: 1024 
-    };
-
-    const triggerResponse = await fetch(`https://api.runpod.ai/v2/${runpodFluxEndpointId}/run`, {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${runpodKey}`, 
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify({ input: payloadInput })
-    });
-
-    if (!triggerResponse.ok) {
-      throw new Error(`RunPod Flux trigger failed: ${await triggerResponse.text()}`);
-    }
-
-    setProgress(25);
-    const triggerData = await triggerResponse.json();
-    const id = triggerData.id;
-    
-    if (!id) throw new Error('RunPod responded but no job ID was found.');
-
-    setRequestId(id); 
-    setStatus('processing'); 
-    setStatusMessage('Flux T2I Serverless is processing...');
-
-    let isCompleted = false;
-    let pollCount = 0;
-    let finalImageUri = '';
-
-    while (!isCompleted) {
-      if (pollCount >= 150) throw new Error('RunPod polling timed out.');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      pollCount++;
-
-      const pollResponse = await fetch(`https://api.runpod.ai/v2/${runpodFluxEndpointId}/status/${id}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${runpodKey}` }
-      });
-
-      if (!pollResponse.ok) throw new Error('RunPod status polling failed.');
-      
-      const pollData = await pollResponse.json();
-
-      if (pollData.status === 'COMPLETED') {
-        isCompleted = true; 
-        setProgress(90);
-        
-        if (pollData.output?.error) {
-          throw new Error(pollData.output.error);
-        } else if (pollData.output?.image) {
-          let rawData = pollData.output.image;
-          finalImageUri = rawData.startsWith('data:') ? rawData : `data:image/png;base64,${rawData}`;
-        } else {
-          throw new Error("Invalid output format from Flux RunPod template.");
-        }
-      } else if (pollData.status === 'FAILED') {
-        throw new Error("RunPod Flux generation failed.");
-      } else {
-        setStatusMessage(`Status: ${pollData.status || 'IN_QUEUE'}...`);
-      }
-    }
-    handleFinalSuccess(finalImageUri, id);
-  };
-
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     try {
@@ -975,13 +721,6 @@ export default function App() {
     }
   };
 
-  const getEngineLabel = () => {
-    if (provider === 'wavespeed_upscale') return 'AI Image Upscaler';
-    if (provider === 'wavespeed') return 'Wan-2.6 Engine';
-    if (provider === 'runpod_flux') return 'Flux Krea (T2I)';
-    return 'Z-Image Edit (RunPod)';
-  };
-
   // --- Custom Before/After Slider Interaction ---
   const handleSliderMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!sliderContainerRef.current) return;
@@ -995,9 +734,7 @@ export default function App() {
     <div className="min-h-screen bg-bg text-text-primary font-sans flex flex-col selection:bg-accent/20 selection:text-accent">
       
       {/* Navbar */}
-      <nav 
-        className="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border px-4 sm:px-6 py-4 flex items-center justify-between"
-      >
+      <nav className="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border px-4 sm:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <TechApexIcon className="text-accent w-7 h-7 shrink-0" />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
@@ -1006,7 +743,7 @@ export default function App() {
           onClick={() => setShowSettings(!showSettings)} 
           className="p-2.5 hover:bg-white/5 rounded-xl border border-transparent hover:border-border transition-all group"
         >
-          <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey && (provider === 'wavespeed' || provider === 'wavespeed_upscale')) ? 'text-orange-500 animate-pulse' : ''}`} />
+          <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey) ? 'text-orange-500 animate-pulse' : ''}`} />
         </button>
       </nav>
 
@@ -1016,61 +753,49 @@ export default function App() {
         {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
+          {/* Master Mode Switcher */}
+          <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner">
+            <button
+              onClick={() => setMode('editor')}
+              className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+                mode === 'editor' 
+                  ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' 
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              Image Editor
+            </button>
+            <button
+              onClick={() => setMode('upscaler')}
+              className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+                mode === 'upscaler' 
+                  ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' 
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Maximize className="w-4 h-4" />
+              AI Upscaler
+            </button>
+          </div>
+
           <section>
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">
-                01 // {provider === 'runpod_flux' ? 'Engine Mode' : 'Input Assets'}
+                01 // {mode === 'editor' ? 'Primary Asset' : 'Image to Upscale'}
               </h2>
             </div>
             
-            {provider === 'runpod_flux' ? (
-              <div className="border border-accent/20 bg-accent/5 rounded-2xl p-8 flex flex-col items-center justify-center text-center h-full min-h-[180px] shadow-inner">
-                <Wand2 className="w-8 h-8 text-accent mb-4 animate-pulse" />
-                <p className="text-sm font-bold text-accent mb-2 uppercase tracking-widest">
-                  Text-to-Image Active
-                </p>
-                <p className="text-[10px] font-mono text-text-secondary uppercase tracking-widest">
-                  No source asset required for Flux.
-                </p>
-              </div>
-            ) : provider === 'wavespeed_upscale' ? (
+            <div className="h-[200px]">
               <UploadZone 
-                label="Image to Upscale" 
+                label={mode === 'editor' ? 'Upload Image to Edit' : 'Upload Image to Enhance'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
-                onProcess={(f: File) => handleFileProcess(f, 1)} 
+                onProcess={(f: File) => handleFileProcess(f)} 
               />
-            ) : (
-              <div className="grid gap-4">
-                <UploadZone 
-                  label="Primary Asset" 
-                  file={selectedFile} 
-                  preview={previewUrl} 
-                  onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
-                  onProcess={(f: File) => handleFileProcess(f, 1)} 
-                />
-                {provider === 'runpod_zimage' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <UploadZone 
-                      label="Style" 
-                      file={selectedFile2} 
-                      preview={previewUrl2} 
-                      onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }} 
-                      onProcess={(f: File) => handleFileProcess(f, 2)} 
-                    />
-                    <UploadZone 
-                      label="Subject" 
-                      file={selectedFile3} 
-                      preview={previewUrl3} 
-                      onClear={() => { setSelectedFile3(null); setPreviewUrl3(null); }} 
-                      onProcess={(f: File) => handleFileProcess(f, 3)} 
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            </div>
           </section>
 
           <section>
@@ -1083,7 +808,7 @@ export default function App() {
             
             <div className="space-y-6">
               
-              {provider === 'wavespeed_upscale' ? (
+              {mode === 'upscaler' ? (
                 <div className="space-y-4 bg-white/[0.02] p-5 border border-border rounded-2xl">
                   <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">
                     Target Output Resolution
@@ -1110,155 +835,123 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Describe your vision..." 
+                      placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')..." 
                       className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
-                      {getEngineLabel()}
+                      Wan-2.6 Editor
                     </div>
                   </div>
 
-                  {/* LoRA PANEL - FULL WIDTH ON DESKTOP/EDGE */}
-                  {provider === 'wavespeed' && (
-                    <div className="w-full border border-border bg-white/[0.01] rounded-2xl overflow-hidden block">
-                      <button 
-                        onClick={() => setShowAdvanced(!showAdvanced)} 
-                        className="w-full p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Sliders className="w-4 h-4 text-accent" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-text-primary">
-                            Advanced // Configuration
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-text-secondary">
-                          {showAdvanced ? '[-]' : '[+]'}
+                  <div className="w-full border border-border bg-white/[0.01] rounded-2xl overflow-hidden block">
+                    <button 
+                      onClick={() => setShowAdvanced(!showAdvanced)} 
+                      className="w-full p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-4 h-4 text-accent" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-text-primary">
+                          Advanced // Configuration
                         </span>
-                      </button>
-                      
-                      <AnimatePresence>
-                        {showAdvanced && (
-                          <motion.div 
-                            initial={{ height: 0, opacity: 0 }} 
-                            animate={{ height: 'auto', opacity: 1 }} 
-                            exit={{ height: 0, opacity: 0 }} 
-                            className="px-4 pb-5 border-t border-border space-y-6 pt-4 overflow-hidden"
+                      </div>
+                      <span className="text-[10px] font-mono text-text-secondary">
+                        {showAdvanced ? '[-]' : '[+]'}
+                      </span>
+                    </button>
+                    
+                    <AnimatePresence>
+                      {showAdvanced && (
+                        <motion.div 
+                          initial={{ height: 0, opacity: 0 }} 
+                          animate={{ height: 'auto', opacity: 1 }} 
+                          exit={{ height: 0, opacity: 0 }} 
+                          className="px-4 pb-5 border-t border-border space-y-6 pt-4 overflow-hidden"
+                        >
+                          <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
+                            <div>
+                              <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
+                                <span>CFG Scale</span>
+                                <span className="text-accent">{cfgScale.toFixed(1)}</span>
+                              </div>
+                              <input 
+                                type="range" min="1" max="20" step="0.5" 
+                                value={cfgScale} 
+                                onChange={(e) => setCfgScale(parseFloat(e.target.value))} 
+                                className="w-full accent-accent" 
+                              />
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
+                                <span>Steps</span>
+                                <span className="text-accent">{steps}</span>
+                              </div>
+                              <input 
+                                type="range" min="10" max="100" step="1" 
+                                value={steps} 
+                                onChange={(e) => setSteps(parseInt(e.target.value, 10))} 
+                                className="w-full accent-accent" 
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            {loras.map((lora, index) => (
+                              <div key={index} className="space-y-4 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
+                                {loras.length > 1 && (
+                                  <button 
+                                    onClick={() => setLoras(loras.filter((_, i) => i !== index))}
+                                    className="absolute top-3 right-3 text-text-secondary hover:text-red-400 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                                
+                                <div>
+                                  <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">LoRA Custom Name</label>
+                                  <input 
+                                    type="text" value={lora.name} 
+                                    onChange={(e) => { const newLoras = [...loras]; newLoras[index].name = e.target.value; setLoras(newLoras); }} 
+                                    placeholder="e.g. Cyberpunk Style" 
+                                    className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-text-primary focus:border-accent transition-colors" 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">LoRA URL (.safetensors)</label>
+                                  <input 
+                                    type="text" value={lora.url} 
+                                    onChange={(e) => { const newLoras = [...loras]; newLoras[index].url = e.target.value; setLoras(newLoras); }} 
+                                    placeholder="https://civitai.com/api/download/models/..." 
+                                    className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-accent focus:border-accent transition-colors" 
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
+                                    <span>Strength / Scale</span>
+                                    <span className="text-accent">{lora.scale.toFixed(2)}</span>
+                                  </div>
+                                  <input 
+                                    type="range" min="0" max="1.5" step="0.05" 
+                                    value={lora.scale} 
+                                    onChange={(e) => { const newLoras = [...loras]; newLoras[index].scale = parseFloat(e.target.value); setLoras(newLoras); }} 
+                                    className="w-full accent-accent" 
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <button 
+                            onClick={() => setLoras([...loras, { name: '', url: '', scale: 0.8 }])}
+                            className="w-full py-3 flex items-center justify-center gap-2 border border-dashed border-white/10 hover:border-accent/50 hover:bg-accent/5 rounded-xl transition-all text-text-secondary hover:text-accent text-[10px] font-bold uppercase tracking-widest"
                           >
-                            {/* Core Settings Grid */}
-                            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
-                              <div>
-                                <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                                  <span>CFG Scale</span>
-                                  <span className="text-accent">{cfgScale.toFixed(1)}</span>
-                                </div>
-                                <input 
-                                  type="range" 
-                                  min="1" 
-                                  max="20" 
-                                  step="0.5" 
-                                  value={cfgScale} 
-                                  onChange={(e) => setCfgScale(parseFloat(e.target.value))} 
-                                  className="w-full accent-accent" 
-                                />
-                              </div>
-                              <div>
-                                <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                                  <span>Steps</span>
-                                  <span className="text-accent">{steps}</span>
-                                </div>
-                                <input 
-                                  type="range" 
-                                  min="10" 
-                                  max="100" 
-                                  step="1" 
-                                  value={steps} 
-                                  onChange={(e) => setSteps(parseInt(e.target.value, 10))} 
-                                  className="w-full accent-accent" 
-                                />
-                              </div>
-                            </div>
-
-                            {/* LoRA List */}
-                            <div className="space-y-4">
-                              {loras.map((lora, index) => (
-                                <div key={index} className="space-y-4 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
-                                  {loras.length > 1 && (
-                                    <button 
-                                      onClick={() => setLoras(loras.filter((_, i) => i !== index))}
-                                      className="absolute top-3 right-3 text-text-secondary hover:text-red-400 transition-colors"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  
-                                  <div>
-                                    <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
-                                      LoRA Custom Name
-                                    </label>
-                                    <input 
-                                      type="text" 
-                                      value={lora.name} 
-                                      onChange={(e) => {
-                                        const newLoras = [...loras];
-                                        newLoras[index].name = e.target.value;
-                                        setLoras(newLoras);
-                                      }} 
-                                      placeholder="e.g. Cyberpunk Style" 
-                                      className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-text-primary focus:border-accent transition-colors" 
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[9px] font-mono text-text-secondary uppercase mb-2 tracking-widest">
-                                      LoRA Download URL (.safetensors)
-                                    </label>
-                                    <input 
-                                      type="text" 
-                                      value={lora.url} 
-                                      onChange={(e) => {
-                                        const newLoras = [...loras];
-                                        newLoras[index].url = e.target.value;
-                                        setLoras(newLoras);
-                                      }} 
-                                      placeholder="https://civitai.com/api/download/models/..." 
-                                      className="w-full p-3 bg-black/30 border border-white/10 rounded-xl outline-none text-[11px] font-mono text-accent focus:border-accent transition-colors" 
-                                    />
-                                  </div>
-                                  
-                                  <div>
-                                    <div className="flex justify-between text-[9px] font-mono uppercase mb-2 tracking-widest">
-                                      <span>Strength / Scale</span>
-                                      <span className="text-accent">{lora.scale.toFixed(2)}</span>
-                                    </div>
-                                    <input 
-                                      type="range" 
-                                      min="0" 
-                                      max="1.5" 
-                                      step="0.05" 
-                                      value={lora.scale} 
-                                      onChange={(e) => {
-                                        const newLoras = [...loras];
-                                        newLoras[index].scale = parseFloat(e.target.value);
-                                        setLoras(newLoras);
-                                      }} 
-                                      className="w-full accent-accent" 
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            
-                            <button 
-                              onClick={() => setLoras([...loras, { name: '', url: '', scale: 0.8 }])}
-                              className="w-full py-3 flex items-center justify-center gap-2 border border-dashed border-white/10 hover:border-accent/50 hover:bg-accent/5 rounded-xl transition-all text-text-secondary hover:text-accent text-[10px] font-bold uppercase tracking-widest"
-                            >
-                              <span className="text-lg leading-none mb-0.5">+</span> Add Another LoRA
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
+                            <span className="text-lg leading-none mb-0.5">+</span> Add Another LoRA
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </>
               )}
 
@@ -1267,8 +960,8 @@ export default function App() {
                   onClick={generateEdit} 
                   className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)]"
                 >
-                  {provider === 'wavespeed_upscale' ? <Maximize className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />} 
-                  {provider === 'wavespeed_upscale' ? 'Initialize Upscaler' : 'Initialize ARX Pipeline'}
+                  {mode === 'upscaler' ? <Maximize className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />} 
+                  {mode === 'upscaler' ? 'Execute Resolution Enhancement' : 'Execute AI Edit'}
                 </button>
               ) : (
                 <ProcessingBar progress={progress} />
@@ -1315,7 +1008,7 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }} 
                     className="w-full h-full p-2 sm:p-4"
                   >
-                    {provider === 'wavespeed_upscale' && previewUrl && !selectedHistoryItem ? (
+                    {mode === 'upscaler' && previewUrl && !selectedHistoryItem ? (
                       /* --- INTERACTIVE BEFORE/AFTER SLIDER FOR UPSCALER --- */
                       <div 
                         ref={sliderContainerRef}
@@ -1323,22 +1016,17 @@ export default function App() {
                         onMouseMove={handleSliderMove}
                         onTouchMove={handleSliderMove}
                       >
-                        {/* Image 1: Original (Bottom Layer) */}
                         <img 
                           src={previewUrl} 
                           alt="Original" 
                           className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80" 
                         />
-                        
-                        {/* Image 2: Upscaled (Top Layer, Clipped) */}
                         <img 
                           src={resultUrl} 
                           alt="Upscaled" 
                           className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                           style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
                         />
-
-                        {/* The Slider Divider Line */}
                         <div 
                           className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-[0_0_10px_rgba(0,242,255,1)] pointer-events-none transition-all duration-75"
                           style={{ left: `${sliderPosition}%` }}
@@ -1347,8 +1035,6 @@ export default function App() {
                             <SlidersHorizontal className="w-4 h-4 text-accent" />
                           </div>
                         </div>
-
-                        {/* Floating Labels */}
                         <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white pointer-events-none">
                           Enhanced ({targetResolution})
                         </div>
@@ -1612,78 +1298,31 @@ export default function App() {
               </div>
               
               <div className="flex-1 space-y-8">
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-text-secondary mb-3">
-                    Active Engine
-                  </label>
-                  <select 
-                    value={provider} 
-                    onChange={(e) => setProvider(e.target.value as EngineProvider)} 
-                    className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl text-text-primary outline-none transition-all focus:border-accent appearance-none cursor-pointer"
-                  >
-                    <option value="wavespeed">Wavespeed (Wan-2.6 I2I)</option>
-                    <option value="wavespeed_upscale">Wavespeed (AI Upscaler)</option>
-                    <option value="runpod_flux">RunPod (Flux T2I)</option>
-                    <option value="runpod_zimage">RunPod (Z-Image Edit)</option>
-                  </select>
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
+                      Wavespeed API Key
+                    </label>
+                    <input 
+                      type="password" 
+                      value={wavespeedKey} 
+                      onChange={(e) => setWavespeedKey(e.target.value)} 
+                      className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" 
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
+                      <Key className="w-3 h-3" /> Civitai API Key (For LoRAs)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={civitaiKey} 
+                      onChange={(e) => setCivitaiKey(e.target.value)} 
+                      placeholder="Optional (Auto-injects token)" 
+                      className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all text-accent" 
+                    />
+                  </div>
                 </div>
-                
-                {(provider === 'wavespeed' || provider === 'wavespeed_upscale') && (
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
-                        API Key
-                      </label>
-                      <input 
-                        type="password" 
-                        value={wavespeedKey} 
-                        onChange={(e) => setWavespeedKey(e.target.value)} 
-                        className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" 
-                      />
-                    </div>
-                    {provider === 'wavespeed' && (
-                      <div>
-                        <label className="flex items-center gap-2 block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
-                          <Key className="w-3 h-3" /> Civitai API Key (For LoRAs)
-                        </label>
-                        <input 
-                          type="password" 
-                          value={civitaiKey} 
-                          onChange={(e) => setCivitaiKey(e.target.value)} 
-                          placeholder="Optional (Auto-injects token)" 
-                          className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all text-accent" 
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {(provider === 'runpod_flux' || provider === 'runpod_zimage') && (
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
-                        RunPod Key
-                      </label>
-                      <input 
-                        type="password" 
-                        value={runpodKey} 
-                        onChange={(e) => setRunpodKey(e.target.value)} 
-                        className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-3">
-                        Endpoint ID
-                      </label>
-                      <input 
-                        type="text" 
-                        value={provider === 'runpod_flux' ? runpodFluxEndpointId : runpodZImageEndpointId} 
-                        onChange={(e) => provider === 'runpod_flux' ? setRunpodFluxEndpointId(e.target.value) : setRunpodZImageEndpointId(e.target.value)} 
-                        className="w-full p-4 bg-white/[0.02] border border-border rounded-2xl focus:border-accent outline-none transition-all" 
-                      />
-                    </div>
-                  </div>
-                )}
                 
                 <div className="pt-8 border-t border-border/50">
                   <button 
