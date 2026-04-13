@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Trash2,
   Maximize,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Box
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -199,7 +200,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 
 // --- Types ---
 type GenerationStatus = 'idle' | 'uploading' | 'triggering' | 'processing' | 'fetching' | 'completed' | 'failed';
-type AppMode = 'editor' | 'upscaler';
+type AppMode = 'editor' | 'upscaler' | 'angles';
 type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
@@ -214,7 +215,12 @@ export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [prompt, setPrompt] = useState<string>('');
+  
+  // --- Parameters State ---
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
+  const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
+  const [verticalAngle, setVerticalAngle] = useState<number>(0);
+  const [distance, setDistance] = useState<number>(1);
 
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -237,6 +243,18 @@ export default function App() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- Parameter Configs ---
+  const horizontalOptions = [
+    { v: 0, l: '0° Front' }, { v: 45, l: '45° F-Right' }, { v: 90, l: '90° Right' }, { v: 135, l: '135° B-Right' },
+    { v: 180, l: '180° Back' }, { v: 225, l: '225° B-Left' }, { v: 270, l: '270° Left' }, { v: 315, l: '315° F-Left' }
+  ];
+  const verticalOptions = [
+    { v: -30, l: '-30° Low' }, { v: 0, l: '0° Eye' }, { v: 30, l: '30° Elev' }, { v: 60, l: '60° High' }
+  ];
+  const distanceOptions = [
+    { v: 0, l: 'Close' }, { v: 1, l: 'Medium' }, { v: 2, l: 'Wide' }
+  ];
 
   // --- Initialization Effects ---
   useEffect(() => {
@@ -391,9 +409,11 @@ export default function App() {
         }
       }, 100);
 
-      // Branch logic: Upscaler uses binary upload, Editor uses Base64
+      // Branch logic: Upscaler and Angles use binary upload, Editor uses Base64
       if (mode === 'upscaler') {
         await triggerWavespeedUpscale(selectedFile);
+      } else if (mode === 'angles') {
+        await triggerWavespeedAngles(selectedFile);
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
         setProgress(15);
@@ -412,9 +432,13 @@ export default function App() {
     setProgress(100); 
     setStatus('completed');
 
+    let historyPrompt = prompt;
+    if (mode === 'upscaler') historyPrompt = `Upscaled to ${targetResolution.toUpperCase()}`;
+    if (mode === 'angles') historyPrompt = `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
+
     const newItem: HistoryItem = { 
       id: id, 
-      prompt: mode === 'upscaler' ? `Upscaled to ${targetResolution.toUpperCase()}` : prompt, 
+      prompt: historyPrompt, 
       url: finalImage, 
       date: new Date().toISOString() 
     };
@@ -424,9 +448,9 @@ export default function App() {
     await pruneHistoryDB(50);
   };
 
-  // --- WAVESPEED LOGIC (Upscaler API) ---
-  const triggerWavespeedUpscale = async (file: File) => {
-    // 1. Upload File as Binary (Best Practice for large upscaling assets)
+  // --- WAVESPEED LOGIC (Qwen Multi-Angle API) ---
+  const triggerWavespeedAngles = async (file: File) => {
+    // 1. Upload File as Binary
     setStatusMessage('Uploading Asset to Secure CDN...');
     setProgress(10);
     
@@ -435,25 +459,149 @@ export default function App() {
 
     const uploadRes = await fetch("https://api.wavespeed.ai/api/v3/media/upload/binary", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${wavespeedKey}`
-      },
-      // Note: Do NOT set Content-Type header when using FormData
+      headers: { "Authorization": `Bearer ${wavespeedKey}` },
       body: formData 
     });
 
-    if (!uploadRes.ok) {
-      throw new Error('Asset upload failed. Please try a smaller file or check your connection.');
-    }
-
+    if (!uploadRes.ok) throw new Error('Asset upload failed. Please try a smaller file.');
     const uploadData = await uploadRes.json();
     const cdnUrl = uploadData.data?.download_url || uploadData.url;
+    if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
 
-    if (!cdnUrl) {
-      throw new Error('Failed to retrieve CDN URL after upload.');
+    // 2. Trigger Qwen Endpoint
+    setStatusMessage('Initiating Multi-Angle Generation...');
+    setProgress(25);
+
+    const payload = {
+      distance: distance,
+      enable_base64_output: false,
+      enable_sync_mode: false,
+      horizontal_angle: horizontalAngle,
+      images: [cdnUrl],
+      output_format: "jpeg",
+      seed: -1,
+      vertical_angle: verticalAngle
+    };
+
+    const triggerResponse = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${wavespeedKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    let triggerData;
+    try {
+      triggerData = await triggerResponse.json();
+    } catch (e) {
+      throw new Error(`Failed to parse response: ${await triggerResponse.text()}`);
     }
 
-    // 2. Trigger Upscaler Endpoint
+    if (!triggerResponse.ok) {
+      throw new Error(`Wavespeed API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Error'}`);
+    }
+
+    const id = triggerData.id || triggerData.request_id || triggerData.task_id || triggerData.uuid || triggerData.data?.id || triggerData.data?.request_id;
+
+    if (!id) throw new Error(`API Rejected Request: Missing Task ID.`);
+
+    // Route polling URL dynamically
+    let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
+    let targetResultUrl = triggerData.response_url;
+
+    if (!pollUrl) {
+      if (triggerData.request_id || triggerData.data?.request_id) {
+        pollUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}/status`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}`;
+      } else {
+        pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
+      }
+    }
+
+    setRequestId(id);
+    setStatus('processing');
+    setStatusMessage('Rendering Camera Angles...');
+
+    // 3. Polling Loop
+    let isCompleted = false;
+    let pollCount = 0;
+    let finalImageUri = '';
+
+    while (!isCompleted) {
+      if (pollCount >= 150) throw new Error('Polling timed out.');
+      await new Promise(r => setTimeout(r, 2000));
+      pollCount++;
+
+      const pollResponse = await fetch(pollUrl, {
+        headers: { "Authorization": `Bearer ${wavespeedKey}` }
+      });
+
+      if (!pollResponse.ok) {
+        if (pollResponse.status === 404 && pollCount < 10) continue;
+        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
+      }
+
+      const pollData = await pollResponse.json();
+      const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
+
+      if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
+        setProgress(90);
+        setStatusMessage('Fetching Multi-Angle output...');
+
+        let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
+
+        if (!outputs || outputs.length === 0) {
+          const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
+          const resultResponse = await fetch(fetchTarget, {
+            headers: { "Authorization": `Bearer ${wavespeedKey}` }
+          });
+          if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
+          const resultData = await resultResponse.json();
+          outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
+        }
+
+        if (outputs && outputs.length > 0) {
+          let finalImage = outputs[0];
+          if (typeof finalImage === 'object' && finalImage !== null) {
+              finalImage = finalImage.url || finalImage.file?.url;
+          }
+          finalImageUri = finalImage;
+          isCompleted = true;
+        } else {
+          throw new Error("Generation succeeded but no output URL was found.");
+        }
+      } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
+        throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
+      } else {
+        setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
+      }
+    }
+
+    handleFinalSuccess(finalImageUri, id);
+  };
+
+  // --- WAVESPEED LOGIC (Upscaler API) ---
+  const triggerWavespeedUpscale = async (file: File) => {
+    setStatusMessage('Uploading Asset to Secure CDN...');
+    setProgress(10);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadRes = await fetch("https://api.wavespeed.ai/api/v3/media/upload/binary", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${wavespeedKey}` },
+      body: formData 
+    });
+
+    if (!uploadRes.ok) throw new Error('Asset upload failed. Please try a smaller file or check your connection.');
+    const uploadData = await uploadRes.json();
+    const cdnUrl = uploadData.data?.download_url || uploadData.url;
+    if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
+
     setStatusMessage('Initiating Resolution Enhancement...');
     setProgress(25);
 
@@ -475,25 +623,13 @@ export default function App() {
     });
 
     let triggerData;
-    try {
-      triggerData = await triggerResponse.json();
-    } catch (e) {
-      throw new Error(`Failed to parse Wavespeed response. Server said: ${await triggerResponse.text()}`);
-    }
+    try { triggerData = await triggerResponse.json(); } 
+    catch (e) { throw new Error(`Failed to parse Wavespeed response. Server said: ${await triggerResponse.text()}`); }
 
-    if (!triggerResponse.ok) {
-      const serverMsg = triggerData.message || triggerData.error || triggerData.detail || 'Unknown Server Error';
-      throw new Error(`Wavespeed API Error: ${serverMsg}`);
-    }
-
+    if (!triggerResponse.ok) throw new Error(`Wavespeed API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Server Error'}`);
     const id = triggerData.id || triggerData.request_id || triggerData.task_id || triggerData.uuid || triggerData.data?.id || triggerData.data?.request_id;
+    if (!id) throw new Error(`API Rejected Request: Missing ID.`);
 
-    if (!id) {
-      const errorReason = triggerData.message || triggerData.error || triggerData.detail || JSON.stringify(triggerData);
-      throw new Error(`API Rejected Request: ${errorReason}`);
-    }
-
-    // Fix for 404 Endpoint Mismatch: Dynamically route the polling URL
     let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
     let targetResultUrl = triggerData.response_url;
 
@@ -511,7 +647,6 @@ export default function App() {
     setStatus('processing');
     setStatusMessage('Enhancing Resolution & Details...');
 
-    // 3. Robust Polling Loop (Handles early 404 propagation delays)
     let isCompleted = false;
     let pollCount = 0;
     let finalImageUri = '';
@@ -521,15 +656,10 @@ export default function App() {
       await new Promise(r => setTimeout(r, 2000));
       pollCount++;
 
-      const pollResponse = await fetch(pollUrl, {
-        headers: { "Authorization": `Bearer ${wavespeedKey}` }
-      });
+      const pollResponse = await fetch(pollUrl, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
 
       if (!pollResponse.ok) {
-        // If the task hasn't propagated to the worker DB yet, it throws a temporary 404. Let it retry.
-        if (pollResponse.status === 404 && pollCount < 10) {
-          continue;
-        }
+        if (pollResponse.status === 404 && pollCount < 10) continue;
         throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
       }
 
@@ -539,17 +669,11 @@ export default function App() {
       if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
         setProgress(90);
         setStatusMessage('Fetching final high-res image...');
-
-        // Check if outputs are returned directly in the polling response first
         let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
 
         if (!outputs || outputs.length === 0) {
-          // Fallback to the dedicated result endpoint
           const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
-          const resultResponse = await fetch(fetchTarget, {
-            headers: { "Authorization": `Bearer ${wavespeedKey}` }
-          });
-          
+          const resultResponse = await fetch(fetchTarget, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
           if (!resultResponse.ok) throw new Error('Failed to fetch final upscale result.');
           const resultData = await resultResponse.json();
           outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
@@ -557,13 +681,11 @@ export default function App() {
 
         if (outputs && outputs.length > 0) {
           let finalImage = outputs[0];
-          if (typeof finalImage === 'object' && finalImage !== null) {
-              finalImage = finalImage.url || finalImage.file?.url;
-          }
+          if (typeof finalImage === 'object' && finalImage !== null) finalImage = finalImage.url || finalImage.file?.url;
           finalImageUri = finalImage;
           isCompleted = true;
         } else {
-          throw new Error("Upscale succeeded but no output URL was found in the result data.");
+          throw new Error("Upscale succeeded but no output URL was found.");
         }
       } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
         throw new Error(pollData.error || pollData.data?.error || "Upscaling task failed on the server.");
@@ -571,7 +693,6 @@ export default function App() {
         setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
       }
     }
-
     handleFinalSuccess(finalImageUri, id);
   };
 
@@ -588,25 +709,19 @@ export default function App() {
 
     const triggerResponse = await fetch('https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${wavespeedKey}` 
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
       body: JSON.stringify(payload)
     });
 
-    if (!triggerResponse.ok) {
-      throw new Error(`Failed to trigger Wavespeed edit: ${await triggerResponse.text()}`);
-    }
+    if (!triggerResponse.ok) throw new Error(`Failed to trigger Wavespeed edit: ${await triggerResponse.text()}`);
 
     setProgress(25);
     const triggerData = await triggerResponse.json();
-    
     const id = triggerData.id || triggerData.request_id || triggerData.job_id || triggerData.task_id || triggerData.prediction_id || triggerData.uuid || triggerData.prediction?.id || triggerData.data?.id || triggerData.data?.request_id;
+    if (!id) throw new Error(`Server responded successfully but no ID was found.`);
+
     let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
     let targetResultUrl = triggerData.response_url;
-
-    if (!id) throw new Error(`Server responded successfully but no ID was found.`);
 
     if (!pollUrl) {
       if (triggerData.request_id || triggerData.data?.request_id) {
@@ -631,24 +746,17 @@ export default function App() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       pollCount++;
       
-      const pollResponse = await fetch(pollUrl as string, { 
-        headers: { 'Authorization': `Bearer ${wavespeedKey}` } 
-      });
+      const pollResponse = await fetch(pollUrl as string, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
       
       if (!pollResponse.ok) {
-        // Handle 404 propagation delay
-        if (pollResponse.status === 404 && pollCount < 10) {
-          continue;
-        }
+        if (pollResponse.status === 404 && pollCount < 10) continue;
         throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
       }
 
       const pollData = await pollResponse.json();
       const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
       
-      if (currentStatus === 'blocked' || pollData.nsfw === true || pollData.data?.nsfw === true) {
-        throw new Error('Safety filter blocked request.');
-      }
+      if (currentStatus === 'blocked' || pollData.nsfw === true || pollData.data?.nsfw === true) throw new Error('Safety filter blocked request.');
 
       if (currentStatus === 'completed' || currentStatus === 'succeeded' || currentStatus === 'success') {
         isCompleted = true; 
@@ -666,10 +774,7 @@ export default function App() {
       setProgress(95); 
       
       const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}`;
-      const resultResponse = await fetch(fetchTarget, { 
-        headers: { 'Authorization': `Bearer ${wavespeedKey}` } 
-      });
-      
+      const resultResponse = await fetch(fetchTarget, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
       if (!resultResponse.ok) throw new Error('Failed to fetch result.');
       
       const resultData = await resultResponse.json();
@@ -678,9 +783,7 @@ export default function App() {
 
     if (finalOutputs && finalOutputs.length > 0) {
       let finalImage = finalOutputs[0];
-      if (typeof finalImage === 'object' && finalImage !== null) {
-        finalImage = finalImage.url || finalImage.file?.url;
-      }
+      if (typeof finalImage === 'object' && finalImage !== null) finalImage = finalImage.url || finalImage.file?.url;
       handleFinalSuccess(finalImage, id);
     } else {
       throw new Error('No output image found in Wavespeed result.');
@@ -743,28 +846,39 @@ export default function App() {
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
           {/* Master Mode Switcher */}
-          <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner">
+          <div className="flex bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
             <button
               onClick={() => setMode('editor')}
-              className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
                 mode === 'editor' 
                   ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' 
                   : 'text-text-secondary hover:text-white hover:bg-white/5'
               }`}
             >
-              <Sparkles className="w-4 h-4" />
-              Image Editor
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              Editor
+            </button>
+            <button
+              onClick={() => setMode('angles')}
+              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+                mode === 'angles' 
+                  ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' 
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              Multi-Angle
             </button>
             <button
               onClick={() => setMode('upscaler')}
-              className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
                 mode === 'upscaler' 
                   ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-[1.02]' 
                   : 'text-text-secondary hover:text-white hover:bg-white/5'
               }`}
             >
-              <Maximize className="w-4 h-4" />
-              AI Upscaler
+              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              Upscale
             </button>
           </div>
 
@@ -772,13 +886,13 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">
-                01 // {mode === 'editor' ? 'Primary Asset' : 'Image to Upscale'}
+                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
             <div className="h-[200px]">
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : 'Upload Image to Enhance'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -797,7 +911,7 @@ export default function App() {
             
             <div className="space-y-6">
               
-              {mode === 'upscaler' ? (
+              {mode === 'upscaler' && (
                 <div className="space-y-4 bg-white/[0.02] p-5 border border-border rounded-2xl">
                   <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">
                     Target Output Resolution
@@ -818,7 +932,87 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {mode === 'angles' && (
+                <div className="space-y-6 bg-white/[0.02] p-5 sm:p-6 border border-border rounded-2xl">
+                  {/* Horizontal Angle */}
+                  <div>
+                    <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest mb-3 flex items-center justify-between">
+                      <span>Horizontal Rotation (Azimuth)</span>
+                      <span className="text-accent">{horizontalAngle}°</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {horizontalOptions.map((opt) => (
+                        <button
+                          key={`h-${opt.v}`}
+                          onClick={() => setHorizontalAngle(opt.v)}
+                          className={`py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border ${
+                            horizontalAngle === opt.v 
+                              ? 'bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,242,255,0.1)]' 
+                              : 'bg-black/40 border-white/5 text-text-secondary hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          {opt.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t border-white/5">
+                    {/* Vertical Angle */}
+                    <div>
+                      <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest mb-3 flex items-center justify-between">
+                        <span>Vertical Tilt</span>
+                        <span className="text-accent">{verticalAngle}°</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {verticalOptions.map((opt) => (
+                          <button
+                            key={`v-${opt.v}`}
+                            onClick={() => setVerticalAngle(opt.v)}
+                            className={`py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border ${
+                              verticalAngle === opt.v 
+                                ? 'bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,242,255,0.1)]' 
+                                : 'bg-black/40 border-white/5 text-text-secondary hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Distance */}
+                    <div>
+                      <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest mb-3 flex items-center justify-between">
+                        <span>Distance</span>
+                        <span className="text-accent">Level {distance}</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {distanceOptions.map((opt) => (
+                          <button
+                            key={`d-${opt.v}`}
+                            onClick={() => setDistance(opt.v)}
+                            className={`py-2 px-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border ${
+                              distance === opt.v 
+                                ? 'bg-accent/10 border-accent text-accent shadow-[0_0_10px_rgba(0,242,255,0.1)]' 
+                                : 'bg-black/40 border-white/5 text-text-secondary hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest mt-2">
+                    Qwen-Image Angles System
+                  </div>
+                </div>
+              )}
+
+              {mode === 'editor' && (
                 <div className="relative">
                   <textarea 
                     value={prompt} 
@@ -837,8 +1031,13 @@ export default function App() {
                   onClick={generateEdit} 
                   className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)]"
                 >
-                  {mode === 'upscaler' ? <Maximize className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />} 
-                  {mode === 'upscaler' ? 'Execute Resolution Enhancement' : 'Execute AI Edit'}
+                  {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
+                  {mode === 'editor' && <Sparkles className="w-5 h-5" />}
+                  {mode === 'angles' && <Box className="w-5 h-5" />}
+                  
+                  {mode === 'upscaler' ? 'Execute Resolution Enhancement' 
+                   : mode === 'angles' ? 'Generate 3D Camera Angle' 
+                   : 'Execute AI Edit'}
                 </button>
               ) : (
                 <ProcessingBar progress={progress} />
@@ -867,7 +1066,7 @@ export default function App() {
               </div>
               {resultUrl && (
                 <button 
-                  onClick={(e) => handleDownload(resultUrl, prompt, e)} 
+                  onClick={(e) => handleDownload(resultUrl, prompt || 'angle_render', e)} 
                   className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" /> 
@@ -927,7 +1126,7 @@ export default function App() {
                           const match = history.find(h => h.url === resultUrl);
                           setSelectedHistoryItem(match || { 
                             id: requestId || Date.now().toString(), 
-                            prompt: prompt, 
+                            prompt: mode === 'angles' ? `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}` : prompt, 
                             url: resultUrl, 
                             date: new Date().toISOString() 
                           });
@@ -1124,19 +1323,22 @@ export default function App() {
                       </p>
                     </div>
                     
-                    <button 
-                      onClick={() => { 
-                        if(selectedHistoryItem) { 
-                          setPrompt(selectedHistoryItem.prompt); 
-                          setSelectedHistoryItem(null); 
-                          window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                        } 
-                      }} 
-                      className="w-full max-w-md mx-auto py-4 bg-accent text-bg rounded-xl font-bold uppercase tracking-[0.15em] text-[10px] hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Use This Prompt
-                    </button>
+                    {/* Only show 'Use prompt' if it's an editor request */}
+                    {!selectedHistoryItem.prompt.startsWith('Multi-Angle') && !selectedHistoryItem.prompt.startsWith('Upscaled') && (
+                      <button 
+                        onClick={() => { 
+                          if(selectedHistoryItem) { 
+                            setPrompt(selectedHistoryItem.prompt); 
+                            setSelectedHistoryItem(null); 
+                            window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                          } 
+                        }} 
+                        className="w-full max-w-md mx-auto py-4 bg-accent text-bg rounded-xl font-bold uppercase tracking-[0.15em] text-[10px] hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Use This Prompt
+                      </button>
+                    )}
                     
                     <p className="text-[9px] text-text-secondary mt-4 uppercase tracking-widest opacity-50">
                       <span className="sm:hidden">Double tap to view image</span>
