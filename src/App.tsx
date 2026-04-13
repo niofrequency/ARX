@@ -20,7 +20,9 @@ import {
   Trash2,
   Maximize,
   SlidersHorizontal,
-  Box
+  Box,
+  Layers,
+  CloudDownload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -90,7 +92,7 @@ const clearHistoryDB = async () => {
   });
 };
 
-const pruneHistoryDB = async (keepCount: number = 50) => {
+const pruneHistoryDB = async (keepCount: number = 100) => {
   const history = await getHistoryDB();
   if (history.length <= keepCount) return;
   const toDelete = history.slice(keepCount);
@@ -116,41 +118,6 @@ const TechApexIcon = ({ className }: { className?: string }) => (
     <path d="M2 2l10 10 10-10" />
   </svg>
 );
-
-const ProcessingBar = ({ progress }: { progress: number }) => {
-  const totalSegments = 10;
-  const litSegments = (progress / 100) * totalSegments;
-
-  return (
-    <div className="relative w-full h-14 sm:h-[60px] bg-[#0a0f14] border border-[#1a232c] rounded-2xl flex items-center justify-center overflow-hidden px-4 shadow-inner">
-      <div className="absolute inset-0 flex items-center justify-between px-3 gap-1.5 opacity-30">
-        {Array.from({ length: totalSegments }).map((_, i) => (
-          <div key={`bg-${i}`} className="h-6 w-full bg-cyan-950 rounded-sm" />
-        ))}
-      </div>
-      <div className="absolute inset-0 flex items-center justify-between px-3 gap-1.5">
-        {Array.from({ length: totalSegments }).map((_, i) => {
-          const segmentOpacity = Math.max(0, Math.min(1, litSegments - i));
-          return (
-            <motion.div
-              key={`active-${i}`}
-              className="h-6 w-full bg-accent rounded-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: segmentOpacity }}
-              transition={{ duration: 0.3 }}
-              style={{ boxShadow: segmentOpacity > 0 ? `0 0 10px rgba(6, 182, 212, ${segmentOpacity * 0.6})` : 'none' }}
-            />
-          );
-        })}
-      </div>
-      <div className="absolute z-10 px-4 py-1 bg-[#0a0f14]/80 backdrop-blur-md border border-accent/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-        <span className="text-[10px] sm:text-xs font-mono tracking-widest text-accent font-bold drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
-          {Math.round(progress)}%
-        </span>
-      </div>
-    </div>
-  );
-};
 
 const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -199,7 +166,6 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 };
 
 // --- Types ---
-type GenerationStatus = 'idle' | 'uploading' | 'triggering' | 'processing' | 'fetching' | 'completed' | 'failed';
 type AppMode = 'editor' | 'upscaler' | 'angles';
 type Resolution = '2k' | '4k' | '8k';
 
@@ -208,6 +174,16 @@ interface HistoryItem {
   prompt: string;
   url: string;
   date: string;
+}
+
+interface QueueTask {
+  id: string;
+  mode: AppMode;
+  prompt: string;
+  progress: number;
+  message: string;
+  pollUrl: string;
+  targetResultUrl: string;
 }
 
 export default function App() {
@@ -226,17 +202,16 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // --- Engine State ---
-  const [status, setStatus] = useState<GenerationStatus>('idle');
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  // --- Queue Engine State ---
+  const [queue, setQueue] = useState<QueueTask[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   // --- UI State (Slider & Modals) ---
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   
@@ -256,28 +231,71 @@ export default function App() {
     { v: 0, l: 'Close' }, { v: 1, l: 'Medium' }, { v: 2, l: 'Wide' }
   ];
 
-  // --- Initialization Effects ---
+  // --- Initialization & Cloud Sync ---
   useEffect(() => {
+    const savedKey = localStorage.getItem('arx_wavespeed_key') || '';
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
-    setWavespeedKey(localStorage.getItem('arx_wavespeed_key') || '');
-    getHistoryDB().then(setHistory).catch(console.error);
+    setWavespeedKey(savedKey);
+    
+    getHistoryDB().then(localData => {
+      setHistory(localData);
+      if (savedKey) syncCloudHistory(savedKey);
+    }).catch(console.error);
   }, []);
 
   // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (status === 'processing') {
-      interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 85) return 85;
-          return prev + Math.max(0.5, (85 - prev) * 0.05);
-        });
-      }, 500);
+  // --- Cloud Sync Logic ---
+  const syncCloudHistory = async (keyToUse: string) => {
+    if (!keyToUse) return;
+    setIsSyncing(true);
+    try {
+      const res = await fetch("https://api.wavespeed.ai/api/v3/predictions?page=1&page_size=100", {
+        headers: { "Authorization": `Bearer ${keyToUse}` }
+      });
+      if (!res.ok) throw new Error("Failed to fetch cloud history");
+      
+      const json = await res.json();
+      const items = json.data?.items || json.items || [];
+      
+      const cloudHistory = items
+        .filter((item: any) => item.status === "completed" || item.status === "succeeded" || item.outputs?.length > 0 || item.data?.outputs?.length > 0)
+        .map((item: any) => {
+          let imageUrl = '';
+          const outputs = item.outputs || item.data?.outputs || (typeof item.output === 'string' ? [item.output] : item.output);
+          const out = outputs?.[0];
+          
+          if (typeof out === 'string') imageUrl = out;
+          else if (typeof out === 'object' && out !== null) imageUrl = out.url || out.file?.url;
+
+          let historyPrompt = item.input?.prompt || item.model || 'Cloud Generation';
+          if (item.model?.includes('upscaler')) historyPrompt = `Upscaled Image`;
+          if (item.model?.includes('multiple-angles') || item.model?.includes('qwen')) historyPrompt = `Multi-Angle Render`;
+
+          return {
+            id: item.id,
+            prompt: historyPrompt,
+            url: imageUrl,
+            date: item.created_at || new Date().toISOString()
+          };
+        })
+        .filter((item: any) => item.url);
+
+      setHistory(prev => {
+        const merged = [...cloudHistory, ...prev];
+        const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+        const sorted = unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 100);
+        
+        sorted.forEach(item => saveHistoryItem(item));
+        return sorted;
+      });
+    } catch (e) {
+      console.error("Cloud sync failed:", e);
+    } finally {
+      setIsSyncing(false);
     }
-    return () => clearInterval(interval);
-  }, [status]);
+  };
 
   // --- Global Paste Listener ---
   useEffect(() => {
@@ -330,10 +348,6 @@ export default function App() {
     setPreviewUrl(url); 
     setResultUrl(null);
     setError(null);
-    setStatus('idle');
-    setStatusMessage('');
-    setProgress(0);
-    setRequestId(null);
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -348,6 +362,7 @@ export default function App() {
   const handleSaveSettings = () => {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     setShowSettings(false);
+    if (wavespeedKey) syncCloudHistory(wavespeedKey);
   };
 
   const handleNextHistory = (e?: React.MouseEvent) => {
@@ -377,7 +392,7 @@ export default function App() {
     }
   };
 
-  // --- THE UNIFIED GENERATION ENGINE ---
+  // --- NON-BLOCKING QUEUE ENGINE ---
   const generateEdit = async () => {
     if (!wavespeedKey) {
       setError('Please enter your Wavespeed API Key in settings.');
@@ -395,65 +410,140 @@ export default function App() {
       return;
     }
 
+    setError(null); 
+    setIsSubmitting(true);
+
     try {
-      setError(null); 
-      setResultUrl(null); 
-      setRequestId(null); 
-      setStatus('triggering'); 
-      setProgress(5); 
-      setStatusMessage('Initiating ARX Pipeline...');
+      if (window.innerWidth < 1024 && resultRef.current) {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
 
-      setTimeout(() => {
-        if (window.innerWidth < 1024 && resultRef.current) {
-          resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-
-      // Branch logic: Upscaler and Angles use binary upload, Editor uses Base64
+      let triggerResult;
+      
       if (mode === 'upscaler') {
-        await triggerWavespeedUpscale(selectedFile);
+        triggerResult = await triggerWavespeedUpscale(selectedFile);
       } else if (mode === 'angles') {
-        await triggerWavespeedAngles(selectedFile);
+        triggerResult = await triggerWavespeedAngles(selectedFile);
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
-        setProgress(15);
-        await triggerWavespeed(base64ImageRaw);
+        triggerResult = await triggerWavespeed(base64ImageRaw);
       } 
+
+      const newTask: QueueTask = {
+        id: triggerResult.id,
+        mode: mode,
+        prompt: triggerResult.historyPrompt,
+        progress: 15,
+        message: 'Queued...',
+        pollUrl: triggerResult.pollUrl,
+        targetResultUrl: triggerResult.targetResultUrl
+      };
+
+      setQueue(prev => [...prev, newTask]);
+      pollBackground(newTask);
+
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An unexpected error occurred.');
-      setStatus('failed'); 
-      setProgress(0); 
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleFinalSuccess = async (finalImage: string, id: string) => {
-    setResultUrl(finalImage);
-    setProgress(100); 
-    setStatus('completed');
+  // UNIVERSAL BACKGROUND POLLING LOOP
+  const pollBackground = async (task: QueueTask) => {
+    let isCompleted = false;
+    let pollCount = 0;
 
-    let historyPrompt = prompt;
-    if (mode === 'upscaler') historyPrompt = `Upscaled to ${targetResolution.toUpperCase()}`;
-    if (mode === 'angles') historyPrompt = `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
+    const progressInterval = setInterval(() => {
+      setQueue(prev => prev.map(t => {
+        if (t.id === task.id && t.progress < 85) {
+          return { ...t, progress: t.progress + Math.max(0.5, (85 - t.progress) * 0.05) };
+        }
+        return t;
+      }));
+    }, 500);
 
+    try {
+      while (!isCompleted) {
+        if (pollCount >= 150) throw new Error('Polling timed out.');
+        await new Promise(r => setTimeout(r, 2000));
+        pollCount++;
+
+        const pollResponse = await fetch(task.pollUrl, {
+          headers: { "Authorization": `Bearer ${wavespeedKey}` }
+        });
+
+        if (!pollResponse.ok) {
+          if (pollResponse.status === 404 && pollCount < 10) continue;
+          throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
+        }
+
+        const pollData = await pollResponse.json();
+        const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
+
+        if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
+          clearInterval(progressInterval);
+          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
+
+          let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
+
+          if (!outputs || outputs.length === 0) {
+            const fetchTarget = task.targetResultUrl;
+            const resultResponse = await fetch(fetchTarget, {
+              headers: { "Authorization": `Bearer ${wavespeedKey}` }
+            });
+            if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
+            const resultData = await resultResponse.json();
+            outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
+          }
+
+          if (outputs && outputs.length > 0) {
+            let finalImage = outputs[0];
+            if (typeof finalImage === 'object' && finalImage !== null) {
+                finalImage = finalImage.url || finalImage.file?.url;
+            }
+            isCompleted = true;
+            await handleFinalSuccess(finalImage, task.id, task.prompt);
+          } else {
+            throw new Error("Generation succeeded but no output URL was found.");
+          }
+        } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
+          throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
+        } else {
+          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: `Status: ${currentStatus || 'Processing'}` } : t));
+        }
+      }
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setQueue(prev => prev.filter(t => t.id !== task.id));
+      setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
+    }
+  };
+
+  const handleFinalSuccess = async (finalImage: string, taskId: string, taskPrompt: string) => {
     const newItem: HistoryItem = { 
-      id: id, 
-      prompt: historyPrompt, 
+      id: taskId, 
+      prompt: taskPrompt, 
       url: finalImage, 
       date: new Date().toISOString() 
     };
     
-    setHistory(prev => [newItem, ...prev].slice(0, 50));
+    setHistory(prev => {
+      const merged = [newItem, ...prev];
+      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 100);
+    });
+    
     await saveHistoryItem(newItem);
-    await pruneHistoryDB(50);
+    await pruneHistoryDB(100);
+
+    setQueue(prev => prev.filter(t => t.id !== taskId));
+    setResultUrl(finalImage);
   };
 
-  // --- WAVESPEED LOGIC (Qwen Multi-Angle API) ---
+  // --- API TRIGGER DEFINITIONS ---
   const triggerWavespeedAngles = async (file: File) => {
-    // 1. Upload File as Binary
-    setStatusMessage('Uploading Asset to Secure CDN...');
-    setProgress(10);
-    
     const formData = new FormData();
     formData.append('file', file);
 
@@ -467,10 +557,6 @@ export default function App() {
     const uploadData = await uploadRes.json();
     const cdnUrl = uploadData.data?.download_url || uploadData.url;
     if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
-
-    // 2. Trigger Qwen Endpoint
-    setStatusMessage('Initiating Multi-Angle Generation...');
-    setProgress(25);
 
     const payload = {
       distance: distance,
@@ -492,22 +578,12 @@ export default function App() {
       body: JSON.stringify(payload)
     });
 
-    let triggerData;
-    try {
-      triggerData = await triggerResponse.json();
-    } catch (e) {
-      throw new Error(`Failed to parse response: ${await triggerResponse.text()}`);
-    }
-
-    if (!triggerResponse.ok) {
-      throw new Error(`Wavespeed API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Error'}`);
-    }
+    const triggerData = await triggerResponse.json();
+    if (!triggerResponse.ok) throw new Error(`Wavespeed API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Error'}`);
 
     const id = triggerData.id || triggerData.request_id || triggerData.task_id || triggerData.uuid || triggerData.data?.id || triggerData.data?.request_id;
-
     if (!id) throw new Error(`API Rejected Request: Missing Task ID.`);
 
-    // Route polling URL dynamically
     let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
     let targetResultUrl = triggerData.response_url;
 
@@ -521,73 +597,15 @@ export default function App() {
       }
     }
 
-    setRequestId(id);
-    setStatus('processing');
-    setStatusMessage('Rendering Camera Angles...');
-
-    // 3. Polling Loop
-    let isCompleted = false;
-    let pollCount = 0;
-    let finalImageUri = '';
-
-    while (!isCompleted) {
-      if (pollCount >= 150) throw new Error('Polling timed out.');
-      await new Promise(r => setTimeout(r, 2000));
-      pollCount++;
-
-      const pollResponse = await fetch(pollUrl, {
-        headers: { "Authorization": `Bearer ${wavespeedKey}` }
-      });
-
-      if (!pollResponse.ok) {
-        if (pollResponse.status === 404 && pollCount < 10) continue;
-        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
-      }
-
-      const pollData = await pollResponse.json();
-      const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
-
-      if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
-        setProgress(90);
-        setStatusMessage('Fetching Multi-Angle output...');
-
-        let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-
-        if (!outputs || outputs.length === 0) {
-          const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
-          const resultResponse = await fetch(fetchTarget, {
-            headers: { "Authorization": `Bearer ${wavespeedKey}` }
-          });
-          if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
-          const resultData = await resultResponse.json();
-          outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
-        }
-
-        if (outputs && outputs.length > 0) {
-          let finalImage = outputs[0];
-          if (typeof finalImage === 'object' && finalImage !== null) {
-              finalImage = finalImage.url || finalImage.file?.url;
-          }
-          finalImageUri = finalImage;
-          isCompleted = true;
-        } else {
-          throw new Error("Generation succeeded but no output URL was found.");
-        }
-      } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
-        throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
-      } else {
-        setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
-      }
-    }
-
-    handleFinalSuccess(finalImageUri, id);
+    return {
+      id,
+      pollUrl,
+      targetResultUrl,
+      historyPrompt: `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`
+    };
   };
 
-  // --- WAVESPEED LOGIC (Upscaler API) ---
   const triggerWavespeedUpscale = async (file: File) => {
-    setStatusMessage('Uploading Asset to Secure CDN...');
-    setProgress(10);
-    
     const formData = new FormData();
     formData.append('file', file);
 
@@ -601,9 +619,6 @@ export default function App() {
     const uploadData = await uploadRes.json();
     const cdnUrl = uploadData.data?.download_url || uploadData.url;
     if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
-
-    setStatusMessage('Initiating Resolution Enhancement...');
-    setProgress(25);
 
     const payload = {
       enable_base64_output: false,
@@ -622,11 +637,9 @@ export default function App() {
       body: JSON.stringify(payload)
     });
 
-    let triggerData;
-    try { triggerData = await triggerResponse.json(); } 
-    catch (e) { throw new Error(`Failed to parse Wavespeed response. Server said: ${await triggerResponse.text()}`); }
-
+    const triggerData = await triggerResponse.json();
     if (!triggerResponse.ok) throw new Error(`Wavespeed API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Server Error'}`);
+    
     const id = triggerData.id || triggerData.request_id || triggerData.task_id || triggerData.uuid || triggerData.data?.id || triggerData.data?.request_id;
     if (!id) throw new Error(`API Rejected Request: Missing ID.`);
 
@@ -643,60 +656,14 @@ export default function App() {
       }
     }
 
-    setRequestId(id);
-    setStatus('processing');
-    setStatusMessage('Enhancing Resolution & Details...');
-
-    let isCompleted = false;
-    let pollCount = 0;
-    let finalImageUri = '';
-
-    while (!isCompleted) {
-      if (pollCount >= 150) throw new Error('Polling timed out.');
-      await new Promise(r => setTimeout(r, 2000));
-      pollCount++;
-
-      const pollResponse = await fetch(pollUrl, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
-
-      if (!pollResponse.ok) {
-        if (pollResponse.status === 404 && pollCount < 10) continue;
-        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
-      }
-
-      const pollData = await pollResponse.json();
-      const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
-
-      if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
-        setProgress(90);
-        setStatusMessage('Fetching final high-res image...');
-        let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-
-        if (!outputs || outputs.length === 0) {
-          const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
-          const resultResponse = await fetch(fetchTarget, { headers: { "Authorization": `Bearer ${wavespeedKey}` } });
-          if (!resultResponse.ok) throw new Error('Failed to fetch final upscale result.');
-          const resultData = await resultResponse.json();
-          outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
-        }
-
-        if (outputs && outputs.length > 0) {
-          let finalImage = outputs[0];
-          if (typeof finalImage === 'object' && finalImage !== null) finalImage = finalImage.url || finalImage.file?.url;
-          finalImageUri = finalImage;
-          isCompleted = true;
-        } else {
-          throw new Error("Upscale succeeded but no output URL was found.");
-        }
-      } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
-        throw new Error(pollData.error || pollData.data?.error || "Upscaling task failed on the server.");
-      } else {
-        setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
-      }
-    }
-    handleFinalSuccess(finalImageUri, id);
+    return {
+      id,
+      pollUrl,
+      targetResultUrl,
+      historyPrompt: `Upscaled to ${targetResolution.toUpperCase()}`
+    };
   };
 
-  // --- WAVESPEED LOGIC (Wan-2.6 I2I) ---
   const triggerWavespeed = async (base64Image: string) => {
     const payload: any = { 
         enable_prompt_expansion: false, 
@@ -713,10 +680,9 @@ export default function App() {
       body: JSON.stringify(payload)
     });
 
-    if (!triggerResponse.ok) throw new Error(`Failed to trigger Wavespeed edit: ${await triggerResponse.text()}`);
-
-    setProgress(25);
     const triggerData = await triggerResponse.json();
+    if (!triggerResponse.ok) throw new Error(`Failed to trigger Wavespeed edit: ${triggerData.message || 'Unknown Error'}`);
+
     const id = triggerData.id || triggerData.request_id || triggerData.job_id || triggerData.task_id || triggerData.prediction_id || triggerData.uuid || triggerData.prediction?.id || triggerData.data?.id || triggerData.data?.request_id;
     if (!id) throw new Error(`Server responded successfully but no ID was found.`);
 
@@ -733,63 +699,15 @@ export default function App() {
       }
     }
 
-    setRequestId(id); 
-    setStatus('processing'); 
-    setStatusMessage('Wan-2.6 is processing your request...');
-
-    let isCompleted = false;
-    let pollCount = 0;
-    let finalOutputs: any = null;
-
-    while (!isCompleted) {
-      if (pollCount >= 150) throw new Error('Polling timed out.');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      pollCount++;
-      
-      const pollResponse = await fetch(pollUrl as string, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
-      
-      if (!pollResponse.ok) {
-        if (pollResponse.status === 404 && pollCount < 10) continue;
-        throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
-      }
-
-      const pollData = await pollResponse.json();
-      const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
-      
-      if (currentStatus === 'blocked' || pollData.nsfw === true || pollData.data?.nsfw === true) throw new Error('Safety filter blocked request.');
-
-      if (currentStatus === 'completed' || currentStatus === 'succeeded' || currentStatus === 'success') {
-        isCompleted = true; 
-        setProgress(90); 
-        finalOutputs = pollData.outputs || pollData.data?.outputs || (typeof pollData.output === 'string' ? [pollData.output] : pollData.output);
-      } else if (currentStatus === 'failed' || currentStatus === 'error' || currentStatus === 'canceled') {
-        throw new Error(pollData.error || pollData.data?.error || 'Generation failed on the server.');
-      } else {
-        setStatusMessage(`Status: ${currentStatus || 'Processing'}...`);
-      }
-    }
-
-    if (!finalOutputs) {
-      setStatus('fetching'); 
-      setProgress(95); 
-      
-      const fetchTarget = targetResultUrl || `https://api.wavespeed.ai/api/v3/predictions/${id}`;
-      const resultResponse = await fetch(fetchTarget, { headers: { 'Authorization': `Bearer ${wavespeedKey}` } });
-      if (!resultResponse.ok) throw new Error('Failed to fetch result.');
-      
-      const resultData = await resultResponse.json();
-      finalOutputs = resultData.outputs || resultData.output || resultData.data?.outputs || (resultData.url ? [resultData.url] : null);
-    }
-
-    if (finalOutputs && finalOutputs.length > 0) {
-      let finalImage = finalOutputs[0];
-      if (typeof finalImage === 'object' && finalImage !== null) finalImage = finalImage.url || finalImage.file?.url;
-      handleFinalSuccess(finalImage, id);
-    } else {
-      throw new Error('No output image found in Wavespeed result.');
-    }
+    return {
+      id,
+      pollUrl,
+      targetResultUrl,
+      historyPrompt: prompt
+    };
   };
 
+  // --- EVENT HANDLERS ---
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     try {
@@ -807,7 +725,6 @@ export default function App() {
       a.click();
       document.body.removeChild(a);
       
-      // Delay blob revoke to prevent ERR_FILE_NOT_FOUND in the browser downloader
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
       window.open(url, '_blank');
@@ -831,12 +748,21 @@ export default function App() {
           <TechApexIcon className="text-accent w-7 h-7 shrink-0" />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
-        <button 
-          onClick={() => setShowSettings(!showSettings)} 
-          className="p-2.5 hover:bg-white/5 rounded-xl border border-transparent hover:border-border transition-all group"
-        >
-          <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey) ? 'text-orange-500 animate-pulse' : ''}`} />
-        </button>
+        <div className="flex items-center gap-4">
+          {queue.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/20 rounded-full">
+              <Layers className="w-3.5 h-3.5 text-accent animate-pulse" />
+              <span className="text-[10px] font-bold text-accent uppercase tracking-widest hidden sm:inline">{queue.length} Active Queue</span>
+              <span className="text-[10px] font-bold text-accent uppercase tracking-widest sm:hidden">{queue.length} Active</span>
+            </div>
+          )}
+          <button 
+            onClick={() => setShowSettings(!showSettings)} 
+            className="p-2.5 hover:bg-white/5 rounded-xl border border-transparent hover:border-border transition-all group"
+          >
+            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey) ? 'text-orange-500 animate-pulse' : ''}`} />
+          </button>
+        </div>
       </nav>
 
       {/* Main Layout */}
@@ -1006,9 +932,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest mt-2">
-                    Qwen-Image Angles System
-                  </div>
                 </div>
               )}
 
@@ -1026,22 +949,69 @@ export default function App() {
                 </div>
               )}
 
-              {status === 'idle' || status === 'completed' || status === 'failed' ? (
-                <button 
-                  onClick={generateEdit} 
-                  className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)]"
-                >
-                  {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
-                  {mode === 'editor' && <Sparkles className="w-5 h-5" />}
-                  {mode === 'angles' && <Box className="w-5 h-5" />}
-                  
-                  {mode === 'upscaler' ? 'Execute Resolution Enhancement' 
-                   : mode === 'angles' ? 'Generate 3D Camera Angle' 
-                   : 'Execute AI Edit'}
-                </button>
-              ) : (
-                <ProcessingBar progress={progress} />
-              )}
+              <button 
+                onClick={generateEdit}
+                disabled={isSubmitting} 
+                className="w-full py-5 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-accent text-bg hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
+                    {mode === 'editor' && <Sparkles className="w-5 h-5" />}
+                    {mode === 'angles' && <Box className="w-5 h-5" />}
+                  </>
+                )}
+                {isSubmitting ? 'Uploading to Server...' 
+                 : mode === 'upscaler' ? 'Queue Resolution Enhancement' 
+                 : mode === 'angles' ? 'Queue 3D Camera Angle' 
+                 : 'Queue AI Edit'}
+              </button>
+
+              {/* Dynamic Action Queue */}
+              <AnimatePresence>
+                {queue.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="mt-8 space-y-3"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-1.5 h-1.5 rounded-full bg-text-secondary" />
+                      <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">
+                        Active Queue
+                      </h3>
+                    </div>
+                    {queue.map(task => (
+                      <motion.div 
+                        key={task.id} 
+                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="bg-[#0a0f14] border border-[#1a232c] rounded-2xl p-4 shadow-inner"
+                      >
+                        <div className="flex justify-between items-center mb-3">
+                           <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode}
+                           </span>
+                           <span className="text-[10px] font-bold text-accent drop-shadow-[0_0_5px_rgba(0,242,255,0.5)]">
+                             {Math.round(task.progress)}%
+                           </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-cyan-950 rounded-full overflow-hidden mb-3">
+                           <div className="h-full bg-accent transition-all duration-300 shadow-[0_0_10px_rgba(0,242,255,0.8)]" style={{ width: `${task.progress}%` }} />
+                        </div>
+                        <div className="flex justify-between items-center gap-4">
+                          <p className="text-[9px] font-mono text-text-secondary uppercase tracking-widest truncate flex-1">
+                            {task.prompt}
+                          </p>
+                          <p className="text-[9px] font-mono text-accent uppercase tracking-widest truncate">
+                            {task.message}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
               
             </div>
           </section>
@@ -1061,16 +1031,16 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">
-                  Prediction // Output
+                  {queue.length > 0 && !resultUrl ? 'Processing in Background...' : 'Prediction // Output'}
                 </h2>
               </div>
               {resultUrl && (
                 <button 
                   onClick={(e) => handleDownload(resultUrl, prompt || 'angle_render', e)} 
-                  className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-2"
+                  className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-2 hover:shadow-[0_0_15px_rgba(0,242,255,0.3)] transition-all bg-accent/10 px-3 py-1.5 rounded-full border border-accent/20"
                 >
-                  <Download className="w-4 h-4" /> 
-                  Export Asset
+                  <Download className="w-3.5 h-3.5" /> 
+                  Export
                 </button>
               )}
             </div>
@@ -1125,8 +1095,8 @@ export default function App() {
                         onClick={() => {
                           const match = history.find(h => h.url === resultUrl);
                           setSelectedHistoryItem(match || { 
-                            id: requestId || Date.now().toString(), 
-                            prompt: mode === 'angles' ? `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}` : prompt, 
+                            id: Date.now().toString(), 
+                            prompt: 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString() 
                           });
@@ -1148,12 +1118,12 @@ export default function App() {
                       </div>
                     )}
                   </motion.div>
-                ) : status !== 'idle' ? (
+                ) : queue.length > 0 ? (
                   <div className="flex flex-col items-center text-center p-12">
-                    <Loader2 className="w-10 h-10 text-accent animate-spin mb-4" />
-                    <p className="text-lg font-bold mb-1">{statusMessage}</p>
+                    <Layers className="w-12 h-12 text-accent/30 animate-pulse mb-4" />
+                    <p className="text-sm font-bold mb-2 uppercase tracking-widest">Processing Background Tasks</p>
                     <p className="text-[10px] font-mono text-text-secondary uppercase tracking-widest">
-                      TaskID: {requestId || 'Queueing'}
+                      Your results will appear here shortly.
                     </p>
                   </div>
                 ) : (
@@ -1172,7 +1142,17 @@ export default function App() {
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary font-mono">
               03 // Generation Log
             </h2>
-            <History className="w-4 h-4 text-text-secondary" />
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => syncCloudHistory(wavespeedKey)}
+                disabled={isSyncing || !wavespeedKey}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-[9px] font-bold uppercase tracking-widest text-text-secondary disabled:opacity-50"
+              >
+                <CloudDownload className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce text-accent' : ''}`} />
+                {isSyncing ? 'Syncing...' : 'Fetch Cloud Sync'}
+              </button>
+              <History className="w-4 h-4 text-text-secondary hidden sm:block" />
+            </div>
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -1324,7 +1304,7 @@ export default function App() {
                     </div>
                     
                     {/* Only show 'Use prompt' if it's an editor request */}
-                    {!selectedHistoryItem.prompt.startsWith('Multi-Angle') && !selectedHistoryItem.prompt.startsWith('Upscaled') && (
+                    {!selectedHistoryItem.prompt.startsWith('Multi-Angle') && !selectedHistoryItem.prompt.startsWith('Upscaled') && !selectedHistoryItem.prompt.startsWith('Cloud') && (
                       <button 
                         onClick={() => { 
                           if(selectedHistoryItem) { 
