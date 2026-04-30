@@ -167,6 +167,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 
 // --- Types ---
 type AppMode = 'editor' | 'upscaler' | 'angles';
+type EditorModel = 'wan-2.6' | 'wan-2.7';
 type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
@@ -189,6 +190,7 @@ interface QueueTask {
 export default function App() {
   // --- Core State ---
   const [mode, setMode] = useState<AppMode>('editor');
+  const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [prompt, setPrompt] = useState<string>('');
   
@@ -206,6 +208,8 @@ export default function App() {
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // --- Result State ---
   const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   // --- UI State (Slider & Modals) ---
@@ -235,6 +239,7 @@ export default function App() {
   useEffect(() => {
     const savedKey = localStorage.getItem('arx_wavespeed_key') || '';
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
+    setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
     setWavespeedKey(savedKey);
     
     getHistoryDB().then(localData => {
@@ -245,6 +250,7 @@ export default function App() {
 
   // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
+  useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
 
   // --- Cloud Sync Logic ---
   const syncCloudHistory = async (keyToUse: string) => {
@@ -475,7 +481,7 @@ export default function App() {
         });
 
         if (!pollResponse.ok) {
-          if (pollResponse.status === 404 && pollCount < 10) continue;
+          if (pollResponse.status === 404 && pollCount < 10) continue; // Handle propagation delay
           throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
         }
 
@@ -666,15 +672,19 @@ export default function App() {
 
   const triggerWavespeed = async (base64Image: string) => {
     const payload: any = { 
-        enable_prompt_expansion: false, 
         images: [base64Image], 
         prompt: prompt, 
-        seed: -1,
-        guidance_scale: 7.5,
-        num_inference_steps: 30
+        seed: -1
     };
+    
+    // Add Wan-2.6 specific parameters if it's the active model
+    if (editorModel === 'wan-2.6') {
+        payload.enable_prompt_expansion = false;
+        payload.guidance_scale = 7.5;
+        payload.num_inference_steps = 30;
+    }
 
-    const triggerResponse = await fetch('https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit', {
+    const triggerResponse = await fetch(`https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
       body: JSON.stringify(payload)
@@ -691,8 +701,8 @@ export default function App() {
 
     if (!pollUrl) {
       if (triggerData.request_id || triggerData.data?.request_id) {
-        pollUrl = `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${id}/status`;
-        targetResultUrl = `https://api.wavespeed.ai/api/v3/alibaba/wan-2.6/image-edit/requests/${id}`;
+        pollUrl = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit/requests/${id}/status`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit/requests/${id}`;
       } else {
         pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
@@ -936,15 +946,43 @@ export default function App() {
               )}
 
               {mode === 'editor' && (
-                <div className="relative">
-                  <textarea 
-                    value={prompt} 
-                    onChange={(e) => setPrompt(e.target.value)} 
-                    placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')..." 
-                    className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
-                  />
-                  <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
-                    Wan-2.6 Editor
+                <div className="space-y-4 bg-white/[0.02] p-5 border border-border rounded-2xl">
+                  <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">
+                    AI Editing Engine
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <button
+                      onClick={() => setEditorModel('wan-2.6')}
+                      className={`py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                        editorModel === 'wan-2.6' 
+                          ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
+                          : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
+                      }`}
+                    >
+                      Wan 2.6
+                    </button>
+                    <button
+                      onClick={() => setEditorModel('wan-2.7')}
+                      className={`py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                        editorModel === 'wan-2.7' 
+                          ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
+                          : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
+                      }`}
+                    >
+                      Wan 2.7
+                    </button>
+                  </div>
+                  
+                  <div className="relative">
+                    <textarea 
+                      value={prompt} 
+                      onChange={(e) => setPrompt(e.target.value)} 
+                      placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')..." 
+                      className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
+                    />
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
+                      {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : 'Wan-2.6 Editor'}
+                    </div>
                   </div>
                 </div>
               )}
