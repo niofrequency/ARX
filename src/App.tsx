@@ -167,7 +167,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 
 // --- Types ---
 type AppMode = 'editor' | 'upscaler' | 'angles';
-type EditorModel = 'wan-2.6' | 'wan-2.7';
+type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
 type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem {
@@ -208,8 +208,6 @@ export default function App() {
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // --- Result State ---
   const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   // --- UI State (Slider & Modals) ---
@@ -277,7 +275,7 @@ export default function App() {
 
           let historyPrompt = item.input?.prompt || item.model || 'Cloud Generation';
           if (item.model?.includes('upscaler')) historyPrompt = `Upscaled Image`;
-          if (item.model?.includes('multiple-angles') || item.model?.includes('qwen')) historyPrompt = `Multi-Angle Render`;
+          if (item.model?.includes('multiple-angles') || item.model?.includes('qwen-image/edit-multiple')) historyPrompt = `Multi-Angle Render`;
 
           return {
             id: item.id,
@@ -684,7 +682,18 @@ export default function App() {
         payload.num_inference_steps = 30;
     }
 
-    const triggerResponse = await fetch(`https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit`, {
+    let endpoint = '';
+    let basePath = '';
+
+    if (editorModel === 'qwen-2.0') {
+        endpoint = 'https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image-2.0/edit';
+        basePath = 'wavespeed-ai/qwen-image-2.0/edit';
+    } else {
+        endpoint = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit`;
+        basePath = `alibaba/${editorModel}/image-edit`;
+    }
+
+    const triggerResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
       body: JSON.stringify(payload)
@@ -701,8 +710,8 @@ export default function App() {
 
     if (!pollUrl) {
       if (triggerData.request_id || triggerData.data?.request_id) {
-        pollUrl = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit/requests/${id}/status`;
-        targetResultUrl = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit/requests/${id}`;
+        pollUrl = `https://api.wavespeed.ai/api/v3/${basePath}/requests/${id}/status`;
+        targetResultUrl = `https://api.wavespeed.ai/api/v3/${basePath}/requests/${id}`;
       } else {
         pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
@@ -950,10 +959,10 @@ export default function App() {
                   <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-widest text-center mb-4">
                     AI Editing Engine
                   </label>
-                  <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="grid grid-cols-3 gap-3 mb-6">
                     <button
                       onClick={() => setEditorModel('wan-2.6')}
-                      className={`py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                      className={`py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.6' 
                           ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
                           : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
@@ -963,13 +972,23 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setEditorModel('wan-2.7')}
-                      className={`py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                      className={`py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.7' 
                           ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
                           : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
                       }`}
                     >
                       Wan 2.7
+                    </button>
+                    <button
+                      onClick={() => setEditorModel('qwen-2.0')}
+                      className={`py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
+                        editorModel === 'qwen-2.0' 
+                          ? 'bg-accent text-bg shadow-[0_0_15px_rgba(0,242,255,0.3)] scale-105' 
+                          : 'bg-black/30 border border-white/10 text-text-secondary hover:text-white'
+                      }`}
+                    >
+                      Qwen 2.0
                     </button>
                   </div>
                   
@@ -981,7 +1000,7 @@ export default function App() {
                       className="w-full h-32 p-5 bg-white/[0.02] border border-border rounded-2xl focus:ring-1 focus:ring-accent outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-text-secondary/50 uppercase tracking-widest">
-                      {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : 'Wan-2.6 Editor'}
+                      {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
                     </div>
                   </div>
                 </div>
