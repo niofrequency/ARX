@@ -193,6 +193,7 @@ export default function App() {
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [prompt, setPrompt] = useState<string>('');
+  const [creditBalance, setCreditBalance] = useState<number | string>('...');
   
   // --- Parameters State ---
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
@@ -242,13 +243,35 @@ export default function App() {
     
     getHistoryDB().then(localData => {
       setHistory(localData);
-      if (savedKey) syncCloudHistory(savedKey);
+      if (savedKey) {
+        syncCloudHistory(savedKey);
+        fetchBalance(savedKey);
+      }
     }).catch(console.error);
   }, []);
 
   // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
+
+  // --- Balance Fetch Logic ---
+  const fetchBalance = async (keyToUse: string) => {
+    if (!keyToUse) return;
+    try {
+      const res = await fetch("https://api.wavespeed.ai/api/v3/balance", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${keyToUse}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && typeof json.data.balance === 'number') {
+          setCreditBalance(`$${json.data.balance.toFixed(2)}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch balance", e);
+    }
+  };
 
   // --- Cloud Sync Logic ---
   const syncCloudHistory = async (keyToUse: string) => {
@@ -366,7 +389,10 @@ export default function App() {
   const handleSaveSettings = () => {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     setShowSettings(false);
-    if (wavespeedKey) syncCloudHistory(wavespeedKey);
+    if (wavespeedKey) {
+      syncCloudHistory(wavespeedKey);
+      fetchBalance(wavespeedKey);
+    }
   };
 
   const handleNextHistory = (e?: React.MouseEvent) => {
@@ -544,6 +570,9 @@ export default function App() {
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
+    
+    // Refresh balance after successful generation
+    if (wavespeedKey) fetchBalance(wavespeedKey);
   };
 
   // --- API TRIGGER DEFINITIONS ---
@@ -768,6 +797,19 @@ export default function App() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
+          
+          {wavespeedKey && creditBalance !== '...' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
+              <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
+              <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest hidden sm:inline">
+                Bal: {creditBalance}
+              </span>
+              <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest sm:hidden">
+                {creditBalance}
+              </span>
+            </div>
+          )}
+
           {queue.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/20 rounded-full">
               <Layers className="w-3.5 h-3.5 text-accent animate-pulse" />
