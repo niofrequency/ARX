@@ -92,7 +92,7 @@ const clearHistoryDB = async () => {
   });
 };
 
-const pruneHistoryDB = async (keepCount: number = 100) => {
+const pruneHistoryDB = async (keepCount: number = 10000) => {
   const history = await getHistoryDB();
   if (history.length <= keepCount) return;
   const toDelete = history.slice(keepCount);
@@ -312,7 +312,7 @@ export default function App() {
       setHistory(prev => {
         const merged = [...cloudHistory, ...prev];
         const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-        const sorted = unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 100);
+        const sorted = unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
         
         sorted.forEach(item => saveHistoryItem(item));
         return sorted;
@@ -562,11 +562,11 @@ export default function App() {
     setHistory(prev => {
       const merged = [newItem, ...prev];
       const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 100);
+      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
     });
     
     await saveHistoryItem(newItem);
-    await pruneHistoryDB(100);
+    await pruneHistoryDB(10000);
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
