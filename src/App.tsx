@@ -704,100 +704,79 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // Safely escape the prompt for JSON injection
-    const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    
-    // Hardcoded ComfyUI Workflow JSON
-    const HARDCODED_WORKFLOW = JSON.stringify({
-      "input": {
-        "workflow": {
-          "1": {
-            "inputs": {
-              "image": "{{IMAGE_BASE64}}",
-              "upload": "image"
-            },
-            "class_type": "LoadImage"
-          },
-          "2": {
-            "inputs": {
-              "text": "{{PROMPT}}",
-              "clip": ["3", 1]
-            },
-            "class_type": "CLIPTextEncode"
-          },
-          "3": {
-            "inputs": {
-              "text": "{{NEGATIVE_PROMPT}}",
-              "clip": ["3", 1]
-            },
-            "class_type": "CLIPTextEncode"
-          },
-          "4": {
-            "inputs": {
-              "model": ["5", 0],
-              "positive": ["2", 0],
-              "negative": ["3", 0],
-              "latent_image": ["6", 0]
-            },
-            "class_type": "KSampler"
-          },
-          "5": {
-            "inputs": {
-              "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
-            },
-            "class_type": "CheckpointLoaderSimple"
-          },
-          "6": {
-            "inputs": {
-              "width": 1024,
-              "height": 1024,
-              "batch_size": 1
-            },
-            "class_type": "EmptyLatentImage"
-          },
-          "7": {
-            "inputs": {
-              "samples": ["4", 0],
-              "vae": ["5", 2]
-            },
-            "class_type": "VAEDecode"
-          },
-          "8": {
-            "inputs": {
-              "images": ["7", 0]
-            },
-            "class_type": "SaveImage"
-          }
-        }
+    // We construct the ComfyUI workflow natively as a JS object.
+    // This perfectly maps the prompt and image without messy string replacement bugs.
+    const workflowObj = {
+      "1": {
+        "inputs": {
+          "image": "input_image.png", // We will upload the base64 data to this exact filename
+          "upload": "image"
+        },
+        "class_type": "LoadImage"
+      },
+      "2": {
+        "inputs": {
+          "text": prompt || "", 
+          "clip": ["3", 1]
+        },
+        "class_type": "CLIPTextEncode"
+      },
+      "3": {
+        "inputs": {
+          "text": "lowres, bad quality, worse quality, watermark, blurry, deformed",
+          "clip": ["3", 1]
+        },
+        "class_type": "CLIPTextEncode"
+      },
+      "4": {
+        "inputs": {
+          "model": ["5", 0],
+          "positive": ["2", 0],
+          "negative": ["3", 0],
+          "latent_image": ["6", 0]
+        },
+        "class_type": "KSampler"
+      },
+      "5": {
+        "inputs": {
+          "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+        },
+        "class_type": "CheckpointLoaderSimple"
+      },
+      "6": {
+        "inputs": {
+          "width": 1024,
+          "height": 1024,
+          "batch_size": 1
+        },
+        "class_type": "EmptyLatentImage"
+      },
+      "7": {
+        "inputs": {
+          "samples": ["4", 0],
+          "vae": ["5", 2]
+        },
+        "class_type": "VAEDecode"
+      },
+      "8": {
+        "inputs": {
+          "images": ["7", 0]
+        },
+        "class_type": "SaveImage"
       }
-    });
+    };
 
-    // Inject dynamic data into the JSON string
-    let workflowStr = HARDCODED_WORKFLOW
-      .replace(/\{\{PROMPT\}\}/g, safePrompt)
-      .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
-      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed");
-
-    let workflowObj;
-    try {
-      workflowObj = JSON.parse(workflowStr);
-      
-      // Auto-unwrap input wrapper to prevent nesting errors
-      if (workflowObj.input && workflowObj.input.workflow) {
-        workflowObj = workflowObj.input.workflow;
-      } else if (workflowObj.workflow) {
-        workflowObj = workflowObj.workflow;
-      } else if (workflowObj.prompt) {
-        workflowObj = workflowObj.prompt;
-      }
-    } catch (e) {
-      throw new Error("Failed to parse hardcoded Workflow JSON.");
-    }
-
-    // Force exact payload structure required by ashleykza worker
     const payload = {
       input: {
-        workflow: workflowObj
+        workflow: workflowObj,
+        // The runpod-worker-comfyui expects base64 images here.
+        // It saves them to the input folder matching the 'name' so LoadImage can find it.
+        images: [
+          {
+            name: "input_image.png",
+            image: base64Data
+          }
+        ]
       }
     };
 
@@ -1275,7 +1254,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Enter your prompt here. It will replace {{PROMPT}} in your workflow..." 
+                      placeholder="Enter your prompt here..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
