@@ -768,6 +768,7 @@ export default function App() {
         "inputs": {
           "upscale_method": "lanczos",
           "megapixels": 1,
+          "resolution_steps": 64, // ADDED: Required to satisfy node validation
           "image": ["78", 0]
         },
         "class_type": "ImageScaleToTotalPixels"
