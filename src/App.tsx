@@ -598,28 +598,35 @@ export default function App() {
 
             // VERY FORGIVING RESPONSE PARSER FOR COMFYUI SERVERLESS WRAPPERS
             if (output) {
+              // 1. Check for standard array of images
               if (output.images && Array.isArray(output.images) && output.images.length > 0) {
                 finalImage = output.images[0];
               } 
+              // 2. Check for output.message
               else if (typeof output.message === 'string') {
                 finalImage = output.message;
               }
+              // 3. Check for output.image
               else if (typeof output.image === 'string') {
                 finalImage = output.image;
               }
+              // 4. Check for nested output.output.images
               else if (output.output && output.output.images && Array.isArray(output.output.images) && output.output.images.length > 0) {
                 finalImage = output.output.images[0];
               }
+              // 5. Check for base64 directly on output
               else if (typeof output.base64 === 'string') {
                 finalImage = output.base64;
               }
             }
 
+            // Fallback for cases where output is directly in pollData.message or pollData.image
             if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
                finalImage = pollData.message;
             }
 
             if (finalImage) {
+              // Ensure valid base64 URI
               if (!finalImage.startsWith('data:image') && !finalImage.startsWith('http')) {
                 finalImage = `data:image/png;base64,${finalImage}`;
               }
@@ -700,81 +707,89 @@ export default function App() {
     // Safely escape the prompt for JSON injection
     const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
     
-    // HARDCODED, FULLY-WIRED COMfyUI IMG2IMG WORKFLOW JSON
+    // Hardcoded ComfyUI Workflow JSON
     const HARDCODED_WORKFLOW = JSON.stringify({
-      "1": {
-        "inputs": {
-          "image": "input_image.png",
-          "upload": "image"
-        },
-        "class_type": "LoadImage"
-      },
-      "2": {
-        "inputs": {
-          "text": "{{PROMPT}}",
-          "clip": ["5", 1] 
-        },
-        "class_type": "CLIPTextEncode"
-      },
-      "3": {
-        "inputs": {
-          "text": "lowres, bad quality, worse quality, watermark, blurry, deformed",
-          "clip": ["5", 1] 
-        },
-        "class_type": "CLIPTextEncode"
-      },
-      "4": {
-        "inputs": {
-          "seed": "{{SEED}}", 
-          "steps": 20, 
-          "cfg": 8.0, 
-          "sampler_name": "euler", 
-          "scheduler": "normal", 
-          "denoise": 0.75, 
-          "model": ["5", 0],
-          "positive": ["2", 0],
-          "negative": ["3", 0],
-          "latent_image": ["9", 0] 
-        },
-        "class_type": "KSampler"
-      },
-      "5": {
-        "inputs": {
-          "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
-        },
-        "class_type": "CheckpointLoaderSimple"
-      },
-      "7": {
-        "inputs": {
-          "samples": ["4", 0],
-          "vae": ["5", 2]
-        },
-        "class_type": "VAEDecode"
-      },
-      "8": {
-        "inputs": {
-          "filename_prefix": "ComfyUI", 
-          "images": ["7", 0]
-        },
-        "class_type": "SaveImage"
-      },
-      "9": { 
-        "inputs": {
-          "pixels": ["1", 0],
-          "vae": ["5", 2]
-        },
-        "class_type": "VAEEncode"
+      "input": {
+        "workflow": {
+          "1": {
+            "inputs": {
+              "image": "{{IMAGE_BASE64}}",
+              "upload": "image"
+            },
+            "class_type": "LoadImage"
+          },
+          "2": {
+            "inputs": {
+              "text": "{{PROMPT}}",
+              "clip": ["3", 1]
+            },
+            "class_type": "CLIPTextEncode"
+          },
+          "3": {
+            "inputs": {
+              "text": "{{NEGATIVE_PROMPT}}",
+              "clip": ["3", 1]
+            },
+            "class_type": "CLIPTextEncode"
+          },
+          "4": {
+            "inputs": {
+              "model": ["5", 0],
+              "positive": ["2", 0],
+              "negative": ["3", 0],
+              "latent_image": ["6", 0]
+            },
+            "class_type": "KSampler"
+          },
+          "5": {
+            "inputs": {
+              "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+            },
+            "class_type": "CheckpointLoaderSimple"
+          },
+          "6": {
+            "inputs": {
+              "width": 1024,
+              "height": 1024,
+              "batch_size": 1
+            },
+            "class_type": "EmptyLatentImage"
+          },
+          "7": {
+            "inputs": {
+              "samples": ["4", 0],
+              "vae": ["5", 2]
+            },
+            "class_type": "VAEDecode"
+          },
+          "8": {
+            "inputs": {
+              "images": ["7", 0]
+            },
+            "class_type": "SaveImage"
+          }
+        }
       }
     });
 
     // Inject dynamic data into the JSON string
     let workflowStr = HARDCODED_WORKFLOW
       .replace(/\{\{PROMPT\}\}/g, safePrompt)
-      .replace(/"\{\{SEED\}\}"/g, Math.floor(Math.random() * 1000000).toString());
+      .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
+      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed");
 
     let workflowObj;
     try {
       workflowObj = JSON.parse(workflowStr);
+      
+      // Auto-unwrap input wrapper to prevent nesting errors
+      if (workflowObj.input && workflowObj.input.workflow) {
+        workflowObj = workflowObj.input.workflow;
+      } else if (workflowObj.workflow) {
+        workflowObj = workflowObj.workflow;
+      } else if (workflowObj.prompt) {
+        workflowObj = workflowObj.prompt;
+      }
     } catch (e) {
       throw new Error("Failed to parse hardcoded Workflow JSON.");
     }
@@ -782,13 +797,7 @@ export default function App() {
     // Force exact payload structure required by ashleykza worker
     const payload = {
       input: {
-        workflow: workflowObj,
-        images: [
-          {
-            name: "input_image.png",
-            image: base64Data
-          }
-        ]
+        workflow: workflowObj
       }
     };
 
@@ -1266,7 +1275,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Describe the modifications (e.g. 'make the background cyberpunk')..." 
+                      placeholder="Enter your prompt here. It will replace {{PROMPT}} in your workflow..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
@@ -1274,7 +1283,7 @@ export default function App() {
                     </div>
                   </div>
                   <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
-                    Your ComfyUI Img2Img workflow is hardcoded. Uploaded images and prompts are injected automatically.
+                    Your ComfyUI workflow is hardcoded. Uploaded images and prompts are injected automatically.
                   </p>
                 </div>
               )}
