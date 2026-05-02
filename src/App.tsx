@@ -692,70 +692,103 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // We construct the ComfyUI workflow natively as a JS object.
+    // Advanced Qwen-Image Workflow Object
     const workflowObj = {
-      "1": {
-        "inputs": {
-          "image": "input_image.png", // The worker will save the incoming base64 to this file
-          "upload": "image"
-        },
-        "class_type": "LoadImage"
-      },
-      "2": {
-        "inputs": {
-          "text": prompt || "cyberpunk style", 
-          "clip": ["5", 1] 
-        },
-        "class_type": "CLIPTextEncode"
-      },
       "3": {
         "inputs": {
-          "text": "lowres, bad quality, worse quality, watermark, blurry, deformed",
-          "clip": ["5", 1] 
-        },
-        "class_type": "CLIPTextEncode"
-      },
-      "4": {
-        "inputs": {
           "seed": Math.floor(Math.random() * 1000000), 
-          "steps": 20, 
-          "cfg": 8.0, 
-          "sampler_name": "euler", 
-          "scheduler": "normal", 
-          "denoise": 0.75, 
-          "model": ["5", 0],
-          "positive": ["2", 0],
-          "negative": ["3", 0],
-          "latent_image": ["9", 0] 
+          "steps": 4, 
+          "cfg": 1,
+          "sampler_name": "dpmpp_2m_sde_gpu",
+          "scheduler": "karras",
+          "denoise": 1,
+          "model": ["75", 0],
+          "positive": ["111", 0],
+          "negative": ["110", 0],
+          "latent_image": ["88", 0]
         },
         "class_type": "KSampler"
       },
-      "5": {
+      "5": { 
         "inputs": {
           "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
         },
         "class_type": "CheckpointLoaderSimple"
       },
-      "7": {
+      "8": {
         "inputs": {
-          "samples": ["4", 0],
+          "samples": ["3", 0],
           "vae": ["5", 2]
         },
         "class_type": "VAEDecode"
       },
-      "8": {
+      "60": {
         "inputs": {
-          "filename_prefix": "ComfyUI", 
-          "images": ["7", 0]
+          "filename_prefix": "ComfyUI",
+          "images": ["8", 0]
         },
         "class_type": "SaveImage"
       },
-      "9": { 
+      "66": {
         "inputs": {
-          "pixels": ["1", 0],
+          "shift": 3,
+          "model": ["89", 0]
+        },
+        "class_type": "ModelSamplingAuraFlow"
+      },
+      "75": {
+        "inputs": {
+          "strength": 1,
+          "model": ["66", 0]
+        },
+        "class_type": "CFGNorm"
+      },
+      "78": {
+        "inputs": {
+          "image": "input_image.png" 
+        },
+        "class_type": "LoadImage"
+      },
+      "88": {
+        "inputs": {
+          "pixels": ["93", 0],
           "vae": ["5", 2]
         },
         "class_type": "VAEEncode"
+      },
+      "89": {
+        "inputs": {
+          "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
+          "strength_model": 1,
+          "model": ["5", 0]
+        },
+        "class_type": "LoraLoaderModelOnly"
+      },
+      "93": {
+        "inputs": {
+          "upscale_method": "lanczos",
+          "megapixels": 1,
+          "image": ["78", 0]
+        },
+        "class_type": "ImageScaleToTotalPixels"
+      },
+      "110": {
+        "inputs": {
+          "prompt": "", 
+          "clip": ["5", 1],
+          "vae": ["5", 2],
+          "image1": ["93", 0]
+        },
+        "class_type": "TextEncodeQwenImageEditPlus"
+      },
+      "111": {
+        "inputs": {
+          "prompt": prompt || "cyberpunk style", 
+          "clip": ["5", 1],
+          "vae": ["5", 2],
+          "image1": ["93", 0]
+        },
+        "class_type": "TextEncodeQwenImageEditPlus"
       }
     };
 
