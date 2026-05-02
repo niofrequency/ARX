@@ -596,33 +596,15 @@ export default function App() {
             const output = pollData.output;
             let finalImage = '';
 
-            // VERY FORGIVING RESPONSE PARSER FOR COMFYUI SERVERLESS WRAPPERS
+            // Runpod Serverless Template returns {"message": "data:image/png;base64,iVBORw0KGg..."}
             if (output) {
-              // 1. Check for standard array of images
-              if (output.images && Array.isArray(output.images) && output.images.length > 0) {
-                finalImage = output.images[0];
-              } 
-              // 2. Check for output.message
-              else if (typeof output.message === 'string') {
+              if (typeof output.message === 'string' && output.message.includes('base64')) {
                 finalImage = output.message;
-              }
-              // 3. Check for output.image
-              else if (typeof output.image === 'string') {
+              } else if (output.images && Array.isArray(output.images) && output.images.length > 0) {
+                finalImage = output.images[0];
+              } else if (typeof output.image === 'string') {
                 finalImage = output.image;
               }
-              // 4. Check for nested output.output.images
-              else if (output.output && output.output.images && Array.isArray(output.output.images) && output.output.images.length > 0) {
-                finalImage = output.output.images[0];
-              }
-              // 5. Check for base64 directly on output
-              else if (typeof output.base64 === 'string') {
-                finalImage = output.base64;
-              }
-            }
-
-            // Fallback for cases where output is directly in pollData.message or pollData.image
-            if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
-               finalImage = pollData.message;
             }
 
             if (finalImage) {
@@ -636,7 +618,7 @@ export default function App() {
               continue;
             } else {
               console.warn("RunPod Output Dump:", pollData);
-              throw new Error("RunPod job completed, but the image could not be found in the response JSON. Check console for output dump.");
+              throw new Error("RunPod job completed, but the image could not be found in the response JSON.");
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
@@ -704,100 +686,83 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // Safely escape the prompt for JSON injection
-    const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    
-    // Hardcoded ComfyUI Workflow JSON
-    const HARDCODED_WORKFLOW = JSON.stringify({
-      "input": {
-        "workflow": {
-          "1": {
-            "inputs": {
-              "image": "{{IMAGE_BASE64}}",
-              "upload": "image"
-            },
-            "class_type": "LoadImage"
-          },
-          "2": {
-            "inputs": {
-              "text": "{{PROMPT}}",
-              "clip": ["3", 1]
-            },
-            "class_type": "CLIPTextEncode"
-          },
-          "3": {
-            "inputs": {
-              "text": "{{NEGATIVE_PROMPT}}",
-              "clip": ["3", 1]
-            },
-            "class_type": "CLIPTextEncode"
-          },
-          "4": {
-            "inputs": {
-              "model": ["5", 0],
-              "positive": ["2", 0],
-              "negative": ["3", 0],
-              "latent_image": ["6", 0]
-            },
-            "class_type": "KSampler"
-          },
-          "5": {
-            "inputs": {
-              "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
-            },
-            "class_type": "CheckpointLoaderSimple"
-          },
-          "6": {
-            "inputs": {
-              "width": 1024,
-              "height": 1024,
-              "batch_size": 1
-            },
-            "class_type": "EmptyLatentImage"
-          },
-          "7": {
-            "inputs": {
-              "samples": ["4", 0],
-              "vae": ["5", 2]
-            },
-            "class_type": "VAEDecode"
-          },
-          "8": {
-            "inputs": {
-              "images": ["7", 0]
-            },
-            "class_type": "SaveImage"
-          }
-        }
+    // We construct the ComfyUI workflow natively as a JS object.
+    const workflowObj = {
+      "1": {
+        "inputs": {
+          "image": "input_image.png", // The worker will save the incoming base64 to this file
+          "upload": "image"
+        },
+        "class_type": "LoadImage"
+      },
+      "2": {
+        "inputs": {
+          "text": prompt || "cyberpunk style", 
+          "clip": ["5", 1] 
+        },
+        "class_type": "CLIPTextEncode"
+      },
+      "3": {
+        "inputs": {
+          "text": "lowres, bad quality, worse quality, watermark, blurry, deformed",
+          "clip": ["5", 1] 
+        },
+        "class_type": "CLIPTextEncode"
+      },
+      "4": {
+        "inputs": {
+          "seed": Math.floor(Math.random() * 1000000), 
+          "steps": 20, 
+          "cfg": 8.0, 
+          "sampler_name": "euler", 
+          "scheduler": "normal", 
+          "denoise": 0.75, 
+          "model": ["5", 0],
+          "positive": ["2", 0],
+          "negative": ["3", 0],
+          "latent_image": ["9", 0] 
+        },
+        "class_type": "KSampler"
+      },
+      "5": {
+        "inputs": {
+          "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+        },
+        "class_type": "CheckpointLoaderSimple"
+      },
+      "7": {
+        "inputs": {
+          "samples": ["4", 0],
+          "vae": ["5", 2]
+        },
+        "class_type": "VAEDecode"
+      },
+      "8": {
+        "inputs": {
+          "filename_prefix": "ComfyUI", 
+          "images": ["7", 0]
+        },
+        "class_type": "SaveImage"
+      },
+      "9": { 
+        "inputs": {
+          "pixels": ["1", 0],
+          "vae": ["5", 2]
+        },
+        "class_type": "VAEEncode"
       }
-    });
+    };
 
-    // Inject dynamic data into the JSON string
-    let workflowStr = HARDCODED_WORKFLOW
-      .replace(/\{\{PROMPT\}\}/g, safePrompt)
-      .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
-      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed");
-
-    let workflowObj;
-    try {
-      workflowObj = JSON.parse(workflowStr);
-      
-      // Auto-unwrap input wrapper to prevent nesting errors
-      if (workflowObj.input && workflowObj.input.workflow) {
-        workflowObj = workflowObj.input.workflow;
-      } else if (workflowObj.workflow) {
-        workflowObj = workflowObj.workflow;
-      } else if (workflowObj.prompt) {
-        workflowObj = workflowObj.prompt;
-      }
-    } catch (e) {
-      throw new Error("Failed to parse hardcoded Workflow JSON.");
-    }
-
-    // Force exact payload structure required by ashleykza worker
+    // Construct the payload EXACTLY as the RunPod worker expects it
     const payload = {
       input: {
-        workflow: workflowObj
+        workflow: workflowObj,
+        images: [
+          {
+            name: "input_image.png",
+            image: base64Data
+          }
+        ]
       }
     };
 
@@ -1275,7 +1240,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Enter your prompt here. It will replace {{PROMPT}} in your workflow..." 
+                      placeholder="Describe the modifications (e.g. 'make the background cyberpunk')..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
@@ -1283,7 +1248,7 @@ export default function App() {
                     </div>
                   </div>
                   <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
-                    Your ComfyUI workflow is hardcoded. Uploaded images and prompts are injected automatically.
+                    Your ComfyUI Img2Img workflow is hardcoded. Uploaded images and prompts are injected automatically.
                   </p>
                 </div>
               )}
