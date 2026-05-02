@@ -696,7 +696,7 @@ export default function App() {
       id,
       pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `[RunPod Qwen] ${prompt}`
+      historyPrompt: `[RunPod] ${prompt}`
     };
   };
 
