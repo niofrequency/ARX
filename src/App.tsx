@@ -219,6 +219,7 @@ export default function App() {
   // --- RunPod ComfyUI Settings State ---
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
+  const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
   const [steps, setSteps] = useState<number>(4);
   const [cfg, setCfg] = useState<number>(1.0);
@@ -280,6 +281,7 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedRpModel = localStorage.getItem('arx_runpod_model') || 'Qwen-Rapid-AIO-NSFW-v23.safetensors';
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
@@ -287,6 +289,7 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
+    setRunpodModel(savedRpModel);
     
     // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -310,6 +313,7 @@ export default function App() {
   // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
+  useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
 
   // --- Balance Fetch Logic ---
   const fetchBalance = async (keyToUse: string) => {
@@ -731,7 +735,7 @@ export default function App() {
       },
       "5": { 
         "inputs": {
-          "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+          "ckpt_name": runpodModel
         },
         "class_type": "CheckpointLoaderSimple"
       },
@@ -1326,6 +1330,20 @@ export default function App() {
                         className="overflow-hidden"
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                          {/* --- ADDED NEURAL ARCHITECTURE SELECTOR --- */}
+                          <div>
+                            <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Neural Architecture</label>
+                            <select 
+                              value={runpodModel} 
+                              onChange={(e) => setRunpodModel(e.target.value)}
+                              className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
+                            >
+                              <option value="Qwen-Rapid-AIO-NSFW-v23.safetensors">Qwen NSFW v23 (27GB)</option>
+                              <option value="Jib-Mix-Qwen.safetensors">Jib Mix Qwen (20GB)</option>
+                              <option value="qwen_image_edit_2511_fp8_e4m3fn.safetensors">Qwen Edit 2511 FP8 (20GB)</option>
+                            </select>
+                          </div>
+
                           <div className="relative">
                             <textarea 
                               value={negativePrompt} 
