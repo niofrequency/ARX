@@ -25,7 +25,8 @@ import {
   CloudDownload,
   Bookmark,
   BookmarkPlus,
-  Server
+  Server,
+  Settings2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -215,6 +216,14 @@ export default function App() {
   const [verticalAngle, setVerticalAngle] = useState<number>(0);
   const [distance, setDistance] = useState<number>(1);
 
+  // --- RunPod ComfyUI Settings State ---
+  const [sampler, setSampler] = useState<string>('euler');
+  const [scheduler, setScheduler] = useState<string>('simple');
+  const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
+  const [steps, setSteps] = useState<number>(4);
+  const [cfg, setCfg] = useState<number>(1.0);
+  const [denoise, setDenoise] = useState<number>(0.75);
+
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -231,6 +240,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [showAdvancedRunpod, setShowAdvancedRunpod] = useState(false);
   
   // --- Saved Prompts State ---
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
@@ -253,6 +263,16 @@ export default function App() {
   ];
   const distanceOptions = [
     { v: 0, l: 'Close' }, { v: 1, l: 'Medium' }, { v: 2, l: 'Wide' }
+  ];
+
+  const COMFY_SAMPLERS = [
+    "euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral",
+    "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu",
+    "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
+    "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"
+  ];
+  const COMFY_SCHEDULERS = [
+    "normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"
   ];
 
   // --- Initialization & Cloud Sync ---
@@ -692,16 +712,16 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // Advanced Qwen-Image Workflow Object
+    // Advanced Qwen-Image Workflow Object with Dynamic Variables
     const workflowObj = {
       "3": {
         "inputs": {
           "seed": Math.floor(Math.random() * 1000000), 
-          "steps": 4, 
-          "cfg": 1,
-          "sampler_name": "dpmpp_2m_sde_gpu",
-          "scheduler": "simple",
-          "denoise": 1,
+          "steps": steps, 
+          "cfg": cfg,
+          "sampler_name": sampler,
+          "scheduler": scheduler,
+          "denoise": denoise,
           "model": ["75", 0],
           "positive": ["111", 0],
           "negative": ["110", 0],
@@ -768,14 +788,14 @@ export default function App() {
         "inputs": {
           "upscale_method": "lanczos",
           "megapixels": 1,
-          "resolution_steps": 64, // ADDED: Required to satisfy node validation
+          "resolution_steps": 64, // Required to satisfy node validation
           "image": ["78", 0]
         },
         "class_type": "ImageScaleToTotalPixels"
       },
       "110": {
         "inputs": {
-          "prompt": "", 
+          "prompt": negativePrompt, 
           "clip": ["5", 1],
           "vae": ["5", 2],
           "image1": ["93", 0]
@@ -784,7 +804,7 @@ export default function App() {
       },
       "111": {
         "inputs": {
-          "prompt": prompt || "photorealistic style", 
+          "prompt": prompt || "cyberpunk style", 
           "clip": ["5", 1],
           "vae": ["5", 2],
           "image1": ["93", 0]
@@ -1267,13 +1287,22 @@ export default function App() {
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
                       RunPod ComfyUI Serverless
                     </label>
-                    <button
-                      onClick={() => setShowLoadPrompt(true)}
-                      className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                    >
-                      <Bookmark className="w-3 h-3" />
-                      Saved Prompts
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)}
+                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                        Advanced
+                      </button>
+                      <button
+                        onClick={() => setShowLoadPrompt(true)}
+                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                      >
+                        <Bookmark className="w-3 h-3" />
+                        Presets
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="relative">
@@ -1281,15 +1310,93 @@ export default function App() {
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
                       placeholder="Describe the modifications (e.g. 'make the background cyberpunk')..." 
-                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
+                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      ComfyUI Injector
+                      Positive Prompt
                     </div>
                   </div>
-                  <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
-                    Your ComfyUI Img2Img workflow is hardcoded. Uploaded images and prompts are injected automatically.
-                  </p>
+
+                  <AnimatePresence>
+                    {showAdvancedRunpod && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                          <div className="relative">
+                            <textarea 
+                              value={negativePrompt} 
+                              onChange={(e) => setNegativePrompt(e.target.value)} 
+                              placeholder="Negative prompt..." 
+                              className="w-full h-20 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
+                            />
+                            <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
+                              Negative Prompt
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Sampler</label>
+                              <select 
+                                value={sampler} 
+                                onChange={(e) => setSampler(e.target.value)}
+                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
+                              >
+                                {COMFY_SAMPLERS.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Scheduler</label>
+                              <select 
+                                value={scheduler} 
+                                onChange={(e) => setScheduler(e.target.value)}
+                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
+                              >
+                                {COMFY_SCHEDULERS.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                                Steps <span>{steps}</span>
+                              </label>
+                              <input 
+                                type="range" min="1" max="50" step="1" 
+                                value={steps} onChange={(e) => setSteps(Number(e.target.value))}
+                                className="w-full accent-zinc-100" 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                                CFG <span>{cfg.toFixed(1)}</span>
+                              </label>
+                              <input 
+                                type="range" min="1" max="15" step="0.5" 
+                                value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
+                                className="w-full accent-zinc-100" 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                                Denoise <span>{denoise.toFixed(2)}</span>
+                              </label>
+                              <input 
+                                type="range" min="0" max="1" step="0.05" 
+                                value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
+                                className="w-full accent-zinc-100" 
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
 
