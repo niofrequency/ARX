@@ -205,7 +205,6 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
-  const [runpodWorkflow, setRunpodWorkflow] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
   const [creditBalance, setCreditBalance] = useState<number | string>('...');
@@ -261,7 +260,6 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedRpWorkflow = localStorage.getItem('arx_runpod_workflow') || '';
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
@@ -269,7 +267,6 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
-    setRunpodWorkflow(savedRpWorkflow);
     
     // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -430,7 +427,6 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
-    localStorage.setItem('arx_runpod_workflow', runpodWorkflow);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -705,16 +701,79 @@ export default function App() {
 
   // --- API TRIGGER DEFINITIONS ---
   const triggerRunPod = async (base64Image: string) => {
-    if (!runpodWorkflow) throw new Error("Please configure your ComfyUI Workflow JSON in Settings first.");
-
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
     // Safely escape the prompt for JSON injection
     const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
     
-    // Inject dynamic data
-    let workflowStr = runpodWorkflow
+    // Hardcoded ComfyUI Workflow JSON
+    const HARDCODED_WORKFLOW = JSON.stringify({
+      "input": {
+        "workflow": {
+          "1": {
+            "inputs": {
+              "image": "{{IMAGE_BASE64}}",
+              "upload": "image"
+            },
+            "class_type": "LoadImage"
+          },
+          "2": {
+            "inputs": {
+              "text": "{{PROMPT}}",
+              "clip": ["3", 1]
+            },
+            "class_type": "CLIPTextEncode"
+          },
+          "3": {
+            "inputs": {
+              "text": "{{NEGATIVE_PROMPT}}",
+              "clip": ["3", 1]
+            },
+            "class_type": "CLIPTextEncode"
+          },
+          "4": {
+            "inputs": {
+              "model": ["5", 0],
+              "positive": ["2", 0],
+              "negative": ["3", 0],
+              "latent_image": ["6", 0]
+            },
+            "class_type": "KSampler"
+          },
+          "5": {
+            "inputs": {
+              "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+            },
+            "class_type": "CheckpointLoaderSimple"
+          },
+          "6": {
+            "inputs": {
+              "width": 1024,
+              "height": 1024,
+              "batch_size": 1
+            },
+            "class_type": "EmptyLatentImage"
+          },
+          "7": {
+            "inputs": {
+              "samples": ["4", 0],
+              "vae": ["5", 2]
+            },
+            "class_type": "VAEDecode"
+          },
+          "8": {
+            "inputs": {
+              "images": ["7", 0]
+            },
+            "class_type": "SaveImage"
+          }
+        }
+      }
+    });
+
+    // Inject dynamic data into the JSON string
+    let workflowStr = HARDCODED_WORKFLOW
       .replace(/\{\{PROMPT\}\}/g, safePrompt)
       .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
       .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed");
@@ -723,17 +782,16 @@ export default function App() {
     try {
       workflowObj = JSON.parse(workflowStr);
       
-      // If user pasted {"input": {"workflow": {...}}}, unwrap it automatically to prevent nesting errors
+      // Auto-unwrap input wrapper to prevent nesting errors
       if (workflowObj.input && workflowObj.input.workflow) {
         workflowObj = workflowObj.input.workflow;
       } else if (workflowObj.workflow) {
         workflowObj = workflowObj.workflow;
       } else if (workflowObj.prompt) {
-        // Some wrappers expect "prompt" instead of "workflow"
         workflowObj = workflowObj.prompt;
       }
     } catch (e) {
-      throw new Error("Invalid Workflow JSON. Check your Settings.");
+      throw new Error("Failed to parse hardcoded Workflow JSON.");
     }
 
     // Force exact payload structure required by ashleykza worker
@@ -1225,7 +1283,7 @@ export default function App() {
                     </div>
                   </div>
                   <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
-                    Ensure your Workflow JSON is configured in <Settings className="w-3 h-3 inline pb-0.5" /> Settings. Uploaded images replace <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-300">{'{{IMAGE_BASE64}}'}</code> and prompts replace <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-300">{'{{PROMPT}}'}</code>.
+                    Your ComfyUI workflow is hardcoded. Uploaded images and prompts are injected automatically.
                   </p>
                 </div>
               )}
@@ -1765,17 +1823,6 @@ export default function App() {
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod ComfyUI Workflow JSON (API Format)
-                    </label>
-                    <textarea 
-                      value={runpodWorkflow} 
-                      onChange={(e) => setRunpodWorkflow(e.target.value)} 
-                      placeholder='Paste workflow JSON here. Use {{PROMPT}} and {{IMAGE_BASE64}} as value placeholders.'
-                      className="w-full h-32 p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-[10px] font-mono leading-relaxed" 
                     />
                   </div>
                 </div>
