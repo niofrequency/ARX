@@ -222,7 +222,8 @@ export default function App() {
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
   const [steps, setSteps] = useState<number>(20);
   const [cfg, setCfg] = useState<number>(7.0);
-  const [denoise, setDenoise] = useState<number>(0.75);
+  // CRITICAL FIX: Qwen Edit instructs require Denoise to be 1.0!
+  const [denoise, setDenoise] = useState<number>(1.0); 
 
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -712,7 +713,7 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- HARDWIRED TO QWEN EDIT 2511 FP8 ---
+    // --- HARDWIRED TO QWEN EDIT 2511 AIO ---
     const workflowObj: any = {
       "3": {
         "inputs": {
@@ -730,7 +731,7 @@ export default function App() {
         "class_type": "KSampler"
       },
       "5": { 
-        "inputs": { "ckpt_name": "qwen_image_edit_2511_fp8_e4m3fn.safetensors" },
+        "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
         "class_type": "CheckpointLoaderSimple"
       },
       "8": {
@@ -1291,6 +1292,12 @@ export default function App() {
                         className="overflow-hidden"
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+
+                          {/* UI LOCK: Hardcoded to AIO model */}
+                          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                            <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-1">Active Neural Architecture</p>
+                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit 2511 AIO (Rapid v23)</p>
+                          </div>
 
                           <div className="relative">
                             <textarea 
