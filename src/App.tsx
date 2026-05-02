@@ -217,12 +217,8 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
-  const [useLightning, setUseLightning] = useState<boolean>(false);
   const [sampler, setSampler] = useState<string>('dpmpp_2m');
   const [scheduler, setScheduler] = useState<string>('karras');
-  
-  // DEFAULT TO QWEN EDIT 2511
-  const [runpodModel, setRunpodModel] = useState<string>('qwen_image_edit_2511_fp8_e4m3fn.safetensors');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
   const [steps, setSteps] = useState<number>(20);
   const [cfg, setCfg] = useState<number>(7.0);
@@ -279,28 +275,11 @@ export default function App() {
     "normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"
   ];
 
-  // --- Auto-Adjusting Smart Defaults ---
-  useEffect(() => {
-    // Whenever the Lightning toggle or Model changes, reset to the optimal, safe settings
-    if (useLightning) {
-      setSteps(4);
-      setCfg(1.0);
-      setSampler('euler');
-      setScheduler('simple');
-    } else {
-      setSteps(20);
-      setCfg(7.0);
-      setSampler('dpmpp_2m');
-      setScheduler('karras');
-    }
-  }, [useLightning, runpodModel]);
-
   // --- Initialization & Cloud Sync ---
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedRpModel = localStorage.getItem('arx_runpod_model') || 'qwen_image_edit_2511_fp8_e4m3fn.safetensors';
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
@@ -308,7 +287,6 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
-    setRunpodModel(savedRpModel);
     
     // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -332,7 +310,6 @@ export default function App() {
   // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
-  useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
 
   // --- Balance Fetch Logic ---
   const fetchBalance = async (keyToUse: string) => {
@@ -735,7 +712,7 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- SMART WORKFLOW GENERATOR ---
+    // --- HARDWIRED TO QWEN EDIT 2511 FP8 ---
     const workflowObj: any = {
       "3": {
         "inputs": {
@@ -745,8 +722,7 @@ export default function App() {
           "sampler_name": sampler,
           "scheduler": scheduler,
           "denoise": denoise,
-          // DYNAMIC WIRING: If Lightning is off, wire directly to the model (Node 5). If on, wire to CFGNorm (Node 75).
-          "model": useLightning ? ["75", 0] : ["5", 0],
+          "model": ["5", 0],
           "positive": ["111", 0],
           "negative": ["110", 0],
           "latent_image": ["88", 0]
@@ -754,7 +730,7 @@ export default function App() {
         "class_type": "KSampler"
       },
       "5": { 
-        "inputs": { "ckpt_name": runpodModel },
+        "inputs": { "ckpt_name": "qwen_image_edit_2511_fp8_e4m3fn.safetensors" },
         "class_type": "CheckpointLoaderSimple"
       },
       "8": {
@@ -777,7 +753,7 @@ export default function App() {
         "inputs": {
           "upscale_method": "lanczos",
           "megapixels": 1,
-          "resolution_steps": 64, // Required to satisfy node validation
+          "resolution_steps": 64, 
           "image": ["78", 0]
         },
         "class_type": "ImageScaleToTotalPixels"
@@ -801,33 +777,6 @@ export default function App() {
         "class_type": "TextEncodeQwenImageEditPlus"
       }
     };
-
-    // --- CONDITIONALLY INJECT LIGHTNING NODES ---
-    // If you don't have the LoRA, this is bypassed, preventing crashes!
-    if (useLightning) {
-      workflowObj["89"] = {
-        "inputs": {
-          "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
-          "strength_model": 1,
-          "model": ["5", 0]
-        },
-        "class_type": "LoraLoaderModelOnly"
-      };
-      workflowObj["66"] = {
-        "inputs": {
-          "shift": 3,
-          "model": ["89", 0]
-        },
-        "class_type": "ModelSamplingAuraFlow"
-      };
-      workflowObj["75"] = {
-        "inputs": {
-          "strength": 1,
-          "model": ["66", 0]
-        },
-        "class_type": "CFGNorm"
-      };
-    }
 
     // Construct the payload EXACTLY as the RunPod worker expects it
     const payload = {
@@ -1342,33 +1291,6 @@ export default function App() {
                         className="overflow-hidden"
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
-                          
-                          {/* --- ADDED LIGHTNING TOGGLE --- */}
-                          <div 
-                            className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl cursor-pointer hover:bg-zinc-800 transition-colors" 
-                            onClick={() => setUseLightning(!useLightning)}
-                          >
-                            <div>
-                              <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">Lightning Mode (4-Step)</p>
-                              <p className="text-[9px] font-mono text-zinc-500 mt-1">Requires LoRA on Server Volume</p>
-                            </div>
-                            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useLightning ? 'bg-zinc-100' : 'bg-zinc-700'}`}>
-                              <div className={`w-3 h-3 rounded-full bg-zinc-950 transition-transform ${useLightning ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Neural Architecture</label>
-                            <select 
-                              value={runpodModel} 
-                              onChange={(e) => setRunpodModel(e.target.value)}
-                              className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
-                            >
-                              <option value="qwen_image_edit_2511_fp8_e4m3fn.safetensors">Qwen Edit 2511 FP8 (20GB)</option>
-                              <option value="Qwen-Rapid-AIO-NSFW-v23.safetensors">Qwen NSFW v23 (27GB)</option>
-                              <option value="Jib-Mix-Qwen.safetensors">Jib Mix Qwen (20GB)</option>
-                            </select>
-                          </div>
 
                           <div className="relative">
                             <textarea 
