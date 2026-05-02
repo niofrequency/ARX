@@ -318,7 +318,12 @@ export default function App() {
       const res = await fetch("https://api.wavespeed.ai/api/v3/predictions?page=1&page_size=100", {
         headers: { "Authorization": `Bearer ${keyToUse}` }
       });
-      if (!res.ok) throw new Error("Failed to fetch cloud history");
+      
+      // Handle 404 gracefully without blowing up the UI
+      if (!res.ok) {
+        console.warn(`Wavespeed history sync failed with status ${res.status}`);
+        return; 
+      }
       
       const json = await res.json();
       const items = json.data?.items || json.items || [];
@@ -355,7 +360,7 @@ export default function App() {
         return sorted;
       });
     } catch (e) {
-      console.error("Cloud sync failed:", e);
+      console.warn("Cloud sync failed gracefully:", e);
     } finally {
       setIsSyncing(false);
     }
@@ -593,49 +598,33 @@ export default function App() {
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
           if (task.mode === 'runpod') {
-            const output = pollData.output;
+            // --- OMNI-PARSER FOR BULLETPROOF BASE64 EXTRACTION ---
             let finalImage = '';
-
-            // --- BULLETPROOF RUNPOD OUTPUT PARSER ---
-            if (output) {
-              if (typeof output === 'string') {
-                finalImage = output;
-              } else if (typeof output.message === 'string' && output.message.length > 100) {
-                finalImage = output.message;
-              } else if (output.images && Array.isArray(output.images) && output.images.length > 0) {
-                const imgObj = output.images[0];
-                if (typeof imgObj === 'string') {
-                  finalImage = imgObj;
-                } else if (imgObj && typeof imgObj.image === 'string') {
-                  finalImage = imgObj.image;
-                } else if (imgObj && typeof imgObj.base64 === 'string') {
-                  finalImage = imgObj.base64;
+            
+            const extractBase64 = (obj: any): string | null => {
+              if (typeof obj === 'string') {
+                if (obj.startsWith('data:image') || obj.startsWith('http')) return obj;
+                if (obj.length > 500 && (obj.startsWith('iVBORw') || obj.startsWith('/9j/'))) return `data:image/png;base64,${obj}`;
+              }
+              if (typeof obj === 'object' && obj !== null) {
+                for (let key in obj) {
+                  const res = extractBase64(obj[key]);
+                  if (res) return res;
                 }
-              } else if (output.image) {
-                finalImage = typeof output.image === 'string' ? output.image : output.image.image || '';
-              } else if (typeof output.base64 === 'string') {
-                finalImage = output.base64;
               }
-            }
+              return null;
+            };
 
-            // Fallback for direct message
-            if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
-               finalImage = pollData.message;
-            }
+            finalImage = extractBase64(pollData.output || pollData) || '';
 
-            // ENSURE IT IS A STRING BEFORE CALLING .startsWith()
-            if (finalImage && typeof finalImage === 'string') {
-              // Clean up valid base64 URI
-              if (!finalImage.startsWith('data:image') && !finalImage.startsWith('http')) {
-                finalImage = `data:image/png;base64,${finalImage}`;
-              }
-              
+            if (finalImage) {
               isCompleted = true;
               await handleFinalSuccess(finalImage, task.id, task.prompt);
               continue;
             } else {
-              console.warn("RunPod Output Dump:", pollData);
-              throw new Error("RunPod job succeeded, but React couldn't find the base64 image string. Check the browser console!");
+              // If we STILL can't find it, dump the stringified JSON payload to the UI so we can see what's happening
+              const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
+              throw new Error(`RunPod returned success but no image found. Payload preview: ${dump}...`);
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
