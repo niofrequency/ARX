@@ -22,7 +22,9 @@ import {
   SlidersHorizontal,
   Box,
   Layers,
-  CloudDownload
+  CloudDownload,
+  Bookmark,
+  BookmarkPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -177,6 +179,12 @@ interface HistoryItem {
   date: string;
 }
 
+interface SavedPrompt {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
 interface QueueTask {
   id: string;
   mode: AppMode;
@@ -218,6 +226,13 @@ export default function App() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   
+  // --- Saved Prompts State ---
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+  const [showLoadPrompt, setShowLoadPrompt] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [newPromptName, setNewPromptName] = useState('');
+  const [promptToSave, setPromptToSave] = useState('');
+
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
@@ -241,6 +256,16 @@ export default function App() {
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
     setWavespeedKey(savedKey);
     
+    // Load saved prompts
+    const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
+    if (localSavedPrompts) {
+      try {
+        setSavedPrompts(JSON.parse(localSavedPrompts));
+      } catch (e) {
+        console.error("Failed to parse saved prompts", e);
+      }
+    }
+
     getHistoryDB().then(localData => {
       setHistory(localData);
       if (savedKey) {
@@ -420,6 +445,27 @@ export default function App() {
     if (selectedHistoryItem?.id === id) {
       setSelectedHistoryItem(null);
     }
+  };
+
+  const handleSavePromptData = () => {
+    if (!newPromptName.trim() || !promptToSave.trim()) return;
+    const newSavedPrompt = {
+      id: Date.now().toString(),
+      name: newPromptName.trim(),
+      prompt: promptToSave.trim()
+    };
+    const updated = [...savedPrompts, newSavedPrompt];
+    setSavedPrompts(updated);
+    localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
+    setShowSavePrompt(false);
+    setNewPromptName('');
+  };
+
+  const handleDeleteSavedPrompt = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = savedPrompts.filter(p => p.id !== id);
+    setSavedPrompts(updated);
+    localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
   };
 
   // --- NON-BLOCKING QUEUE ENGINE ---
@@ -998,9 +1044,19 @@ export default function App() {
 
               {mode === 'editor' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">
-                    AI Editing Engine
-                  </label>
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                      AI Editing Engine
+                    </label>
+                    <button
+                      onClick={() => setShowLoadPrompt(true)}
+                      className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                    >
+                      <Bookmark className="w-3 h-3" />
+                      Saved Prompts
+                    </button>
+                  </div>
+                  
                   <div className="grid grid-cols-3 gap-3 mb-6">
                     <button
                       onClick={() => setEditorModel('wan-2.6')}
@@ -1041,7 +1097,7 @@ export default function App() {
                       placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest">
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
                     </div>
                   </div>
@@ -1126,7 +1182,7 @@ export default function App() {
         {/* Right Column (Results) */}
         <div className="lg:col-span-7" id="result-section" ref={resultRef}>
           <div className="lg:sticky lg:top-28">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
                 <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 font-mono">
@@ -1134,13 +1190,25 @@ export default function App() {
                 </h2>
               </div>
               {resultUrl && (
-                <button 
-                  onClick={(e) => handleDownload(resultUrl, prompt || 'angle_render', e)} 
-                  className="text-[10px] font-medium uppercase tracking-widest text-zinc-950 flex items-center gap-2 hover:bg-zinc-200 transition-all bg-zinc-100 px-4 py-2 rounded-full border border-zinc-200 shadow-sm"
-                >
-                  <Download className="w-3.5 h-3.5" /> 
-                  Export
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setPromptToSave(prompt || 'Generated Prompt');
+                      setShowSavePrompt(true);
+                    }}
+                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 transition-all bg-zinc-900 px-4 py-2 rounded-full border border-zinc-800 shadow-sm"
+                  >
+                    <BookmarkPlus className="w-3.5 h-3.5" />
+                    Save Prompt
+                  </button>
+                  <button 
+                    onClick={(e) => handleDownload(resultUrl, prompt || 'angle_render', e)} 
+                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-950 flex items-center gap-2 hover:bg-zinc-200 transition-all bg-zinc-100 px-4 py-2 rounded-full border border-zinc-200 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" /> 
+                    Export
+                  </button>
+                </div>
               )}
             </div>
             
@@ -1195,7 +1263,7 @@ export default function App() {
                           const match = history.find(h => h.url === resultUrl);
                           setSelectedHistoryItem(match || { 
                             id: Date.now().toString(), 
-                            prompt: 'Latest Output', 
+                            prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString() 
                           });
@@ -1402,21 +1470,34 @@ export default function App() {
                       </p>
                     </div>
                     
-                    {/* Only show 'Use prompt' if it's an editor request */}
+                    {/* Only show 'Use prompt' and 'Save Prompt' if it's an editor request */}
                     {!selectedHistoryItem.prompt.startsWith('Multi-Angle') && !selectedHistoryItem.prompt.startsWith('Upscaled') && !selectedHistoryItem.prompt.startsWith('Cloud') && (
-                      <button 
-                        onClick={() => { 
-                          if(selectedHistoryItem) { 
-                            setPrompt(selectedHistoryItem.prompt); 
-                            setSelectedHistoryItem(null); 
-                            window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                          } 
-                        }} 
-                        className="w-full max-w-md mx-auto py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        Use This Prompt
-                      </button>
+                      <div className="w-full max-w-md mx-auto space-y-3">
+                        <button 
+                          onClick={() => { 
+                            if(selectedHistoryItem) { 
+                              setPrompt(selectedHistoryItem.prompt); 
+                              setSelectedHistoryItem(null); 
+                              window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                            } 
+                          }} 
+                          className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          Use This Prompt
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation();
+                            setPromptToSave(selectedHistoryItem.prompt);
+                            setShowSavePrompt(true);
+                          }} 
+                          className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                          <BookmarkPlus className="w-4 h-4" />
+                          Save Prompt
+                        </button>
+                      </div>
                     )}
                     
                     <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest">
@@ -1493,6 +1574,120 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Save Prompt Modal */}
+      <AnimatePresence>
+        {showSavePrompt && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShowSavePrompt(false)} 
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[110]" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
+              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }} 
+              exit={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
+              className="fixed top-1/2 left-1/2 w-full max-w-sm bg-zinc-950 border border-zinc-800 p-6 rounded-3xl z-[120] shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-sm font-medium uppercase tracking-widest text-zinc-100">Save Prompt</h3>
+                <button onClick={() => setShowSavePrompt(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mb-6">
+                <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Prompt Name</label>
+                <input 
+                  type="text" 
+                  value={newPromptName} 
+                  onChange={(e) => setNewPromptName(e.target.value)} 
+                  placeholder="e.g. Cyberpunk Style"
+                  className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm"
+                  autoFocus
+                />
+              </div>
+              <button 
+                onClick={handleSavePromptData} 
+                disabled={!newPromptName.trim()}
+                className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save to Library
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Load Prompt Modal */}
+      <AnimatePresence>
+        {showLoadPrompt && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShowLoadPrompt(false)} 
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[110]" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
+              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }} 
+              exit={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
+              className="fixed top-1/2 left-1/2 w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl z-[120] shadow-2xl flex flex-col max-h-[80vh]"
+            >
+              <div className="flex justify-between items-center p-6 border-b border-zinc-800/50">
+                <h3 className="text-sm font-medium uppercase tracking-widest text-zinc-100 flex items-center gap-2">
+                  <Bookmark className="w-4 h-4" />
+                  Prompt Library
+                </h3>
+                <button onClick={() => setShowLoadPrompt(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {savedPrompts.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Bookmark className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
+                    <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">No saved prompts yet</p>
+                  </div>
+                ) : (
+                  savedPrompts.map(sp => (
+                    <div key={sp.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col group transition-colors hover:border-zinc-700">
+                      <div className="flex justify-between items-start mb-2 gap-4">
+                        <h4 className="text-xs font-medium text-zinc-100 uppercase tracking-wider truncate">{sp.name}</h4>
+                        <button 
+                          onClick={(e) => handleDeleteSavedPrompt(sp.id, e)}
+                          className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="text-[10px] font-mono text-zinc-400 line-clamp-2 mb-4 leading-relaxed">
+                        {sp.prompt}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setPrompt(sp.prompt);
+                          setShowLoadPrompt(false);
+                        }}
+                        className="w-full py-3 bg-zinc-800 text-zinc-300 rounded-xl font-medium uppercase tracking-[0.1em] text-[9px] hover:bg-zinc-700 hover:text-zinc-100 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Load into Editor
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
