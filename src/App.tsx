@@ -700,7 +700,7 @@ export default function App() {
           "steps": 4, 
           "cfg": 1,
           "sampler_name": "dpmpp_2m_sde_gpu",
-          "scheduler": "karras",
+          "scheduler": "simple",
           "denoise": 1,
           "model": ["75", 0],
           "positive": ["111", 0],
@@ -784,7 +784,7 @@ export default function App() {
       },
       "111": {
         "inputs": {
-          "prompt": prompt || "cyberpunk style", 
+          "prompt": prompt || "photorealistic style", 
           "clip": ["5", 1],
           "vae": ["5", 2],
           "image1": ["93", 0]
