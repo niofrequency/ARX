@@ -231,7 +231,6 @@ function useWavespeedEngine(wavespeedKey: string, onSuccess: (item: HistoryItem)
             setQueue(prev => prev.filter(t => t.id !== task.id));
             setResultUrl(finalImage);
             
-            // Ensures the item saves locally correctly with full object signature
             onSuccess({
               id: task.id,
               prompt: task.prompt,
@@ -494,7 +493,7 @@ const ResultViewer = ({ resultUrl, mode, previewUrl, queueLength, targetResoluti
   }
 
   return (
-    <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 overflow-hidden">
+    <div className="flex-1 relative flex items-center justify-center p-2 sm:p-8 overflow-hidden">
       <AnimatePresence mode="wait">
         <motion.div key={resultUrl} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full h-full flex items-center justify-center">
           {mode === 'upscaler' && previewUrl ? (
@@ -571,31 +570,32 @@ const HistoryCardModal = ({ item, history, onClose, onDelete, onApplyPrompt }: a
       
       {history.length > 1 && (
         <>
-          <button onClick={() => handleNavigate(-1)} className="fixed left-4 top-1/2 -translate-y-1/2 z-[100] p-3 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110">
-            <ChevronLeft className="w-5 h-5" />
+          <button onClick={() => handleNavigate(-1)} className="fixed left-2 sm:left-8 top-1/2 -translate-y-1/2 z-[100] p-3 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110">
+            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-          <button onClick={() => handleNavigate(1)} className="fixed right-4 top-1/2 -translate-y-1/2 z-[100] p-3 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110">
-            <ChevronRight className="w-5 h-5" />
+          <button onClick={() => handleNavigate(1)} className="fixed right-2 sm:right-8 top-1/2 -translate-y-1/2 z-[100] p-3 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110">
+            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </>
       )}
 
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 sm:p-12 pointer-events-none">
-        <div className="pointer-events-auto relative flex items-center justify-center w-full max-w-5xl h-full" style={{ perspective: 2000 }}>
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-12 pointer-events-none">
+        <div className="pointer-events-auto relative flex items-center justify-center w-full max-w-5xl" style={{ perspective: 2000 }}>
           <motion.div 
-            className="relative flex items-center justify-center w-full h-full" 
+            className="relative flex items-center justify-center" 
             style={{ transformStyle: 'preserve-3d' }} 
             animate={{ rotateY: isFlipped ? 180 : 0 }} 
             transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
             onDoubleClick={() => setIsFlipped(!isFlipped)}
           >
-            {/* FRONT */}
-            <div className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 bg-zinc-950 flex items-center justify-center" style={{ backfaceVisibility: 'hidden' }}>
-              <img src={item.url} alt="History Entry" className="block max-w-full max-h-full w-auto h-auto object-contain p-4" />
-              <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 p-2 bg-zinc-900/80 backdrop-blur-md rounded-md text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800">
+            {/* FRONT (Allows image to dictate dimensions up to max-w/h bounds) */}
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-zinc-950 flex items-center justify-center" style={{ backfaceVisibility: 'hidden' }}>
+              <img src={item.url} alt="History Entry" className="block max-w-[90vw] sm:max-w-[85vw] max-h-[80vh] sm:max-h-[85vh] w-auto h-auto object-contain" />
+              
+              <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-md text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800">
                 <X className="w-4 h-4" />
               </button>
-              <button onClick={(e) => onDelete(item.id, e)} className="absolute top-4 left-4 p-2 text-red-400 bg-zinc-900/80 backdrop-blur-md rounded-md border border-zinc-800 transition-colors hover:bg-red-500/20">
+              <button onClick={(e) => onDelete(item.id, e)} className="absolute top-4 left-4 p-2.5 text-red-400 bg-zinc-900/80 backdrop-blur-md rounded-md border border-zinc-800 transition-colors hover:bg-red-500/20">
                 <Trash2 className="w-4 h-4" />
               </button>
               <motion.div key={item.id} initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ delay: 2.5, duration: 0.8 }} className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none">
@@ -606,9 +606,9 @@ const HistoryCardModal = ({ item, history, onClose, onDelete, onApplyPrompt }: a
               </motion.div>
             </div>
 
-            {/* BACK */}
-            <div className="absolute inset-0 rounded-2xl shadow-2xl bg-zinc-950 border border-zinc-800 p-8 sm:p-12 flex flex-col items-center justify-center text-center overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-              <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-zinc-100 transition-colors">
+            {/* BACK (Matches exact dimensions of the front via absolute inset-0) */}
+            <div className="absolute inset-0 rounded-3xl shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-12 flex flex-col items-center justify-center text-center overflow-y-auto" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
+              <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 p-2.5 text-zinc-500 hover:text-zinc-100 transition-colors">
                 <X className="w-5 h-5" />
               </button>
               <History className="w-6 h-6 text-zinc-700 mb-6" />
@@ -634,7 +634,6 @@ const HistoryCardModal = ({ item, history, onClose, onDelete, onApplyPrompt }: a
 // 5. MAIN APP COMPONENT
 // ==========================================
 export default function App() {
-  // --- Form & Global State ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mode, setMode] = useState<AppMode>(() => (localStorage.getItem('arx_mode') as AppMode) || 'editor');
   const [editorModel, setEditorModel] = useState<EditorModel>(() => (localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
@@ -652,15 +651,19 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
 
-  // --- Initialize Custom Hooks ---
   const { history, isSyncing, addHistoryItem, deleteHistoryItem, clearHistory, syncCloudHistory } = useHistoryManager(wavespeedKey);
   const { queue, isSubmitting, error, setError, resultUrl, setResultUrl, creditBalance, fetchBalance, executeTask } = useWavespeedEngine(wavespeedKey, addHistoryItem);
 
-  // --- Auto-Save User Prefs ---
+  // Auto-close sidebar on mobile devices on initial load
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
 
-  // --- Global Paste Listener ---
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -676,7 +679,6 @@ export default function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  // --- Interaction Handlers ---
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) { setError('Invalid file type.'); return; }
     setSelectedFile(file); 
@@ -727,16 +729,30 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} 
       />
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative w-full">
         
+        {/* Mobile Sidebar Overlay Backdrop */}
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm z-20 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
         {/* LEFT SIDEBAR: Tools & Parameters */}
         <AnimatePresence initial={false}>
           {sidebarOpen && (
             <motion.aside 
-              initial={{ width: 0, opacity: 0 }} animate={{ width: 320, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-              className="flex-shrink-0 border-r border-zinc-800/50 bg-zinc-950 flex flex-col h-full overflow-y-auto hidden-scrollbar relative z-10"
+              initial={{ width: 0, opacity: 0 }} 
+              animate={{ width: 320, opacity: 1 }} 
+              exit={{ width: 0, opacity: 0 }} 
+              transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+              className="absolute md:relative left-0 top-0 bottom-0 z-30 bg-zinc-950 border-r border-zinc-800/50 flex flex-col overflow-x-hidden overflow-y-auto hidden-scrollbar"
             >
-              <div className="p-5 space-y-6 w-[320px]">
+              <div className="p-4 sm:p-5 space-y-6 w-[320px] max-w-[85vw]">
                 
                 {/* Mode Switcher */}
                 <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/50">
