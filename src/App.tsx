@@ -600,12 +600,13 @@ export default function App() {
             const output = pollData.output;
             let finalImage = '';
 
-            // Handle standard ComfyUI wrapper outputs (usually an array in result.output.images)
+            // Handle standard ComfyUI wrapper outputs (usually an array in result.output.images or result.output.message)
             if (output && output.images && Array.isArray(output.images) && output.images.length > 0) {
               const imgStr = output.images[0];
               finalImage = imgStr.startsWith('data:image') ? imgStr : `data:image/png;base64,${imgStr}`;
+            } else if (output && typeof output.message === 'string') {
+              finalImage = output.message.startsWith('data:image') ? output.message : `data:image/png;base64,${output.message}`;
             } else if (output && typeof output.image === 'string') {
-              // Fallback
               finalImage = output.image.startsWith('data:image') ? output.image : `data:image/png;base64,${output.image}`;
             }
 
@@ -615,7 +616,7 @@ export default function App() {
               continue;
             } else {
               console.warn("RunPod Output:", output);
-              throw new Error("RunPod job completed but no 'images' array was found in output.");
+              throw new Error("RunPod job completed but no image output was found in the expected format.");
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
@@ -682,30 +683,39 @@ export default function App() {
   const triggerRunPod = async (base64Image: string) => {
     if (!runpodWorkflow) throw new Error("Please configure your ComfyUI Workflow JSON in Settings first.");
 
-    // Strip metadata prefix if present
+    // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
     // Safely escape the prompt for JSON injection
-    const safePrompt = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
     
-    // Inject dynamic data into the raw JSON string
-    let workflowStr = runpodWorkflow;
-    workflowStr = workflowStr.replace(/\{\{PROMPT\}\}/g, safePrompt);
-    workflowStr = workflowStr.replace(/\{\{IMAGE_BASE64\}\}/g, base64Data);
+    // Inject dynamic data
+    let workflowStr = runpodWorkflow
+      .replace(/\{\{PROMPT\}\}/g, safePrompt)
+      .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
+      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed"); // Added fallback negative prompt
 
     let workflowObj;
     try {
       workflowObj = JSON.parse(workflowStr);
+      
+      // Force the correct wrapper if the user accidentally included the "input: { workflow: {} }" wrap in settings
+      if (workflowObj.input && workflowObj.input.workflow) {
+        workflowObj = workflowObj.input.workflow;
+      } else if (workflowObj.workflow) {
+        workflowObj = workflowObj.workflow;
+      }
     } catch (e) {
-      throw new Error("Failed to parse ComfyUI Workflow JSON. Check your settings tab formatting.");
+      throw new Error("Invalid Workflow JSON. Check your Settings.");
     }
 
     const payload = {
       input: {
-        workflow: workflowObj
+        workflow: workflowObj // This matches ashleykza worker expectations perfectly
       }
     };
 
+    // We use /run (async mode) instead of /runsync so our UI progress queue doesn't freeze
     const response = await fetch(`https://api.runpod.ai/v2/${runpodEndpointId}/run`, {
       method: 'POST',
       headers: {
@@ -716,7 +726,7 @@ export default function App() {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(`RunPod API Error: ${data.error || 'Unknown Error'}`);
+    if (!response.ok) throw new Error(`RunPod API Error: ${data.error?.message || data.error || 'Request Failed'}`);
 
     const id = data.id;
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
