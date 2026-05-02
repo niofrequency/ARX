@@ -600,23 +600,47 @@ export default function App() {
             const output = pollData.output;
             let finalImage = '';
 
-            // Handle standard ComfyUI wrapper outputs (usually an array in result.output.images or result.output.message)
-            if (output && output.images && Array.isArray(output.images) && output.images.length > 0) {
-              const imgStr = output.images[0];
-              finalImage = imgStr.startsWith('data:image') ? imgStr : `data:image/png;base64,${imgStr}`;
-            } else if (output && typeof output.message === 'string') {
-              finalImage = output.message.startsWith('data:image') ? output.message : `data:image/png;base64,${output.message}`;
-            } else if (output && typeof output.image === 'string') {
-              finalImage = output.image.startsWith('data:image') ? output.image : `data:image/png;base64,${output.image}`;
+            // VERY FORGIVING RESPONSE PARSER FOR COMFYUI SERVERLESS WRAPPERS
+            if (output) {
+              // 1. Check for standard array of images
+              if (output.images && Array.isArray(output.images) && output.images.length > 0) {
+                finalImage = output.images[0];
+              } 
+              // 2. Check for output.message
+              else if (typeof output.message === 'string') {
+                finalImage = output.message;
+              }
+              // 3. Check for output.image
+              else if (typeof output.image === 'string') {
+                finalImage = output.image;
+              }
+              // 4. Check for nested output.output.images
+              else if (output.output && output.output.images && Array.isArray(output.output.images) && output.output.images.length > 0) {
+                finalImage = output.output.images[0];
+              }
+              // 5. Check for base64 directly on output
+              else if (typeof output.base64 === 'string') {
+                finalImage = output.base64;
+              }
+            }
+
+            // Fallback for cases where output is directly in pollData.message or pollData.image
+            if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
+               finalImage = pollData.message;
             }
 
             if (finalImage) {
+              // Ensure valid base64 URI
+              if (!finalImage.startsWith('data:image') && !finalImage.startsWith('http')) {
+                finalImage = `data:image/png;base64,${finalImage}`;
+              }
+              
               isCompleted = true;
               await handleFinalSuccess(finalImage, task.id, task.prompt);
               continue;
             } else {
-              console.warn("RunPod Output:", output);
-              throw new Error("RunPod job completed but no image output was found in the expected format.");
+              console.warn("RunPod Output Dump:", pollData);
+              throw new Error("RunPod job completed, but the image could not be found in the response JSON. Check console for output dump.");
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
@@ -693,25 +717,29 @@ export default function App() {
     let workflowStr = runpodWorkflow
       .replace(/\{\{PROMPT\}\}/g, safePrompt)
       .replace(/\{\{IMAGE_BASE64\}\}/g, base64Data)
-      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed"); // Added fallback negative prompt
+      .replace(/\{\{NEGATIVE_PROMPT\}\}/g, "lowres, bad quality, worse quality, watermark, blurry, deformed");
 
     let workflowObj;
     try {
       workflowObj = JSON.parse(workflowStr);
       
-      // Force the correct wrapper if the user accidentally included the "input: { workflow: {} }" wrap in settings
+      // If user pasted {"input": {"workflow": {...}}}, unwrap it automatically to prevent nesting errors
       if (workflowObj.input && workflowObj.input.workflow) {
         workflowObj = workflowObj.input.workflow;
       } else if (workflowObj.workflow) {
         workflowObj = workflowObj.workflow;
+      } else if (workflowObj.prompt) {
+        // Some wrappers expect "prompt" instead of "workflow"
+        workflowObj = workflowObj.prompt;
       }
     } catch (e) {
       throw new Error("Invalid Workflow JSON. Check your Settings.");
     }
 
+    // Force exact payload structure required by ashleykza worker
     const payload = {
       input: {
-        workflow: workflowObj // This matches ashleykza worker expectations perfectly
+        workflow: workflowObj
       }
     };
 
