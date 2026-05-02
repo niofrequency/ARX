@@ -596,19 +596,36 @@ export default function App() {
             const output = pollData.output;
             let finalImage = '';
 
-            // Runpod Serverless Template returns {"message": "data:image/png;base64,iVBORw0KGg..."}
+            // --- BULLETPROOF RUNPOD OUTPUT PARSER ---
             if (output) {
-              if (typeof output.message === 'string' && output.message.includes('base64')) {
+              if (typeof output === 'string') {
+                finalImage = output;
+              } else if (typeof output.message === 'string' && output.message.length > 100) {
                 finalImage = output.message;
               } else if (output.images && Array.isArray(output.images) && output.images.length > 0) {
-                finalImage = output.images[0];
-              } else if (typeof output.image === 'string') {
-                finalImage = output.image;
+                const imgObj = output.images[0];
+                if (typeof imgObj === 'string') {
+                  finalImage = imgObj;
+                } else if (imgObj && typeof imgObj.image === 'string') {
+                  finalImage = imgObj.image;
+                } else if (imgObj && typeof imgObj.base64 === 'string') {
+                  finalImage = imgObj.base64;
+                }
+              } else if (output.image) {
+                finalImage = typeof output.image === 'string' ? output.image : output.image.image || '';
+              } else if (typeof output.base64 === 'string') {
+                finalImage = output.base64;
               }
             }
 
-            if (finalImage) {
-              // Ensure valid base64 URI
+            // Fallback for direct message
+            if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
+               finalImage = pollData.message;
+            }
+
+            // ENSURE IT IS A STRING BEFORE CALLING .startsWith()
+            if (finalImage && typeof finalImage === 'string') {
+              // Clean up valid base64 URI
               if (!finalImage.startsWith('data:image') && !finalImage.startsWith('http')) {
                 finalImage = `data:image/png;base64,${finalImage}`;
               }
@@ -618,7 +635,7 @@ export default function App() {
               continue;
             } else {
               console.warn("RunPod Output Dump:", pollData);
-              throw new Error("RunPod job completed, but the image could not be found in the response JSON.");
+              throw new Error("RunPod job succeeded, but React couldn't find the base64 image string. Check the browser console!");
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
