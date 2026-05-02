@@ -25,8 +25,7 @@ import {
   CloudDownload,
   Bookmark,
   BookmarkPlus,
-  Server,
-  Play
+  Server
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -206,6 +205,7 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
+  const [runpodWorkflow, setRunpodWorkflow] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
   const [creditBalance, setCreditBalance] = useState<number | string>('...');
@@ -215,9 +215,6 @@ export default function App() {
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
   const [verticalAngle, setVerticalAngle] = useState<number>(0);
   const [distance, setDistance] = useState<number>(1);
-  
-  // --- RunPod ComfyUI Specific State ---
-  const [comfyWorkflowId, setComfyWorkflowId] = useState<string>('qwen_image_edit_1_1image.json');
 
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -264,6 +261,7 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedRpWorkflow = localStorage.getItem('arx_runpod_workflow') || '';
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
@@ -271,6 +269,7 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
+    setRunpodWorkflow(savedRpWorkflow);
     
     // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -431,6 +430,7 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
+    localStorage.setItem('arx_runpod_workflow', runpodWorkflow);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -507,9 +507,6 @@ export default function App() {
       return;
     }
 
-    // RunPod ComfyUI flow might be able to handle no initial image if it's text-to-image, 
-    // but the original spec for qwen-edit implies an initial image is needed. 
-    // For now, we enforce it across all modes.
     if (!selectedFile) {
       setError('Please upload a primary image to process.');
       return;
@@ -530,9 +527,8 @@ export default function App() {
       } else if (mode === 'angles') {
         triggerResult = await triggerWavespeedAngles(selectedFile);
       } else if (mode === 'runpod') {
-        // We always pass a Base64 string for this flow as defined in the RunPod handler spec
         const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPodComfyUI(base64ImageRaw);
+        triggerResult = await triggerRunPod(base64ImageRaw);
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerWavespeed(base64ImageRaw);
@@ -601,35 +597,26 @@ export default function App() {
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
           if (task.mode === 'runpod') {
-             // ComfyUI template usually returns the image via base64 encoded string directly under outputs or output
-             // Adapt this based on the specific return structure of the ComfyUI handler
-             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-             
-             if (pollData.output && pollData.output.image) {
-                // If it follows standard RunPod schema
-                const finalImage = `data:image/png;base64,${pollData.output.image}`;
-                isCompleted = true;
-                await handleFinalSuccess(finalImage, task.id, task.prompt);
-                continue;
-             } else if (outputs) {
-                // Try parsing standard ComfyUI output array
-                let finalImage = Array.isArray(outputs) ? outputs[0] : outputs;
-                if (typeof finalImage === 'object' && finalImage !== null) {
-                  finalImage = finalImage.url || finalImage.file?.url || finalImage.image;
-                }
-                
-                // If it returned a raw base64 string, prefix it
-                if (finalImage && !finalImage.startsWith('http') && !finalImage.startsWith('data:')) {
-                   finalImage = `data:image/png;base64,${finalImage}`;
-                }
-                
-                isCompleted = true;
-                await handleFinalSuccess(finalImage, task.id, task.prompt);
-                continue;
-             }
-             
-             throw new Error("RunPod job completed but no image was returned. Check handler schema.");
-             
+            const output = pollData.output;
+            let finalImage = '';
+
+            // Handle standard ComfyUI wrapper outputs (usually an array in result.output.images)
+            if (output && output.images && Array.isArray(output.images) && output.images.length > 0) {
+              const imgStr = output.images[0];
+              finalImage = imgStr.startsWith('data:image') ? imgStr : `data:image/png;base64,${imgStr}`;
+            } else if (output && typeof output.image === 'string') {
+              // Fallback
+              finalImage = output.image.startsWith('data:image') ? output.image : `data:image/png;base64,${output.image}`;
+            }
+
+            if (finalImage) {
+              isCompleted = true;
+              await handleFinalSuccess(finalImage, task.id, task.prompt);
+              continue;
+            } else {
+              console.warn("RunPod Output:", output);
+              throw new Error("RunPod job completed but no 'images' array was found in output.");
+            }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
 
@@ -692,24 +679,30 @@ export default function App() {
   };
 
   // --- API TRIGGER DEFINITIONS ---
-  const triggerRunPodComfyUI = async (base64Image: string) => {
+  const triggerRunPod = async (base64Image: string) => {
+    if (!runpodWorkflow) throw new Error("Please configure your ComfyUI Workflow JSON in Settings first.");
+
     // Strip metadata prefix if present
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // Based on the comfyui-docker template standard, typically you submit the 
-    // full JSON workflow directly to the handler or a specialized prompt wrapper
+    // Safely escape the prompt for JSON injection
+    const safePrompt = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
     
-    // As the exact handler interface wasn't provided for the comfyui-docker worker, 
-    // we'll assume a standard RunPod Serverless pass-through payload where `input` 
-    // contains the prompt, image, and workflow selection if custom logic wraps it.
+    // Inject dynamic data into the raw JSON string
+    let workflowStr = runpodWorkflow;
+    workflowStr = workflowStr.replace(/\{\{PROMPT\}\}/g, safePrompt);
+    workflowStr = workflowStr.replace(/\{\{IMAGE_BASE64\}\}/g, base64Data);
+
+    let workflowObj;
+    try {
+      workflowObj = JSON.parse(workflowStr);
+    } catch (e) {
+      throw new Error("Failed to parse ComfyUI Workflow JSON. Check your settings tab formatting.");
+    }
+
     const payload = {
       input: {
-        workflow: comfyWorkflowId, // Example convention
-        prompt: prompt,
-        image_base64: base64Data,
-        seed: Math.floor(Math.random() * 1000000),
-        width: 1024, // Assuming standard dims, would need UI fields if variable
-        height: 1024
+        workflow: workflowObj
       }
     };
 
@@ -732,7 +725,7 @@ export default function App() {
       id,
       pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `[ComfyUI] ${prompt}`
+      historyPrompt: `[RunPod ComfyUI] ${prompt}`
     };
   };
 
@@ -1050,7 +1043,7 @@ export default function App() {
             
             <div className="h-[200px]">
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for ComfyUI' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for ComfyUI Node' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -1171,7 +1164,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      ComfyUI Workflow configuration
+                      RunPod ComfyUI Serverless
                     </label>
                     <button
                       onClick={() => setShowLoadPrompt(true)}
@@ -1182,39 +1175,20 @@ export default function App() {
                     </button>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-                    <div className="space-y-2">
-                       <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Workflow Type</label>
-                       <select 
-                         value={comfyWorkflowId}
-                         onChange={(e) => setComfyWorkflowId(e.target.value)}
-                         className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-xs text-zinc-300 appearance-none"
-                       >
-                         <option value="qwen_image_edit_1_1image.json">Qwen Image Edit (1 Image)</option>
-                         <option value="qwen_image_edit_1_2image.json">Qwen Image Edit (2 Images)</option>
-                         <option value="qwen_image_edit_1_3image.json">Qwen Image Edit (3 Images)</option>
-                         <option value="custom">Custom ComfyUI Workflow</option>
-                       </select>
-                    </div>
-                    {/* Add extra fields if handling 2 or 3 image inputs per the spec */}
-                    {comfyWorkflowId !== 'qwen_image_edit_1_1image.json' && comfyWorkflowId !== 'custom' && (
-                       <div className="space-y-2 flex items-center justify-center border border-dashed border-zinc-700 rounded-xl bg-zinc-900/50 p-2 text-center text-[10px] text-zinc-500">
-                          Note: Multi-image workflows may require modifying the handler payload. 
-                       </div>
-                    )}
-                  </div>
-
                   <div className="relative">
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Enter instructions for the ComfyUI workflow..." 
+                      placeholder="Enter your prompt here. It will replace {{PROMPT}} in your workflow..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      RunPod ComfyUI
+                      ComfyUI Injector
                     </div>
                   </div>
+                  <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
+                    Ensure your Workflow JSON is configured in <Settings className="w-3 h-3 inline pb-0.5" /> Settings. Uploaded images replace <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-300">{'{{IMAGE_BASE64}}'}</code> and prompts replace <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-300">{'{{PROMPT}}'}</code>.
+                  </p>
                 </div>
               )}
 
@@ -1291,14 +1265,14 @@ export default function App() {
                   <>
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
-                    {mode === 'runpod' && <Play className="w-5 h-5" />}
+                    {mode === 'runpod' && <Server className="w-5 h-5" />}
                     {mode === 'angles' && <Box className="w-5 h-5" />}
                   </>
                 )}
                 {isSubmitting ? 'Uploading to Server...' 
                  : mode === 'upscaler' ? 'Queue Resolution Enhancement' 
                  : mode === 'angles' ? 'Queue 3D Camera Angle' 
-                 : mode === 'runpod' ? 'Execute ComfyUI Workflow'
+                 : mode === 'runpod' ? 'Queue RunPod Task'
                  : 'Queue AI Edit'}
               </button>
 
@@ -1323,7 +1297,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'ComfyUI' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -1753,6 +1727,17 @@ export default function App() {
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod ComfyUI Workflow JSON (API Format)
+                    </label>
+                    <textarea 
+                      value={runpodWorkflow} 
+                      onChange={(e) => setRunpodWorkflow(e.target.value)} 
+                      placeholder='Paste workflow JSON here. Use {{PROMPT}} and {{IMAGE_BASE64}} as value placeholders.'
+                      className="w-full h-32 p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-[10px] font-mono leading-relaxed" 
                     />
                   </div>
                 </div>
