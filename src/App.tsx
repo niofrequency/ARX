@@ -24,7 +24,8 @@ import {
   Layers,
   CloudDownload,
   Bookmark,
-  BookmarkPlus
+  BookmarkPlus,
+  Server
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -168,7 +169,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
 };
 
 // --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles';
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
 type Resolution = '2k' | '4k' | '8k';
 
@@ -199,7 +200,12 @@ export default function App() {
   // --- Core State ---
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
+  
+  // API Keys
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
+  const [runpodKey, setRunpodKey] = useState<string>('');
+  const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
+  
   const [prompt, setPrompt] = useState<string>('');
   const [creditBalance, setCreditBalance] = useState<number | string>('...');
   
@@ -251,10 +257,16 @@ export default function App() {
 
   // --- Initialization & Cloud Sync ---
   useEffect(() => {
-    const savedKey = localStorage.getItem('arx_wavespeed_key') || '';
+    const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
+    const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
+    const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
-    setWavespeedKey(savedKey);
+    
+    setWavespeedKey(savedWsKey);
+    setRunpodKey(savedRpKey);
+    setRunpodEndpointId(savedRpEndpoint);
     
     // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -268,9 +280,9 @@ export default function App() {
 
     getHistoryDB().then(localData => {
       setHistory(localData);
-      if (savedKey) {
-        syncCloudHistory(savedKey);
-        fetchBalance(savedKey);
+      if (savedWsKey) {
+        syncCloudHistory(savedWsKey);
+        fetchBalance(savedWsKey);
       }
     }).catch(console.error);
   }, []);
@@ -413,6 +425,8 @@ export default function App() {
 
   const handleSaveSettings = () => {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
+    localStorage.setItem('arx_runpod_key', runpodKey);
+    localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -470,13 +484,21 @@ export default function App() {
 
   // --- NON-BLOCKING QUEUE ENGINE ---
   const generateEdit = async () => {
-    if (!wavespeedKey) {
-      setError('Please enter your Wavespeed API Key in settings.');
-      setShowSettings(true); 
-      return;
+    if (mode === 'runpod') {
+      if (!runpodKey || !runpodEndpointId) {
+        setError('Please enter your RunPod API Key and Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+    } else {
+      if (!wavespeedKey) {
+        setError('Please enter your Wavespeed API Key in settings.');
+        setShowSettings(true); 
+        return;
+      }
     }
 
-    if (mode === 'editor' && !prompt) {
+    if ((mode === 'editor' || mode === 'runpod') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -500,6 +522,9 @@ export default function App() {
         triggerResult = await triggerWavespeedUpscale(selectedFile);
       } else if (mode === 'angles') {
         triggerResult = await triggerWavespeedAngles(selectedFile);
+      } else if (mode === 'runpod') {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        triggerResult = await triggerRunPod(base64ImageRaw);
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerWavespeed(base64ImageRaw);
@@ -546,13 +571,18 @@ export default function App() {
         await new Promise(r => setTimeout(r, 2000));
         pollCount++;
 
-        const pollResponse = await fetch(task.pollUrl, {
-          headers: { "Authorization": `Bearer ${wavespeedKey}` }
-        });
+        const headers: any = {};
+        if (task.mode === 'runpod') {
+          headers["Authorization"] = `Bearer ${runpodKey}`;
+        } else {
+          headers["Authorization"] = `Bearer ${wavespeedKey}`;
+        }
+
+        const pollResponse = await fetch(task.pollUrl, { headers });
 
         if (!pollResponse.ok) {
           if (pollResponse.status === 404 && pollCount < 10) continue; // Handle propagation delay
-          throw new Error(`Wavespeed polling failed with status ${pollResponse.status}`);
+          throw new Error(`Server polling failed with status ${pollResponse.status}`);
         }
 
         const pollData = await pollResponse.json();
@@ -562,27 +592,38 @@ export default function App() {
           clearInterval(progressInterval);
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
-          let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-
-          if (!outputs || outputs.length === 0) {
-            const fetchTarget = task.targetResultUrl;
-            const resultResponse = await fetch(fetchTarget, {
-              headers: { "Authorization": `Bearer ${wavespeedKey}` }
-            });
-            if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
-            const resultData = await resultResponse.json();
-            outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
-          }
-
-          if (outputs && outputs.length > 0) {
-            let finalImage = outputs[0];
-            if (typeof finalImage === 'object' && finalImage !== null) {
-                finalImage = finalImage.url || finalImage.file?.url;
+          if (task.mode === 'runpod') {
+            if (pollData.output && pollData.output.image) {
+              const finalImage = `data:image/png;base64,${pollData.output.image}`;
+              isCompleted = true;
+              await handleFinalSuccess(finalImage, task.id, task.prompt);
+              continue;
+            } else {
+              throw new Error("RunPod job completed but no image was returned.");
             }
-            isCompleted = true;
-            await handleFinalSuccess(finalImage, task.id, task.prompt);
           } else {
-            throw new Error("Generation succeeded but no output URL was found.");
+            let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
+
+            if (!outputs || outputs.length === 0) {
+              const fetchTarget = task.targetResultUrl;
+              const resultResponse = await fetch(fetchTarget, {
+                headers: { "Authorization": `Bearer ${wavespeedKey}` }
+              });
+              if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
+              const resultData = await resultResponse.json();
+              outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
+            }
+
+            if (outputs && outputs.length > 0) {
+              let finalImage = outputs[0];
+              if (typeof finalImage === 'object' && finalImage !== null) {
+                  finalImage = finalImage.url || finalImage.file?.url;
+              }
+              isCompleted = true;
+              await handleFinalSuccess(finalImage, task.id, task.prompt);
+            } else {
+              throw new Error("Generation succeeded but no output URL was found.");
+            }
           }
         } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
           throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
@@ -617,11 +658,48 @@ export default function App() {
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
     
-    // Refresh balance after successful generation
+    // Refresh balance after successful generation (only for wavespeed for now)
     if (wavespeedKey) fetchBalance(wavespeedKey);
   };
 
   // --- API TRIGGER DEFINITIONS ---
+  const triggerRunPod = async (base64Image: string) => {
+    // Strip metadata prefix if present
+    const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+
+    const payload = {
+      input: {
+        prompt: prompt,
+        image_base64: base64Data,
+        seed: Math.floor(Math.random() * 1000000),
+        width: 1024,
+        height: 1024
+      }
+    };
+
+    const response = await fetch(`https://api.runpod.ai/v2/${runpodEndpointId}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${runpodKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`RunPod API Error: ${data.error || 'Unknown Error'}`);
+
+    const id = data.id;
+    if (!id) throw new Error('RunPod API Error: Missing Job ID');
+
+    return {
+      id,
+      pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
+      targetResultUrl: '',
+      historyPrompt: `[RunPod Qwen] ${prompt}`
+    };
+  };
+
   const triggerWavespeedAngles = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -867,7 +945,7 @@ export default function App() {
             onClick={() => setShowSettings(!showSettings)} 
             className="p-2.5 hover:bg-zinc-900 rounded-xl border border-transparent hover:border-zinc-800 transition-all group"
           >
-            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(!wavespeedKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
+            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && !wavespeedKey) || (mode === 'runpod' && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
           </button>
         </div>
       </nav>
@@ -879,10 +957,10 @@ export default function App() {
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
           {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1">
+          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto hide-scrollbar">
             <button
               onClick={() => setMode('editor')}
-              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
                 mode === 'editor' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
@@ -892,8 +970,19 @@ export default function App() {
               Editor
             </button>
             <button
+              onClick={() => setMode('runpod')}
+              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
+                mode === 'runpod' 
+                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
+                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
+            >
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              RunPod Qwen
+            </button>
+            <button
               onClick={() => setMode('angles')}
-              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
                 mode === 'angles' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
@@ -904,7 +993,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setMode('upscaler')}
-              className={`flex-1 py-3.5 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
                 mode === 'upscaler' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
@@ -919,13 +1008,13 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
               <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-400 font-mono">
-                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
+                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'runpod' ? 'Image for RunPod' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
             <div className="h-[200px]">
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -1042,6 +1131,35 @@ export default function App() {
                 </div>
               )}
 
+              {mode === 'runpod' && (
+                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                      RunPod Serverless Edit
+                    </label>
+                    <button
+                      onClick={() => setShowLoadPrompt(true)}
+                      className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                    >
+                      <Bookmark className="w-3 h-3" />
+                      Saved Prompts
+                    </button>
+                  </div>
+                  
+                  <div className="relative">
+                    <textarea 
+                      value={prompt} 
+                      onChange={(e) => setPrompt(e.target.value)} 
+                      placeholder="Describe the modifications (e.g. 'vintage look, grain, warm tones')..." 
+                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
+                    />
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                      RunPod Qwen Editor
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {mode === 'editor' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
@@ -1115,12 +1233,14 @@ export default function App() {
                   <>
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
+                    {mode === 'runpod' && <Server className="w-5 h-5" />}
                     {mode === 'angles' && <Box className="w-5 h-5" />}
                   </>
                 )}
                 {isSubmitting ? 'Uploading to Server...' 
                  : mode === 'upscaler' ? 'Queue Resolution Enhancement' 
                  : mode === 'angles' ? 'Queue 3D Camera Angle' 
+                 : mode === 'runpod' ? 'Queue RunPod Task'
                  : 'Queue AI Edit'}
               </button>
 
@@ -1145,7 +1265,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -1546,7 +1666,34 @@ export default function App() {
                       type="password" 
                       value={wavespeedKey} 
                       onChange={(e) => setWavespeedKey(e.target.value)} 
-                      placeholder="Enter API Key"
+                      placeholder="Enter Wavespeed API Key"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod API Key
+                    </label>
+                    <input 
+                      type="password" 
+                      value={runpodKey} 
+                      onChange={(e) => setRunpodKey(e.target.value)} 
+                      placeholder="Enter RunPod API Key"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={runpodEndpointId} 
+                      onChange={(e) => setRunpodEndpointId(e.target.value)} 
+                      placeholder="e.g. abc123def456"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
