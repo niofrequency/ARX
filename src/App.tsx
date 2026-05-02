@@ -598,35 +598,28 @@ export default function App() {
 
             // VERY FORGIVING RESPONSE PARSER FOR COMFYUI SERVERLESS WRAPPERS
             if (output) {
-              // 1. Check for standard array of images
               if (output.images && Array.isArray(output.images) && output.images.length > 0) {
                 finalImage = output.images[0];
               } 
-              // 2. Check for output.message
               else if (typeof output.message === 'string') {
                 finalImage = output.message;
               }
-              // 3. Check for output.image
               else if (typeof output.image === 'string') {
                 finalImage = output.image;
               }
-              // 4. Check for nested output.output.images
               else if (output.output && output.output.images && Array.isArray(output.output.images) && output.output.images.length > 0) {
                 finalImage = output.output.images[0];
               }
-              // 5. Check for base64 directly on output
               else if (typeof output.base64 === 'string') {
                 finalImage = output.base64;
               }
             }
 
-            // Fallback for cases where output is directly in pollData.message or pollData.image
             if (!finalImage && typeof pollData.message === 'string' && pollData.message.length > 100) {
                finalImage = pollData.message;
             }
 
             if (finalImage) {
-              // Ensure valid base64 URI
               if (!finalImage.startsWith('data:image') && !finalImage.startsWith('http')) {
                 finalImage = `data:image/png;base64,${finalImage}`;
               }
@@ -704,36 +697,44 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // We construct the ComfyUI workflow natively as a JS object.
-    // This perfectly maps the prompt and image without messy string replacement bugs.
-    const workflowObj = {
+    // Safely escape the prompt for JSON injection
+    const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    
+    // HARDCODED, FULLY-WIRED COMfyUI IMG2IMG WORKFLOW JSON
+    const HARDCODED_WORKFLOW = JSON.stringify({
       "1": {
         "inputs": {
-          "image": "input_image.png", // We will upload the base64 data to this exact filename
+          "image": "input_image.png",
           "upload": "image"
         },
         "class_type": "LoadImage"
       },
       "2": {
         "inputs": {
-          "text": prompt || "", 
-          "clip": ["3", 1]
+          "text": "{{PROMPT}}",
+          "clip": ["5", 1] 
         },
         "class_type": "CLIPTextEncode"
       },
       "3": {
         "inputs": {
           "text": "lowres, bad quality, worse quality, watermark, blurry, deformed",
-          "clip": ["3", 1]
+          "clip": ["5", 1] 
         },
         "class_type": "CLIPTextEncode"
       },
       "4": {
         "inputs": {
+          "seed": "{{SEED}}", 
+          "steps": 20, 
+          "cfg": 8.0, 
+          "sampler_name": "euler", 
+          "scheduler": "normal", 
+          "denoise": 0.75, 
           "model": ["5", 0],
           "positive": ["2", 0],
           "negative": ["3", 0],
-          "latent_image": ["6", 0]
+          "latent_image": ["9", 0] 
         },
         "class_type": "KSampler"
       },
@@ -742,14 +743,6 @@ export default function App() {
           "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
         },
         "class_type": "CheckpointLoaderSimple"
-      },
-      "6": {
-        "inputs": {
-          "width": 1024,
-          "height": 1024,
-          "batch_size": 1
-        },
-        "class_type": "EmptyLatentImage"
       },
       "7": {
         "inputs": {
@@ -760,17 +753,36 @@ export default function App() {
       },
       "8": {
         "inputs": {
+          "filename_prefix": "ComfyUI", 
           "images": ["7", 0]
         },
         "class_type": "SaveImage"
+      },
+      "9": { 
+        "inputs": {
+          "pixels": ["1", 0],
+          "vae": ["5", 2]
+        },
+        "class_type": "VAEEncode"
       }
-    };
+    });
 
+    // Inject dynamic data into the JSON string
+    let workflowStr = HARDCODED_WORKFLOW
+      .replace(/\{\{PROMPT\}\}/g, safePrompt)
+      .replace(/"\{\{SEED\}\}"/g, Math.floor(Math.random() * 1000000).toString());
+
+    let workflowObj;
+    try {
+      workflowObj = JSON.parse(workflowStr);
+    } catch (e) {
+      throw new Error("Failed to parse hardcoded Workflow JSON.");
+    }
+
+    // Force exact payload structure required by ashleykza worker
     const payload = {
       input: {
         workflow: workflowObj,
-        // The runpod-worker-comfyui expects base64 images here.
-        // It saves them to the input folder matching the 'name' so LoadImage can find it.
         images: [
           {
             name: "input_image.png",
@@ -1254,7 +1266,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Enter your prompt here..." 
+                      placeholder="Describe the modifications (e.g. 'make the background cyberpunk')..." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
@@ -1262,7 +1274,7 @@ export default function App() {
                     </div>
                   </div>
                   <p className="text-[10px] font-mono text-zinc-500 mt-2 leading-relaxed">
-                    Your ComfyUI workflow is hardcoded. Uploaded images and prompts are injected automatically.
+                    Your ComfyUI Img2Img workflow is hardcoded. Uploaded images and prompts are injected automatically.
                   </p>
                 </div>
               )}
