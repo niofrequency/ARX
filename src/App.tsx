@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // --- Native IndexedDB Wrapper ---
 const DB_NAME = 'ARX_DB';
 const STORE_NAME = 'history';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for schema change
 
 const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -179,6 +179,7 @@ interface HistoryItem {
   prompt: string;
   url: string;
   date: string;
+  modelInfo?: string;
 }
 
 interface SavedPrompt {
@@ -195,6 +196,7 @@ interface QueueTask {
   message: string;
   pollUrl: string;
   targetResultUrl: string;
+  modelInfo: string;
 }
 
 export default function App() {
@@ -399,7 +401,8 @@ export default function App() {
             id: item.id,
             prompt: historyPrompt,
             url: imageUrl,
-            date: item.created_at || new Date().toISOString()
+            date: item.created_at || new Date().toISOString(),
+            modelInfo: 'Cloud Generation'
           };
         })
         .filter((item: any) => item.url);
@@ -611,7 +614,8 @@ export default function App() {
         progress: 15,
         message: 'Queued...',
         pollUrl: triggerResult.pollUrl,
-        targetResultUrl: triggerResult.targetResultUrl
+        targetResultUrl: triggerResult.targetResultUrl,
+        modelInfo: triggerResult.modelInfo
       };
 
       setQueue(prev => [...prev, newTask]);
@@ -686,7 +690,7 @@ export default function App() {
 
             if (finalImage) {
               isCompleted = true;
-              await handleFinalSuccess(finalImage, task.id, task.prompt);
+              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
               continue;
             } else {
               const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
@@ -711,7 +715,7 @@ export default function App() {
                   finalImage = finalImage.url || finalImage.file?.url;
               }
               isCompleted = true;
-              await handleFinalSuccess(finalImage, task.id, task.prompt);
+              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
             } else {
               throw new Error("Generation succeeded but no output URL was found.");
             }
@@ -729,12 +733,13 @@ export default function App() {
     }
   };
 
-  const handleFinalSuccess = async (finalImage: string, taskId: string, taskPrompt: string) => {
+  const handleFinalSuccess = async (finalImage: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
     const newItem: HistoryItem = { 
       id: taskId, 
       prompt: taskPrompt, 
       url: finalImage, 
-      date: new Date().toISOString() 
+      date: new Date().toISOString(),
+      modelInfo: modelInfoStr
     };
     
     setHistory(prev => {
@@ -863,12 +868,15 @@ export default function App() {
 
     const id = data.id;
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
+    
+    const usedModelInfo = activeLora === 'none' ? 'RunPod AIO Base' : activeLora.replace('.safetensors', '');
 
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `[RunPod ComfyUI] ${prompt}`
+      historyPrompt: `[RunPod ComfyUI] ${prompt}`,
+      modelInfo: usedModelInfo
     };
   };
 
@@ -930,7 +938,8 @@ export default function App() {
       id,
       pollUrl,
       targetResultUrl,
-      historyPrompt: `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`
+      historyPrompt: `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`,
+      modelInfo: "Multi-Angle Generator"
     };
   };
 
@@ -989,7 +998,8 @@ export default function App() {
       id,
       pollUrl,
       targetResultUrl,
-      historyPrompt: `Upscaled to ${targetResolution.toUpperCase()}`
+      historyPrompt: `Upscaled to ${targetResolution.toUpperCase()}`,
+      modelInfo: "AI Upscaler"
     };
   };
 
@@ -1041,12 +1051,15 @@ export default function App() {
         targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
       }
     }
+    
+    const usedModelInfo = editorModel === 'wan-2.6' ? 'Wan 2.6' : editorModel === 'wan-2.7' ? 'Wan 2.7' : 'Qwen 2.0';
 
     return {
       id,
       pollUrl,
       targetResultUrl,
-      historyPrompt: prompt
+      historyPrompt: prompt,
+      modelInfo: usedModelInfo
     };
   };
 
@@ -1792,6 +1805,10 @@ export default function App() {
                 </>
               )}
 
+              {/* Edge Fades */}
+              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
+              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
+
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
@@ -1819,7 +1836,7 @@ export default function App() {
                         }
                       }}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
                         opacity: isCenter ? 1 : 0.4,
                         transformStyle: 'preserve-3d',
@@ -1827,7 +1844,7 @@ export default function App() {
                     >
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1836,7 +1853,7 @@ export default function App() {
                           
                           {/* --- FRONT OF CARD --- */}
                           <div 
-                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden border border-zinc-800 bg-zinc-950 flex justify-center items-center" 
+                            className="relative w-full h-fit max-h-[85vh] rounded-2xl overflow-hidden bg-black flex justify-center items-center shadow-[0_0_50px_rgba(0,0,0,0.5)]" 
                             style={{ backfaceVisibility: 'hidden' }}
                           >
                             <img 
@@ -1869,9 +1886,9 @@ export default function App() {
                                   initial={{ opacity: 1 }}
                                   animate={{ opacity: 0 }}
                                   transition={{ delay: 2.5, duration: 0.8 }}
-                                  className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none z-10"
+                                  className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
                                 >
-                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl">
+                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl">
                                     <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
                                     <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
                                       Double tap to flip
@@ -1880,6 +1897,14 @@ export default function App() {
                                       Space to flip
                                     </span>
                                   </div>
+                                  
+                                  {img.modelInfo && (
+                                    <div className="bg-zinc-950/80 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
+                                      <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
+                                        Model: {img.modelInfo}
+                                      </span>
+                                    </div>
+                                  )}
                                 </motion.div>
                               </>
                             )}
@@ -1887,7 +1912,7 @@ export default function App() {
 
                           {/* --- BACK OF CARD --- */}
                           <div 
-                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            className="absolute inset-0 w-full h-full rounded-2xl shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
                             <button 
@@ -1909,9 +1934,15 @@ export default function App() {
                             
                             <History className="w-8 h-8 text-zinc-700 mb-6 shrink-0" />
                             
-                            <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-4 shrink-0">
+                            <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-2 shrink-0">
                               Modification Log
                             </h3>
+
+                            {img.modelInfo && (
+                                <p className="text-zinc-400 font-mono text-[9px] uppercase tracking-widest mb-6">
+                                  {img.modelInfo}
+                                </p>
+                            )}
                             
                             <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
                               <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
@@ -2051,7 +2082,7 @@ export default function App() {
             </motion.div>
           </>
         )}
-      </CheckPresence>
+      </AnimatePresence>
 
       {/* Save Prompt Modal */}
       <AnimatePresence>
