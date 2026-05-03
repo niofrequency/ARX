@@ -1393,7 +1393,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      RunPod ComfyUI Serverless
+                      RunPod
                     </label>
                     <div className="flex items-center gap-3">
                       <button
