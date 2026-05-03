@@ -217,11 +217,11 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
-  // Reverted to Rapid-AIO optimal settings
+  const [activeLora, setActiveLora] = useState<string>('none');
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
-  const [steps, setSteps] = useState<number>(6); // Rapid AIO uses 6 steps
+  const [steps, setSteps] = useState<number>(6);
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
@@ -281,9 +281,11 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedLora = localStorage.getItem('arx_runpod_lora') || 'none';
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
+    setActiveLora(savedLora);
     
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
@@ -309,6 +311,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
+  useEffect(() => { localStorage.setItem('arx_runpod_lora', activeLora); }, [activeLora]);
 
   const fetchBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
@@ -698,7 +701,7 @@ export default function App() {
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- REVERTED TO AIO WORKFLOW ---
+    // --- DYNAMIC AIO WORKFLOW WITH OPTIONAL LORA ---
     const workflowObj: any = {
       "3": {
         "inputs": {
@@ -708,7 +711,7 @@ export default function App() {
           "sampler_name": sampler,
           "scheduler": scheduler,
           "denoise": denoise,
-          "model": ["5", 0],
+          "model": [activeLora === 'none' ? "5" : "10", 0], // Dynamically select UNET path
           "positive": ["111", 0],
           "negative": ["110", 0],
           "latent_image": ["88", 0]
@@ -747,7 +750,7 @@ export default function App() {
       "110": {
         "inputs": {
           "prompt": negativePrompt, 
-          "clip": ["5", 1],
+          "clip": [activeLora === 'none' ? "5" : "10", 1], // Dynamically select CLIP path
           "vae": ["5", 2],
           "image1": ["93", 0]
         },
@@ -755,14 +758,28 @@ export default function App() {
       },
       "111": {
         "inputs": {
-          "prompt": prompt || "cyberpunk style", 
-          "clip": ["5", 1],
+          "prompt": prompt || "change to red", 
+          "clip": [activeLora === 'none' ? "5" : "10", 1], // Dynamically select CLIP path
           "vae": ["5", 2],
           "image1": ["93", 0]
         },
         "class_type": "TextEncodeQwenImageEditPlus"
       }
     };
+
+    // Inject LoraLoader into JSON if selected
+    if (activeLora !== 'none') {
+      workflowObj["10"] = {
+        "inputs": {
+          "lora_name": activeLora,
+          "strength_model": 0.8, // 0.8 is best for photorealism
+          "strength_clip": 0.8,
+          "model": ["5", 0],
+          "clip": ["5", 1]
+        },
+        "class_type": "LoraLoader"
+      };
+    }
 
     const payload = {
       input: {
@@ -1274,10 +1291,23 @@ export default function App() {
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
 
-                          {/* UI LOCK: Hardcoded to AIO model */}
                           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
                             <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-1">Active Neural Architecture</p>
                             <p className="text-[9px] font-mono text-zinc-500">Qwen Edit AIO (Rapid-NSFW-v23)</p>
+                          </div>
+                          
+                          {/* --- NEW DYNAMIC LORA DROPDOWN --- */}
+                          <div>
+                            <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Realism Style Injection</label>
+                            <select 
+                              value={activeLora} 
+                              onChange={(e) => setActiveLora(e.target.value)}
+                              className="w-full p-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-xs outline-none focus:border-zinc-400 text-zinc-100 shadow-inner"
+                            >
+                              <option value="none">None (Base AIO Model)</option>
+                              <option value="yarn_qwen.safetensors">YARN (NSFW Realism)</option>
+                              <option value="hmfemme_qwen.safetensors">HMFemme (1Girl Realism)</option>
+                            </select>
                           </div>
 
                           <div className="relative">
