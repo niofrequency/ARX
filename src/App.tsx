@@ -217,10 +217,11 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
+  // Reverted to Rapid-AIO optimal settings
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
-  const [steps, setSteps] = useState<number>(20);
+  const [steps, setSteps] = useState<number>(6); // Rapid AIO uses 6 steps
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
@@ -288,7 +289,6 @@ export default function App() {
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
     
-    // Load saved prompts
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
     if (localSavedPrompts) {
       try {
@@ -307,11 +307,9 @@ export default function App() {
     }).catch(console.error);
   }, []);
 
-  // --- Auto-Save Settings ---
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
 
-  // --- Balance Fetch Logic ---
   const fetchBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
     try {
@@ -330,7 +328,6 @@ export default function App() {
     }
   };
 
-  // --- Cloud Sync Logic ---
   const syncCloudHistory = async (keyToUse: string) => {
     if (!keyToUse) return;
     setIsSyncing(true);
@@ -339,7 +336,6 @@ export default function App() {
         headers: { "Authorization": `Bearer ${keyToUse}` }
       });
       
-      // Handle 404 gracefully without blowing up the UI
       if (!res.ok) {
         console.warn(`Wavespeed history sync failed with status ${res.status}`);
         return; 
@@ -386,7 +382,6 @@ export default function App() {
     }
   };
 
-  // --- Global Paste Listener ---
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -405,7 +400,6 @@ export default function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  // --- Carousel Keyboard Listener ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedHistoryItem) return;
@@ -426,7 +420,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
-  // --- Core Handlers ---
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please provide a valid image file.');
@@ -507,7 +500,6 @@ export default function App() {
     localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
   };
 
-  // --- NON-BLOCKING QUEUE ENGINE ---
   const generateEdit = async () => {
     if (mode === 'runpod') {
       if (!runpodKey || !runpodEndpointId) {
@@ -576,7 +568,6 @@ export default function App() {
     }
   };
 
-  // UNIVERSAL BACKGROUND POLLING LOOP
   const pollBackground = async (task: QueueTask) => {
     let isCompleted = false;
     let pollCount = 0;
@@ -606,7 +597,7 @@ export default function App() {
         const pollResponse = await fetch(task.pollUrl, { headers });
 
         if (!pollResponse.ok) {
-          if (pollResponse.status === 404 && pollCount < 10) continue; // Handle propagation delay
+          if (pollResponse.status === 404 && pollCount < 10) continue; 
           throw new Error(`Server polling failed with status ${pollResponse.status}`);
         }
 
@@ -618,7 +609,6 @@ export default function App() {
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
           if (task.mode === 'runpod') {
-            // --- OMNI-PARSER FOR BULLETPROOF BASE64 EXTRACTION ---
             let finalImage = '';
             
             const extractBase64 = (obj: any): string | null => {
@@ -705,21 +695,20 @@ export default function App() {
     if (wavespeedKey) fetchBalance(wavespeedKey);
   };
 
-  // --- API TRIGGER DEFINITIONS ---
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- FULL SPLIT COMPONENT ARCHITECTURE - CLEANED ---
+    // --- REVERTED TO AIO WORKFLOW ---
     const workflowObj: any = {
       "3": {
         "inputs": {
-          "seed": Math.floor(Math.random() * 100000000), 
+          "seed": Math.floor(Math.random() * 1000000), 
           "steps": steps, 
           "cfg": cfg,
           "sampler_name": sampler,
           "scheduler": scheduler,
           "denoise": denoise,
-          "model": ["5", 0], // Directly connected to UNET! Bypassing broken AuraFlow nodes.
+          "model": ["5", 0],
           "positive": ["111", 0],
           "negative": ["110", 0],
           "latent_image": ["88", 0]
@@ -727,70 +716,51 @@ export default function App() {
         "class_type": "KSampler"
       },
       "5": { 
-        "inputs": { 
-          "unet_name": "qwen_image_edit_fp8_e4m3fn.safetensors",
-          "weight_dtype": "default"
-        },
-        "class_type": "UNETLoader"
-      },
-      "10": {
-        "inputs": { 
-          "vae_name": "qwen_image_vae.safetensors" 
-        },
-        "class_type": "VAELoader"
-      },
-      "11": {
-        "inputs": { 
-          "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", 
-          "type": "qwen_image", 
-          "device": "default" 
-        },
-        "class_type": "CLIPLoader"
+        "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
+        "class_type": "CheckpointLoaderSimple"
       },
       "8": {
-        "inputs": { 
-          "samples": ["3", 0], 
-          "vae": ["10", 0] 
-        },
+        "inputs": { "samples": ["3", 0], "vae": ["5", 2] },
         "class_type": "VAEDecode"
       },
       "60": {
-        "inputs": { 
-          "filename_prefix": "ARX_Edit", 
-          "images": ["8", 0] 
-        },
+        "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] },
         "class_type": "SaveImage"
       },
       "78": {
-        "inputs": { 
-          "image": "input_image.png" 
-        },
+        "inputs": { "image": "input_image.png" },
         "class_type": "LoadImage"
       },
       "88": {
-        "inputs": { 
-          "pixels": ["78", 0], 
-          "vae": ["10", 0] 
-        },
+        "inputs": { "pixels": ["93", 0], "vae": ["5", 2] },
         "class_type": "VAEEncode"
+      },
+      "93": {
+        "inputs": {
+          "upscale_method": "lanczos",
+          "megapixels": 1,
+          "resolution_steps": 64, 
+          "image": ["78", 0]
+        },
+        "class_type": "ImageScaleToTotalPixels"
       },
       "110": {
         "inputs": {
           "prompt": negativePrompt, 
-          "clip": ["11", 0],
-          "vae": ["10", 0],
-          "image": ["78", 0] 
+          "clip": ["5", 1],
+          "vae": ["5", 2],
+          "image1": ["93", 0]
         },
-        "class_type": "TextEncodeQwenImageEdit"
+        "class_type": "TextEncodeQwenImageEditPlus"
       },
       "111": {
         "inputs": {
-          "prompt": prompt || "change to red", 
-          "clip": ["11", 0],
-          "vae": ["10", 0],
-          "image": ["78", 0]
+          "prompt": prompt || "cyberpunk style", 
+          "clip": ["5", 1],
+          "vae": ["5", 2],
+          "image1": ["93", 0]
         },
-        "class_type": "TextEncodeQwenImageEdit"
+        "class_type": "TextEncodeQwenImageEditPlus"
       }
     };
 
@@ -957,7 +927,6 @@ export default function App() {
         seed: -1
     };
     
-    // Add Wan-2.6 specific parameters if it's the active model
     if (editorModel === 'wan-2.6') {
         payload.enable_prompt_expansion = false;
         payload.guidance_scale = 7.5;
@@ -1008,7 +977,6 @@ export default function App() {
     };
   };
 
-  // --- EVENT HANDLERS ---
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     try {
@@ -1306,10 +1274,10 @@ export default function App() {
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
 
-                          {/* UI LOCK: Hardcoded to Split model */}
+                          {/* UI LOCK: Hardcoded to AIO model */}
                           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
                             <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-1">Active Neural Architecture</p>
-                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit 2511 FP8 (Split Architecture)</p>
+                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit AIO (Rapid-NSFW-v23)</p>
                           </div>
 
                           <div className="relative">
