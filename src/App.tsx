@@ -1382,6 +1382,11 @@ export default function App() {
                               <option value="hmfemme_qwen.safetensors">HMFEM</option>
                               <option value="qwen4play.safetensors">QWEN4PLAY</option>
                               <option value="FemNde.safetensors">FEMNUDE</option>
+                              <option value="ENZOM_BJ.safetensors">ENZOM_BJ</option>
+                              <option value="ZOOTALLURES_BJ.safetensors">ZOOTALLURES_BJ</option>
+                              <option value="GNASS_SXE.safetensors">GNASS_SXE</option>
+                              <option value="FOK_SXE.safetensors">FOK_SXE</option>
+                              <option value="NATURALSKIN.safetensors">NATURALSKIN</option>
                               
                             </select>
                           </div>
