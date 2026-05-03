@@ -1793,54 +1793,55 @@ export default function App() {
                 <>
                   <button 
                     onClick={handlePrevHistory} 
-                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
                   >
                     <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
                   </button>
                   <button 
                     onClick={handleNextHistory} 
-                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
                   >
                     <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
                   </button>
                 </>
               )}
 
-              {/* Edge Fades (z-index pushed up to blanket over the side cards) */}
-              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
-                  const len = history.length;
                   
-                  // Wrap-around logic so images slide infinitely and never "unmount" suddenly
-                  if (offset > len / 2) offset -= len;
-                  else if (offset < -len / 2) offset += len;
+                  // Handle wrap-around logic
+                  if (offset > 1 && currentIndex === 0 && idx === history.length - 1) offset = -1;
+                  if (offset < -1 && currentIndex === history.length - 1 && idx === 0) offset = 1;
                   
                   const isCenter = offset === 0;
-                  const isVisible = Math.abs(offset) <= 1;
+                  
+                  // Only render the center item and its immediate left/right neighbors
+                  if (Math.abs(offset) > 1) return null;
 
                   return (
                     <div
                       key={`carousel-${img.id}-${idx}`}
-                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center pointer-events-none`}
+                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center ${!isCenter ? 'pointer-events-none' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCenter) {
+                          setSelectedHistoryItem(img);
+                          setIsFlipped(false);
+                        }
+                      }}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        // Keep mounted but opacity 0 if further than 1 slot away, this stops the flash
-                        opacity: isCenter ? 1 : (isVisible ? 1 : 0),
-                        pointerEvents: isCenter ? 'auto' : 'none',
+                        opacity: isCenter ? 1 : 0.4,
                         transformStyle: 'preserve-3d',
-                        visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full shadow-2xl rounded-[2rem] cursor-pointer" 
+                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1856,12 +1857,6 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
-                            />
-
-                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
-                            <div 
-                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
-                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
