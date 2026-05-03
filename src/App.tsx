@@ -1131,50 +1131,50 @@ export default function App() {
         {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
-          {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto hide-scrollbar">
+          {/* Master Mode Switcher - Fixed Scrollbar issue for desktop */}
+          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-4 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
             <button
               onClick={() => setMode('editor')}
-              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
+              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
                 mode === 'editor' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               Editor
             </button>
             <button
               onClick={() => setMode('runpod')}
-              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
+              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
                 mode === 'runpod' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              RunPod ComfyUI
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              RunPod
             </button>
             <button
               onClick={() => setMode('angles')}
-              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
+              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
                 mode === 'angles' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Multi-Angle
+              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              Angles
             </button>
             <button
               onClick={() => setMode('upscaler')}
-              className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-max ${
+              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
                 mode === 'upscaler' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               Upscale
             </button>
           </div>
@@ -1467,7 +1467,7 @@ export default function App() {
                       onClick={() => setEditorModel('wan-2.6')}
                       className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.6' 
-                          ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -1477,7 +1477,7 @@ export default function App() {
                       onClick={() => setEditorModel('wan-2.7')}
                       className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.7' 
-                          ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -1487,7 +1487,7 @@ export default function App() {
                       onClick={() => setEditorModel('qwen-2.0')}
                       className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
                         editorModel === 'qwen-2.0' 
-                          ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -1825,7 +1825,6 @@ export default function App() {
                         transformStyle: 'preserve-3d',
                       }}
                     >
-                      {/* Active Focused Card container matches ResultViewer dynamic sizing */}
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
                           className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
@@ -2052,7 +2051,7 @@ export default function App() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </CheckPresence>
 
       {/* Save Prompt Modal */}
       <AnimatePresence>
