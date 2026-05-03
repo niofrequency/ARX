@@ -1905,10 +1905,6 @@ export default function App() {
                 </>
               )}
 
-              {/* Edge Fades (z-index pushed up to blanket over the side cards) */}
-              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
@@ -1930,8 +1926,8 @@ export default function App() {
                       style={{
                         transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        // Keep mounted but opacity 0 if further than 1 slot away, this stops the flash
-                        opacity: isCenter ? 1 : (isVisible ? 1 : 0),
+                        // Keep mounted but opacity 0.4 if further than 1 slot away
+                        opacity: isCenter ? 1 : (isVisible ? 0.4 : 0),
                         pointerEvents: isCenter ? 'auto' : 'none',
                         transformStyle: 'preserve-3d',
                         visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
@@ -1939,7 +1935,7 @@ export default function App() {
                     >
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full shadow-2xl rounded-[2rem] cursor-pointer" 
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1955,12 +1951,6 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
-                            />
-
-                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
-                            <div 
-                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
-                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
