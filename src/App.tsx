@@ -217,13 +217,11 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
-  // Adjusted for Qwen-2511 Flow Matching Base settings
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
   const [steps, setSteps] = useState<number>(20);
   const [cfg, setCfg] = useState<number>(1.5);
-  // CRITICAL FIX: Qwen Edit instructs require Denoise to be 1.0!
   const [denoise, setDenoise] = useState<number>(1.0); 
 
   // --- Input State ---
@@ -644,7 +642,6 @@ export default function App() {
               await handleFinalSuccess(finalImage, task.id, task.prompt);
               continue;
             } else {
-              // If we STILL can't find it, dump the stringified JSON payload to the UI so we can see what's happening
               const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
               throw new Error(`RunPod returned success but no image found. Payload preview: ${dump}...`);
             }
@@ -705,17 +702,14 @@ export default function App() {
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
     
-    // Refresh balance after successful generation (only for wavespeed for now)
     if (wavespeedKey) fetchBalance(wavespeedKey);
   };
 
   // --- API TRIGGER DEFINITIONS ---
   const triggerRunPod = async (base64Image: string) => {
-    // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- FULL SPLIT COMPONENT ARCHITECTURE ---
-    // Wired explicitly to your precise JSON workflow
+    // --- FULL SPLIT COMPONENT ARCHITECTURE - CLEANED ---
     const workflowObj: any = {
       "3": {
         "inputs": {
@@ -725,7 +719,7 @@ export default function App() {
           "sampler_name": sampler,
           "scheduler": scheduler,
           "denoise": denoise,
-          "model": ["75", 0], // Takes from CFGNorm
+          "model": ["5", 0], // Directly connected to UNET! Bypassing broken AuraFlow nodes.
           "positive": ["111", 0],
           "negative": ["110", 0],
           "latent_image": ["88", 0]
@@ -752,20 +746,6 @@ export default function App() {
           "device": "default" 
         },
         "class_type": "CLIPLoader"
-      },
-      "66": {
-        "inputs": { 
-          "shift": 3, 
-          "model": ["5", 0] 
-        },
-        "class_type": "ModelSamplingAuraFlow"
-      },
-      "75": {
-        "inputs": { 
-          "strength": 1, 
-          "model": ["66", 0] 
-        },
-        "class_type": "CFGNorm"
       },
       "8": {
         "inputs": { 
@@ -805,7 +785,7 @@ export default function App() {
       },
       "111": {
         "inputs": {
-          "prompt": prompt || "cyberpunk style", 
+          "prompt": prompt || "change to red", 
           "clip": ["11", 0],
           "vae": ["10", 0],
           "image": ["78", 0]
@@ -814,7 +794,6 @@ export default function App() {
       }
     };
 
-    // Construct the payload EXACTLY as the RunPod worker expects it
     const payload = {
       input: {
         workflow: workflowObj,
@@ -827,7 +806,6 @@ export default function App() {
       }
     };
 
-    // We use /run (async mode) instead of /runsync so our UI progress queue doesn't freeze
     const response = await fetch(`https://api.runpod.ai/v2/${runpodEndpointId}/run`, {
       method: 'POST',
       headers: {
@@ -1310,7 +1288,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Describe the modifications (e.g. 'make the background cyberpunk')..." 
+                      placeholder="Be specific: 'Change the man's black shirt to a red shirt'..." 
                       className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
