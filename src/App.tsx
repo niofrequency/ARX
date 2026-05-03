@@ -1689,7 +1689,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* History Carousel Container */}
+      {/* History Grid (Restored to original static grid layout) */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-16 border-t border-zinc-800/50 pb-12">
           <div className="flex items-center justify-between mb-8">
@@ -1709,42 +1709,34 @@ export default function App() {
             </div>
           </div>
           
-          <div className="relative w-full -mx-4 sm:mx-0 px-4 sm:px-0">
-            {/* Left Edge Fade */}
-            <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-r from-zinc-950 to-transparent z-10 pointer-events-none" />
-            
-            {/* Right Edge Fade */}
-            <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-l from-zinc-950 to-transparent z-10 pointer-events-none" />
-            
-            <div className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 pt-2 px-4 sm:px-8 snap-x snap-mandatory items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-              {history.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square shrink-0 w-44 sm:w-56 snap-center transition-all duration-300 hover:z-20"
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {history.map((item) => (
+              <div 
+                key={item.id} 
+                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
+              >
+                <img 
+                  src={item.url} 
+                  alt={item.prompt} 
+                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                  onClick={() => { 
+                    setSelectedHistoryItem(item); 
+                    setIsFlipped(false); 
+                  }} 
+                />
+                <button 
+                  onClick={(e) => handleDeleteHistory(item.id, e)} 
+                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
                 >
-                  <img 
-                    src={item.url} 
-                    alt={item.prompt} 
-                    className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
-                    onClick={() => { 
-                      setSelectedHistoryItem(item); 
-                      setIsFlipped(false); 
-                    }} 
-                  />
-                  <button 
-                    onClick={(e) => handleDeleteHistory(item.id, e)} 
-                    className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         </section>
       )}
 
-      {/* History Card Modal (Front & Back) */}
+      {/* History Card Modal (Fullscreen Carousel with Flips) */}
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
@@ -1756,28 +1748,64 @@ export default function App() {
               className="fixed inset-0 bg-zinc-950/90 backdrop-blur-sm z-[80]" 
             />
             
-            {/* Carousel Controls */}
-            {history.length > 1 && (
-              <>
-                <button 
-                  onClick={handlePrevHistory} 
-                  className="fixed left-2 sm:left-8 top-1/2 -translate-y-1/2 z-[100] p-3 sm:p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110"
-                >
-                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-                </button>
-                <button 
-                  onClick={handleNextHistory} 
-                  className="fixed right-2 sm:right-8 top-1/2 -translate-y-1/2 z-[100] p-3 sm:p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110"
-                >
-                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-                </button>
-              </>
-            )}
+            <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden">
+              
+              {/* Carousel Background Track (Shows Prev/Next Images) */}
+              <div className="absolute inset-0 flex items-center justify-center gap-[5vw] pointer-events-none opacity-40">
+                {(() => {
+                  const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
+                  const prevItem = history[(currentIndex - 1 + history.length) % history.length];
+                  const nextItem = history[(currentIndex + 1) % history.length];
+                  
+                  return (
+                    <>
+                      {/* Previous Image (Left Side) */}
+                      {history.length > 1 && (
+                        <div className="w-[55vw] shrink-0 translate-x-[-15vw] scale-90 blur-[2px]">
+                          <img src={prevItem.url} className="w-full h-[75vh] object-contain rounded-3xl" />
+                        </div>
+                      )}
+                      
+                      {/* Hidden Center Spacer */}
+                      <div className="w-[55vw] shrink-0" />
+                      
+                      {/* Next Image (Right Side) */}
+                      {history.length > 1 && (
+                        <div className="w-[55vw] shrink-0 translate-x-[15vw] scale-90 blur-[2px]">
+                          <img src={nextItem.url} className="w-full h-[75vh] object-contain rounded-3xl" />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
 
-            <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 sm:p-8 pointer-events-none">
-              <div className="pointer-events-auto relative flex items-center justify-center" style={{ perspective: 2000 }}>
+              {/* Heavy Fade Gradients for the Edges */}
+              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
+              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
+
+              {/* Navigation Controls */}
+              {history.length > 1 && (
+                <>
+                  <button 
+                    onClick={handlePrevHistory} 
+                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl"
+                  >
+                    <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                  <button 
+                    onClick={handleNextHistory} 
+                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl"
+                  >
+                    <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                </>
+              )}
+
+              {/* Active Focused Card */}
+              <div className="relative z-[95] flex items-center justify-center w-[85vw] sm:w-[55vw]" style={{ perspective: 2000 }}>
                 <motion.div 
-                  className="relative flex items-center justify-center" 
+                  className="relative w-full flex items-center justify-center" 
                   style={{ transformStyle: 'preserve-3d' }} 
                   animate={{ rotateY: isFlipped ? 180 : 0 }} 
                   transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1786,13 +1814,13 @@ export default function App() {
                   
                   {/* --- FRONT OF CARD --- */}
                   <div 
-                    className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-zinc-800 bg-zinc-950 flex" 
+                    className="relative w-full rounded-[2rem] overflow-hidden shadow-2xl border border-zinc-800 bg-zinc-950 flex justify-center items-center h-[75vh]" 
                     style={{ backfaceVisibility: 'hidden' }}
                   >
                     <img 
                       src={selectedHistoryItem.url} 
                       alt="History Entry" 
-                      className="block max-w-[90vw] sm:max-w-[85vw] max-h-[80vh] sm:max-h-[85vh] w-auto h-auto object-contain" 
+                      className="w-full h-full object-contain" 
                     />
                     
                     <button 
@@ -1800,14 +1828,14 @@ export default function App() {
                         e.stopPropagation(); 
                         setSelectedHistoryItem(null); 
                       }} 
-                      className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800"
+                      className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800 z-10"
                     >
                       <X className="w-4 h-4" />
                     </button>
 
                     <button 
                       onClick={(e) => handleDeleteHistory(selectedHistoryItem.id, e)} 
-                      className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20"
+                      className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20 z-10"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1817,7 +1845,7 @@ export default function App() {
                       initial={{ opacity: 1 }}
                       animate={{ opacity: 0 }}
                       transition={{ delay: 2.5, duration: 0.8 }}
-                      className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none"
+                      className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none z-10"
                     >
                       <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl">
                         <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
@@ -1833,7 +1861,7 @@ export default function App() {
 
                   {/* --- BACK OF CARD --- */}
                   <div 
-                    className="absolute inset-0 rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                    className="absolute inset-0 w-full h-[75vh] rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                     style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                   >
                     <button 
@@ -1853,13 +1881,13 @@ export default function App() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                     
-                    <History className="w-8 h-8 text-zinc-700 mb-6" />
+                    <History className="w-8 h-8 text-zinc-700 mb-6 shrink-0" />
                     
-                    <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-4">
+                    <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-4 shrink-0">
                       Modification Log
                     </h3>
                     
-                    <div className="flex-1 w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6">
+                    <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
                       <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
                         {selectedHistoryItem.prompt}
                       </p>
@@ -1867,7 +1895,7 @@ export default function App() {
                     
                     {/* Only show 'Use prompt' and 'Save Prompt' if it's an editor request */}
                     {!selectedHistoryItem.prompt.startsWith('Multi-Angle') && !selectedHistoryItem.prompt.startsWith('Upscaled') && !selectedHistoryItem.prompt.startsWith('Cloud') && (
-                      <div className="w-full max-w-md mx-auto space-y-3">
+                      <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                         <button 
                           onClick={() => { 
                             if(selectedHistoryItem) { 
@@ -1895,7 +1923,7 @@ export default function App() {
                       </div>
                     )}
                     
-                    <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest">
+                    <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
                       <span className="sm:hidden">Double tap to view image</span>
                       <span className="hidden sm:inline">Space to view image</span>
                     </p>
