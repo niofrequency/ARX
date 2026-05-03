@@ -1689,7 +1689,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* History Grid */}
+      {/* History Carousel Container */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-16 border-t border-zinc-800/50 pb-12">
           <div className="flex items-center justify-between mb-8">
@@ -1709,29 +1709,37 @@ export default function App() {
             </div>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            {history.map((item) => (
-              <div 
-                key={item.id} 
-                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
-              >
-                <img 
-                  src={item.url} 
-                  alt={item.prompt} 
-                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
-                  onClick={() => { 
-                    setSelectedHistoryItem(item); 
-                    setIsFlipped(false); 
-                  }} 
-                />
-                <button 
-                  onClick={(e) => handleDeleteHistory(item.id, e)} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+          <div className="relative w-full -mx-4 sm:mx-0 px-4 sm:px-0">
+            {/* Left Edge Fade */}
+            <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-r from-zinc-950 to-transparent z-10 pointer-events-none" />
+            
+            {/* Right Edge Fade */}
+            <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-l from-zinc-950 to-transparent z-10 pointer-events-none" />
+            
+            <div className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 pt-2 px-4 sm:px-8 snap-x snap-mandatory items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+              {history.map((item) => (
+                <div 
+                  key={item.id} 
+                  className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square shrink-0 w-44 sm:w-56 snap-center transition-all duration-300 hover:z-20"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <img 
+                    src={item.url} 
+                    alt={item.prompt} 
+                    className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                    onClick={() => { 
+                      setSelectedHistoryItem(item); 
+                      setIsFlipped(false); 
+                    }} 
+                  />
+                  <button 
+                    onClick={(e) => handleDeleteHistory(item.id, e)} 
+                    className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
