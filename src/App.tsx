@@ -208,7 +208,10 @@ export default function App() {
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
-  const [creditBalance, setCreditBalance] = useState<number | string>('...');
+  
+  // Isolated Balances
+  const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
+  const [runpodBalance, setRunpodBalance] = useState<string | null>(null);
   
   // --- Parameters State ---
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
@@ -304,7 +307,10 @@ export default function App() {
       setHistory(localData);
       if (savedWsKey) {
         syncCloudHistory(savedWsKey);
-        fetchBalance(savedWsKey);
+        fetchWavespeedBalance(savedWsKey);
+      }
+      if (savedRpKey) {
+        fetchRunPodBalance(savedRpKey);
       }
     }).catch(console.error);
   }, []);
@@ -313,7 +319,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_lora', activeLora); }, [activeLora]);
 
-  const fetchBalance = async (keyToUse: string) => {
+  // --- Balance Fetching Architecture ---
+  const fetchWavespeedBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
     try {
       const res = await fetch("https://api.wavespeed.ai/api/v3/balance", {
@@ -323,11 +330,35 @@ export default function App() {
       if (res.ok) {
         const json = await res.json();
         if (json.data && typeof json.data.balance === 'number') {
-          setCreditBalance(`$${json.data.balance.toFixed(2)}`);
+          setWavespeedBalance(`$${json.data.balance.toFixed(2)}`);
         }
       }
     } catch (e) {
-      console.error("Failed to fetch balance", e);
+      console.error("Failed to fetch Wavespeed balance", e);
+    }
+  };
+
+  const fetchRunPodBalance = async (keyToUse: string) => {
+    if (!keyToUse) return;
+    try {
+      const res = await fetch("https://api.runpod.io/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyToUse}`
+        },
+        body: JSON.stringify({
+          query: `query { myself { balance } }`
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data?.myself && typeof json.data.myself.balance === 'number') {
+          setRunpodBalance(`$${json.data.myself.balance.toFixed(2)}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch RunPod balance", e);
     }
   };
 
@@ -451,7 +482,10 @@ export default function App() {
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
-      fetchBalance(wavespeedKey);
+      fetchWavespeedBalance(wavespeedKey);
+    }
+    if (runpodKey) {
+      fetchRunPodBalance(runpodKey);
     }
   };
 
@@ -695,13 +729,15 @@ export default function App() {
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
     
-    if (wavespeedKey) fetchBalance(wavespeedKey);
+    // Update balances after a generation uses credits
+    if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
+    if (runpodKey) fetchRunPodBalance(runpodKey);
   };
 
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- DYNAMIC AIO WORKFLOW WITH OPTIONAL LORA ---
+    // --- CLEAN RAPID-AIO WORKFLOW (With optional LoRA injection) ---
     const workflowObj: any = {
       "3": {
         "inputs": {
@@ -772,7 +808,7 @@ export default function App() {
       workflowObj["10"] = {
         "inputs": {
           "lora_name": activeLora,
-          "strength_model": 0.8, // 0.8 is best for photorealism
+          "strength_model": 0.8,
           "strength_clip": 0.8,
           "model": ["5", 0],
           "clip": ["5", 1]
@@ -1025,6 +1061,10 @@ export default function App() {
     setSliderPosition(percentage);
   };
 
+  // Determine which balance to show based on the active tab mode
+  const displayBalance = mode === 'runpod' ? runpodBalance : wavespeedBalance;
+  const balanceLabel = mode === 'runpod' ? 'RunPod' : 'Wavespeed';
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
       
@@ -1036,14 +1076,15 @@ export default function App() {
         </div>
         <div className="flex items-center gap-4">
           
-          {wavespeedKey && creditBalance !== '...' && (
+          {/* Dynamic Dual Balance Display */}
+          {displayBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
               <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest hidden sm:inline">
-                Bal: {creditBalance}
+                {balanceLabel}: {displayBalance}
               </span>
               <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest sm:hidden">
-                {creditBalance}
+                {displayBalance}
               </span>
             </div>
           )}
@@ -1296,7 +1337,6 @@ export default function App() {
                             <p className="text-[9px] font-mono text-zinc-500">Qwen Edit AIO (Rapid-NSFW-v23)</p>
                           </div>
                           
-                          {/* --- NEW DYNAMIC LORA DROPDOWN --- */}
                           <div>
                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Realism Style Injection</label>
                             <select 
@@ -1436,7 +1476,7 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')..." 
+                      placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')...." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
