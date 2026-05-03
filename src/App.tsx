@@ -217,11 +217,12 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
-  const [sampler, setSampler] = useState<string>('dpmpp_2m');
-  const [scheduler, setScheduler] = useState<string>('karras');
+  // Adjusted for Qwen-2511 Flow Matching Base settings
+  const [sampler, setSampler] = useState<string>('euler');
+  const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
   const [steps, setSteps] = useState<number>(20);
-  const [cfg, setCfg] = useState<number>(7.0);
+  const [cfg, setCfg] = useState<number>(1.5);
   // CRITICAL FIX: Qwen Edit instructs require Denoise to be 1.0!
   const [denoise, setDenoise] = useState<number>(1.0); 
 
@@ -713,17 +714,18 @@ export default function App() {
     // Clean base64 (remove data:image prefix)
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- HARDWIRED TO QWEN EDIT 2511 AIO ---
+    // --- FULL SPLIT COMPONENT ARCHITECTURE ---
+    // Wired explicitly to your precise JSON workflow
     const workflowObj: any = {
       "3": {
         "inputs": {
-          "seed": Math.floor(Math.random() * 1000000), 
+          "seed": Math.floor(Math.random() * 100000000), 
           "steps": steps, 
           "cfg": cfg,
           "sampler_name": sampler,
           "scheduler": scheduler,
           "denoise": denoise,
-          "model": ["5", 0],
+          "model": ["75", 0], // Takes from CFGNorm
           "positive": ["111", 0],
           "negative": ["110", 0],
           "latent_image": ["88", 0]
@@ -731,51 +733,84 @@ export default function App() {
         "class_type": "KSampler"
       },
       "5": { 
-        "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
-        "class_type": "CheckpointLoaderSimple"
+        "inputs": { 
+          "unet_name": "qwen_image_edit_fp8_e4m3fn.safetensors",
+          "weight_dtype": "default"
+        },
+        "class_type": "UNETLoader"
+      },
+      "10": {
+        "inputs": { 
+          "vae_name": "qwen_image_vae.safetensors" 
+        },
+        "class_type": "VAELoader"
+      },
+      "11": {
+        "inputs": { 
+          "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", 
+          "type": "qwen_image", 
+          "device": "default" 
+        },
+        "class_type": "CLIPLoader"
+      },
+      "66": {
+        "inputs": { 
+          "shift": 3, 
+          "model": ["5", 0] 
+        },
+        "class_type": "ModelSamplingAuraFlow"
+      },
+      "75": {
+        "inputs": { 
+          "strength": 1, 
+          "model": ["66", 0] 
+        },
+        "class_type": "CFGNorm"
       },
       "8": {
-        "inputs": { "samples": ["3", 0], "vae": ["5", 2] },
+        "inputs": { 
+          "samples": ["3", 0], 
+          "vae": ["10", 0] 
+        },
         "class_type": "VAEDecode"
       },
       "60": {
-        "inputs": { "filename_prefix": "ComfyUI", "images": ["8", 0] },
+        "inputs": { 
+          "filename_prefix": "ARX_Edit", 
+          "images": ["8", 0] 
+        },
         "class_type": "SaveImage"
       },
       "78": {
-        "inputs": { "image": "input_image.png" },
+        "inputs": { 
+          "image": "input_image.png" 
+        },
         "class_type": "LoadImage"
       },
       "88": {
-        "inputs": { "pixels": ["93", 0], "vae": ["5", 2] },
-        "class_type": "VAEEncode"
-      },
-      "93": {
-        "inputs": {
-          "upscale_method": "lanczos",
-          "megapixels": 1,
-          "resolution_steps": 64, 
-          "image": ["78", 0]
+        "inputs": { 
+          "pixels": ["78", 0], 
+          "vae": ["10", 0] 
         },
-        "class_type": "ImageScaleToTotalPixels"
+        "class_type": "VAEEncode"
       },
       "110": {
         "inputs": {
           "prompt": negativePrompt, 
-          "clip": ["5", 1],
-          "vae": ["5", 2],
-          "image1": ["93", 0]
+          "clip": ["11", 0],
+          "vae": ["10", 0],
+          "image": ["78", 0] 
         },
-        "class_type": "TextEncodeQwenImageEditPlus"
+        "class_type": "TextEncodeQwenImageEdit"
       },
       "111": {
         "inputs": {
           "prompt": prompt || "cyberpunk style", 
-          "clip": ["5", 1],
-          "vae": ["5", 2],
-          "image1": ["93", 0]
+          "clip": ["11", 0],
+          "vae": ["10", 0],
+          "image": ["78", 0]
         },
-        "class_type": "TextEncodeQwenImageEditPlus"
+        "class_type": "TextEncodeQwenImageEdit"
       }
     };
 
@@ -1293,10 +1328,10 @@ export default function App() {
                       >
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
 
-                          {/* UI LOCK: Hardcoded to AIO model */}
+                          {/* UI LOCK: Hardcoded to Split model */}
                           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
                             <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-1">Active Neural Architecture</p>
-                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit 2511 AIO (Rapid v23)</p>
+                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit 2511 FP8 (Split Architecture)</p>
                           </div>
 
                           <div className="relative">
