@@ -1685,7 +1685,8 @@ export default function App() {
                             id: Date.now().toString(), 
                             prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
-                            date: new Date().toISOString() 
+                            date: new Date().toISOString(),
+                            modelInfo: mode === 'runpod' ? activeLora === 'none' ? 'RunPod AIO Base' : activeLora.replace('.safetensors', '') : editorModel
                           });
                           setIsFlipped(false);
                         }}
@@ -1805,10 +1806,6 @@ export default function App() {
                 </>
               )}
 
-              {/* Edge Fades */}
-              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
-              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[91]" />
-
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
@@ -1836,7 +1833,7 @@ export default function App() {
                         }
                       }}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
                         opacity: isCenter ? 1 : 0.4,
                         transformStyle: 'preserve-3d',
@@ -1844,7 +1841,7 @@ export default function App() {
                     >
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
+                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1853,7 +1850,7 @@ export default function App() {
                           
                           {/* --- FRONT OF CARD --- */}
                           <div 
-                            className="relative w-full h-fit max-h-[85vh] rounded-2xl overflow-hidden bg-black flex justify-center items-center shadow-[0_0_50px_rgba(0,0,0,0.5)]" 
+                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
                             style={{ backfaceVisibility: 'hidden' }}
                           >
                             <img 
@@ -1912,7 +1909,7 @@ export default function App() {
 
                           {/* --- BACK OF CARD --- */}
                           <div 
-                            className="absolute inset-0 w-full h-full rounded-2xl shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
                             <button 
