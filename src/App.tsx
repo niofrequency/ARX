@@ -1347,6 +1347,9 @@ export default function App() {
                               <option value="none">None (Base AIO Model)</option>
                               <option value="yarn_qwen.safetensors">YARN (NSFW Realism)</option>
                               <option value="hmfemme_qwen.safetensors">HMFemme (1Girl Realism)</option>
+                              <option value="qwen4play.safetensors">qwen4play</option>
+                              <option value="FemNde.safetensors">FemNde</option>
+                              
                             </select>
                           </div>
 
