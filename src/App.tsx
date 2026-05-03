@@ -206,6 +206,18 @@ interface ActiveLora {
   strength: number;
 }
 
+const LORA_OPTIONS = [
+  { id: "yarn_qwen.safetensors", name: "YARN" },
+  { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
+  { id: "qwen4play.safetensors", name: "QWEN4PLAY" },
+  { id: "FemNde.safetensors", name: "FEMNUDE" },
+  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" },
+  { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
+  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" },
+  { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
+  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
+];
+
 export default function App() {
   // --- Core State ---
   const [mode, setMode] = useState<AppMode>('editor');
@@ -291,18 +303,6 @@ export default function App() {
     "normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"
   ];
 
-  const LORA_OPTIONS = [
-    { id: "yarn_qwen.safetensors", name: "YARN" },
-    { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
-    { id: "qwen4play.safetensors", name: "QWEN4PLAY" },
-    { id: "FemNde.safetensors", name: "FEMNUDE" },
-    { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" },
-    { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
-    { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" },
-    { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
-    { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
-  ];
-
   // --- Initialization & Cloud Sync ---
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
@@ -312,8 +312,13 @@ export default function App() {
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
+    
     if (savedLoras) {
-      try { setActiveLoras(JSON.parse(savedLoras)); } catch(e) {}
+      try {
+        setActiveLoras(JSON.parse(savedLoras));
+      } catch (e) {
+        console.error("Failed to parse saved LoRAs", e);
+      }
     }
     
     setWavespeedKey(savedWsKey);
@@ -589,7 +594,7 @@ export default function App() {
     if (opt && !activeLoras.find(l => l.id === val)) {
       setActiveLoras([...activeLoras, { id: opt.id, name: opt.name, strength: 0.8 }]);
     }
-    e.target.value = 'none'; // reset selector
+    e.target.value = 'none';
   };
 
   const updateLoraStrength = (id: string, strength: number) => {
@@ -933,8 +938,8 @@ export default function App() {
     
     // Create string summarizing models used
     const usedModelInfo = activeLoras.length === 0 
-      ? 'AIO Base' 
-      : activeLoras.map(l => `${l.name} (${l.strength})`).join(' + ');
+      ? 'RunPod AIO Base' 
+      : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
 
     return {
       id,
@@ -1388,7 +1393,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      RunPod
+                      RunPod ComfyUI Serverless
                     </label>
                     <div className="flex items-center gap-3">
                       <button
@@ -1780,7 +1785,7 @@ export default function App() {
                             prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString(),
-                            modelInfo: mode === 'runpod' ? activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength})`).join(' + ') : editorModel
+                            modelInfo: mode === 'runpod' ? activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ') : editorModel
                           });
                           setIsFlipped(false);
                         }}
@@ -1900,41 +1905,38 @@ export default function App() {
                 </>
               )}
 
-              {/* Edge Fades (z-index pushed up to blanket over the side cards) */}
-              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
-
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
-                  const len = history.length;
-                  
-                  // Wrap-around logic so images slide infinitely and never "unmount" suddenly
-                  if (offset > len / 2) offset -= len;
-                  else if (offset < -len / 2) offset += len;
+                  if (offset > 1 && currentIndex === 0 && idx === history.length - 1) offset = -1;
+                  if (offset < -1 && currentIndex === history.length - 1 && idx === 0) offset = 1;
                   
                   const isCenter = offset === 0;
-                  const isVisible = Math.abs(offset) <= 1;
+                  if (Math.abs(offset) > 1) return null;
 
                   return (
                     <div
                       key={`carousel-${img.id}-${idx}`}
-                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center pointer-events-none`}
+                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center ${!isCenter ? 'pointer-events-none' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCenter) {
+                          setSelectedHistoryItem(img);
+                          setIsFlipped(false);
+                        }
+                      }}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        // Keep mounted but opacity 0 if further than 1 slot away, this stops the flash
-                        opacity: isCenter ? 1 : (isVisible ? 1 : 0),
-                        pointerEvents: isCenter ? 'auto' : 'none',
+                        opacity: isCenter ? 1 : 0.4,
                         transformStyle: 'preserve-3d',
-                        visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
+                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1950,12 +1952,6 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
-                            />
-
-                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
-                            <div 
-                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
-                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
@@ -1984,7 +1980,7 @@ export default function App() {
                                   transition={{ delay: 2.5, duration: 0.8 }}
                                   className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
                                 >
-                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl">
+                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
                                     <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
                                     <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
                                       Double tap to flip
@@ -1995,7 +1991,7 @@ export default function App() {
                                   </div>
                                   
                                   {img.modelInfo && (
-                                    <div className="bg-zinc-950/80 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
+                                    <div className="bg-zinc-950/80 border border-zinc-800 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
                                       <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
                                         Model: {img.modelInfo}
                                       </span>
@@ -2008,7 +2004,7 @@ export default function App() {
 
                           {/* --- BACK OF CARD --- */}
                           <div 
-                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
                             <button 
