@@ -1377,11 +1377,11 @@ export default function App() {
                               onChange={(e) => setActiveLora(e.target.value)}
                               className="w-full p-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-xs outline-none focus:border-zinc-400 text-zinc-100 shadow-inner"
                             >
-                              <option value="none">None (Base AIO Model)</option>
-                              <option value="yarn_qwen.safetensors">YARN (NSFW Realism)</option>
-                              <option value="hmfemme_qwen.safetensors">HMFemme (1Girl Realism)</option>
-                              <option value="qwen4play.safetensors">qwen4play</option>
-                              <option value="FemNde.safetensors">FemNde</option>
+                              <option value="none">NONE</option>
+                              <option value="yarn_qwen.safetensors">YARN</option>
+                              <option value="hmfemme_qwen.safetensors">HMFEM</option>
+                              <option value="qwen4play.safetensors">QWEN4PLAY</option>
+                              <option value="FemNde.safetensors">FEMNUDE</option>
                               
                             </select>
                           </div>
