@@ -26,7 +26,8 @@ import {
   Bookmark,
   BookmarkPlus,
   Server,
-  Settings2
+  Settings2,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -199,6 +200,12 @@ interface QueueTask {
   modelInfo: string;
 }
 
+interface ActiveLora {
+  id: string;
+  name: string;
+  strength: number;
+}
+
 export default function App() {
   // --- Core State ---
   const [mode, setMode] = useState<AppMode>('editor');
@@ -222,7 +229,7 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
-  const [activeLora, setActiveLora] = useState<string>('none');
+  const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
@@ -284,16 +291,30 @@ export default function App() {
     "normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"
   ];
 
+  const LORA_OPTIONS = [
+    { id: "yarn_qwen.safetensors", name: "YARN" },
+    { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
+    { id: "qwen4play.safetensors", name: "QWEN4PLAY" },
+    { id: "FemNde.safetensors", name: "FEMNUDE" },
+    { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" },
+    { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
+    { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" },
+    { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
+    { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
+  ];
+
   // --- Initialization & Cloud Sync ---
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedLora = localStorage.getItem('arx_runpod_lora') || 'none';
+    const savedLoras = localStorage.getItem('arx_runpod_loras');
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
-    setActiveLora(savedLora);
+    if (savedLoras) {
+      try { setActiveLoras(JSON.parse(savedLoras)); } catch(e) {}
+    }
     
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
@@ -322,7 +343,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
-  useEffect(() => { localStorage.setItem('arx_runpod_lora', activeLora); }, [activeLora]);
+  useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
   // --- Balance Fetching Architecture ---
   const fetchWavespeedBalance = async (keyToUse: string) => {
@@ -560,6 +581,25 @@ export default function App() {
     localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
   };
 
+  // --- Lora Management Functions ---
+  const addLora = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === 'none') return;
+    const opt = LORA_OPTIONS.find(l => l.id === val);
+    if (opt && !activeLoras.find(l => l.id === val)) {
+      setActiveLoras([...activeLoras, { id: opt.id, name: opt.name, strength: 0.8 }]);
+    }
+    e.target.value = 'none'; // reset selector
+  };
+
+  const updateLoraStrength = (id: string, strength: number) => {
+    setActiveLoras(prev => prev.map(l => l.id === id ? { ...l, strength } : l));
+  };
+
+  const removeLora = (id: string) => {
+    setActiveLoras(prev => prev.filter(l => l.id !== id));
+  };
+
   const generateEdit = async () => {
     if (mode === 'runpod') {
       if (!runpodKey || !runpodEndpointId) {
@@ -762,85 +802,107 @@ export default function App() {
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
-    // --- CLEAN RAPID-AIO WORKFLOW (With optional LoRA injection) ---
+    // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
-      "3": {
-        "inputs": {
-          "seed": Math.floor(Math.random() * 1000000), 
-          "steps": steps, 
-          "cfg": cfg,
-          "sampler_name": sampler,
-          "scheduler": scheduler,
-          "denoise": denoise,
-          "model": [activeLora === 'none' ? "5" : "10", 0], // Dynamically select UNET path
-          "positive": ["111", 0],
-          "negative": ["110", 0],
-          "latent_image": ["88", 0]
-        },
-        "class_type": "KSampler"
-      },
       "5": { 
         "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
         "class_type": "CheckpointLoaderSimple"
-      },
-      "8": {
-        "inputs": { "samples": ["3", 0], "vae": ["5", 2] },
-        "class_type": "VAEDecode"
-      },
-      "60": {
-        "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] },
-        "class_type": "SaveImage"
-      },
-      "78": {
-        "inputs": { "image": "input_image.png" },
-        "class_type": "LoadImage"
-      },
-      "88": {
-        "inputs": { "pixels": ["93", 0], "vae": ["5", 2] },
-        "class_type": "VAEEncode"
-      },
-      "93": {
-        "inputs": {
-          "upscale_method": "lanczos",
-          "megapixels": 1,
-          "resolution_steps": 64, 
-          "image": ["78", 0]
-        },
-        "class_type": "ImageScaleToTotalPixels"
-      },
-      "110": {
-        "inputs": {
-          "prompt": negativePrompt, 
-          "clip": [activeLora === 'none' ? "5" : "10", 1], // Dynamically select CLIP path
-          "vae": ["5", 2],
-          "image1": ["93", 0]
-        },
-        "class_type": "TextEncodeQwenImageEditPlus"
-      },
-      "111": {
-        "inputs": {
-          "prompt": prompt || "change to red", 
-          "clip": [activeLora === 'none' ? "5" : "10", 1], // Dynamically select CLIP path
-          "vae": ["5", 2],
-          "image1": ["93", 0]
-        },
-        "class_type": "TextEncodeQwenImageEditPlus"
       }
     };
 
-    // Inject LoraLoader into JSON if selected
-    if (activeLora !== 'none') {
-      workflowObj["10"] = {
+    let lastModelNodeId = "5";
+    let lastModelOutputIndex = 0;
+    let lastClipNodeId = "5";
+    let lastClipOutputIndex = 1;
+
+    let currentId = 100;
+
+    // Dynamically build the LoraLoader chain
+    activeLoras.forEach(lora => {
+      const nodeId = currentId.toString();
+      workflowObj[nodeId] = {
         "inputs": {
-          "lora_name": activeLora,
-          "strength_model": 0.8,
-          "strength_clip": 0.8,
-          "model": ["5", 0],
-          "clip": ["5", 1]
+          "lora_name": lora.id,
+          "strength_model": lora.strength,
+          "strength_clip": lora.strength,
+          "model": [lastModelNodeId, lastModelOutputIndex],
+          "clip": [lastClipNodeId, lastClipOutputIndex]
         },
         "class_type": "LoraLoader"
       };
-    }
+      
+      // Update pointers to output from this new node
+      lastModelNodeId = nodeId;
+      lastModelOutputIndex = 0;
+      lastClipNodeId = nodeId;
+      lastClipOutputIndex = 1;
+      
+      currentId++;
+    });
+
+    // Add remaining required nodes
+    workflowObj["8"] = {
+      "inputs": { "samples": ["3", 0], "vae": ["5", 2] },
+      "class_type": "VAEDecode"
+    };
+    workflowObj["60"] = {
+      "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] },
+      "class_type": "SaveImage"
+    };
+    workflowObj["78"] = {
+      "inputs": { "image": "input_image.png" },
+      "class_type": "LoadImage"
+    };
+    workflowObj["88"] = {
+      "inputs": { "pixels": ["93", 0], "vae": ["5", 2] },
+      "class_type": "VAEEncode"
+    };
+    workflowObj["93"] = {
+      "inputs": {
+        "upscale_method": "lanczos",
+        "megapixels": 1,
+        "resolution_steps": 64, 
+        "image": ["78", 0]
+      },
+      "class_type": "ImageScaleToTotalPixels"
+    };
+
+    // Text Encoders connected to the END of the CLIP chain
+    workflowObj["110"] = {
+      "inputs": {
+        "prompt": negativePrompt, 
+        "clip": [lastClipNodeId, lastClipOutputIndex],
+        "vae": ["5", 2],
+        "image1": ["93", 0]
+      },
+      "class_type": "TextEncodeQwenImageEditPlus"
+    };
+    workflowObj["111"] = {
+      "inputs": {
+        "prompt": prompt || "change to red", 
+        "clip": [lastClipNodeId, lastClipOutputIndex],
+        "vae": ["5", 2],
+        "image1": ["93", 0]
+      },
+      "class_type": "TextEncodeQwenImageEditPlus"
+    };
+
+    // Sampler connected to the END of the MODEL chain
+    workflowObj["3"] = {
+      "inputs": {
+        "seed": Math.floor(Math.random() * 1000000), 
+        "steps": steps, 
+        "cfg": cfg,
+        "sampler_name": sampler,
+        "scheduler": scheduler,
+        "denoise": denoise,
+        "model": [lastModelNodeId, lastModelOutputIndex],
+        "positive": ["111", 0],
+        "negative": ["110", 0],
+        "latent_image": ["88", 0]
+      },
+      "class_type": "KSampler"
+    };
 
     const payload = {
       input: {
@@ -869,7 +931,10 @@ export default function App() {
     const id = data.id;
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
     
-    const usedModelInfo = activeLora === 'none' ? 'RunPod AIO Base' : activeLora.replace('.safetensors', '');
+    // Create string summarizing models used
+    const usedModelInfo = activeLoras.length === 0 
+      ? 'AIO Base' 
+      : activeLoras.map(l => `${l.name} (${l.strength})`).join(' + ');
 
     return {
       id,
@@ -1366,29 +1431,53 @@ export default function App() {
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
 
                           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-                            <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-1">Active Neural Architecture</p>
-                            <p className="text-[9px] font-mono text-zinc-500">Qwen Edit AIO (Rapid-NSFW-v23)</p>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Realism Style Injection</label>
-                            <select 
-                              value={activeLora} 
-                              onChange={(e) => setActiveLora(e.target.value)}
-                              className="w-full p-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-xs outline-none focus:border-zinc-400 text-zinc-100 shadow-inner"
-                            >
-                              <option value="none">NONE</option>
-                              <option value="yarn_qwen.safetensors">YARN</option>
-                              <option value="hmfemme_qwen.safetensors">HMFEM</option>
-                              <option value="qwen4play.safetensors">QWEN4PLAY</option>
-                              <option value="FemNde.safetensors">FEMNUDE</option>
-                              <option value="ENZOM_BJ.safetensors">ENZOM_BJ</option>
-                              <option value="ZOOTALLURES_BJ.safetensors">ZOOTALLURES_BJ</option>
-                              <option value="GNASS_SXE.safetensors">GNASS_SXE</option>
-                              <option value="FOK_SXE.safetensors">FOK_SXE</option>
-                              <option value="NATURALSKIN.safetensors">NATURALSKIN</option>
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">Base Neural Architecture</p>
+                              <p className="text-[9px] font-mono text-zinc-500">Qwen AIO (Rapid-v23)</p>
+                            </div>
+                            
+                            <div className="mt-4 pt-4 border-t border-zinc-800/50">
+                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+                                <span>Active Style Injections (LoRAs)</span>
+                              </label>
                               
-                            </select>
+                              <div className="space-y-2 mb-3">
+                                {activeLoras.map(lora => (
+                                  <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
+                                    <span className="text-[9px] font-mono text-zinc-300 w-24 truncate">{lora.name}</span>
+                                    <input 
+                                      type="range" min="0" max="2" step="0.1" 
+                                      value={lora.strength} 
+                                      onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
+                                      className="flex-1 accent-zinc-500 h-1" 
+                                    />
+                                    <span className="text-[9px] font-mono text-zinc-500 w-6 text-right">{lora.strength.toFixed(1)}</span>
+                                    <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {activeLoras.length === 0 && (
+                                  <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
+                                )}
+                              </div>
+
+                              <div className="flex gap-2">
+                                <select 
+                                  onChange={addLora}
+                                  value="none"
+                                  className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
+                                >
+                                  <option value="none">Add LoRA to Chain...</option>
+                                  {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                  ))}
+                                </select>
+                                <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
+                                  <Plus className="w-4 h-4" />
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="relative">
@@ -1691,7 +1780,7 @@ export default function App() {
                             prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString(),
-                            modelInfo: mode === 'runpod' ? activeLora === 'none' ? 'RunPod AIO Base' : activeLora.replace('.safetensors', '') : editorModel
+                            modelInfo: mode === 'runpod' ? activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength})`).join(' + ') : editorModel
                           });
                           setIsFlipped(false);
                         }}
@@ -1798,55 +1887,54 @@ export default function App() {
                 <>
                   <button 
                     onClick={handlePrevHistory} 
-                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
                   >
                     <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
                   </button>
                   <button 
                     onClick={handleNextHistory} 
-                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[100] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
                   >
                     <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
                   </button>
                 </>
               )}
 
+              {/* Edge Fades (z-index pushed up to blanket over the side cards) */}
+              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
+              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
+
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
+                  const len = history.length;
                   
-                  // Handle wrap-around logic
-                  if (offset > 1 && currentIndex === 0 && idx === history.length - 1) offset = -1;
-                  if (offset < -1 && currentIndex === history.length - 1 && idx === 0) offset = 1;
+                  // Wrap-around logic so images slide infinitely and never "unmount" suddenly
+                  if (offset > len / 2) offset -= len;
+                  else if (offset < -len / 2) offset += len;
                   
                   const isCenter = offset === 0;
-                  
-                  // Only render the center item and its immediate left/right neighbors
-                  if (Math.abs(offset) > 1) return null;
+                  const isVisible = Math.abs(offset) <= 1;
 
                   return (
                     <div
                       key={`carousel-${img.id}-${idx}`}
-                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center ${!isCenter ? 'pointer-events-none' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isCenter) {
-                          setSelectedHistoryItem(img);
-                          setIsFlipped(false);
-                        }
-                      }}
+                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center pointer-events-none`}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        opacity: isCenter ? 1 : 0.4,
+                        // Keep mounted but opacity 0 if further than 1 slot away, this stops the flash
+                        opacity: isCenter ? 1 : (isVisible ? 1 : 0),
+                        pointerEvents: isCenter ? 'auto' : 'none',
                         transformStyle: 'preserve-3d',
+                        visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1862,6 +1950,12 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                            />
+
+                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
+                            <div 
+                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
+                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
