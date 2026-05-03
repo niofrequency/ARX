@@ -1793,7 +1793,7 @@ export default function App() {
                         <img 
                           src={resultUrl} 
                           alt="Result" 
-                          className="w-full h-full object-contain rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                          className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
                         />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300">
                           <div className="bg-zinc-950/80 px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl backdrop-blur-sm">
@@ -1905,38 +1905,41 @@ export default function App() {
                 </>
               )}
 
+              {/* Edge Fades (z-index pushed up to blanket over the side cards) */}
+              <div className="absolute left-0 top-0 bottom-0 w-[20vw] bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
+              <div className="absolute right-0 top-0 bottom-0 w-[20vw] bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pointer-events-none z-[2000]" />
+
               {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
-                  if (offset > 1 && currentIndex === 0 && idx === history.length - 1) offset = -1;
-                  if (offset < -1 && currentIndex === history.length - 1 && idx === 0) offset = 1;
+                  const len = history.length;
+                  
+                  // Wrap-around logic so images slide infinitely and never "unmount" suddenly
+                  if (offset > len / 2) offset -= len;
+                  else if (offset < -len / 2) offset += len;
                   
                   const isCenter = offset === 0;
-                  if (Math.abs(offset) > 1) return null;
+                  const isVisible = Math.abs(offset) <= 1;
 
                   return (
                     <div
                       key={`carousel-${img.id}-${idx}`}
-                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center ${!isCenter ? 'pointer-events-none' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isCenter) {
-                          setSelectedHistoryItem(img);
-                          setIsFlipped(false);
-                        }
-                      }}
+                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center pointer-events-none`}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 80 : 120)}%) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        opacity: isCenter ? 1 : 0.4,
+                        // Keep mounted but opacity 0 if further than 1 slot away, this stops the flash
+                        opacity: isCenter ? 1 : (isVisible ? 1 : 0),
+                        pointerEvents: isCenter ? 'auto' : 'none',
                         transformStyle: 'preserve-3d',
+                        visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col z-[10000]" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
                         <motion.div 
-                          className="relative w-full h-full flex items-center justify-center shadow-2xl rounded-[2rem] cursor-pointer" 
+                          className="relative w-full h-full shadow-2xl rounded-[2rem] cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
@@ -1952,6 +1955,12 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                            />
+
+                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
+                            <div 
+                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
+                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
@@ -2004,7 +2013,7 @@ export default function App() {
 
                           {/* --- BACK OF CARD --- */}
                           <div 
-                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
                             <button 
