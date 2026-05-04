@@ -238,6 +238,7 @@ const LORA_OPTIONS = [
   { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
   { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" },
   { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
+  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" },
   { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
   { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
   { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
