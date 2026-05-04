@@ -1029,7 +1029,7 @@ export default function App() {
       id,
       pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `[RunPod ComfyUI] ${prompt}`,
+      historyPrompt: prompt,
       modelInfo: usedModelInfo
     };
   };
@@ -1796,7 +1796,8 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => {
-                      setPromptToSave(prompt || 'Generated Prompt');
+                      const cleanPrompt = (prompt || 'Generated Prompt').replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                      setPromptToSave(cleanPrompt);
                       setShowSavePrompt(true);
                     }}
                     className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 transition-all bg-zinc-900 px-4 py-2 rounded-full border border-zinc-800 shadow-sm"
@@ -2036,12 +2037,6 @@ export default function App() {
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
                             />
-
-                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
-                            <div 
-                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
-                              style={{ opacity: isCenter ? 0 : 0.6 }} 
-                            />
                             
                             {isCenter && (
                               <>
@@ -2093,7 +2088,7 @@ export default function App() {
 
                           {/* --- BACK OF CARD --- */}
                           <div 
-                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
                             <button 
@@ -2136,7 +2131,8 @@ export default function App() {
                               <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                                 <button 
                                   onClick={() => { 
-                                    setPrompt(img.prompt); 
+                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                    setPrompt(cleanPrompt); 
                                     setSelectedHistoryItem(null); 
                                     window.scrollTo({ top: 0, behavior: 'smooth' }); 
                                   }} 
@@ -2148,7 +2144,8 @@ export default function App() {
                                 <button 
                                   onClick={(e) => { 
                                     e.stopPropagation();
-                                    setPromptToSave(img.prompt);
+                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                    setPromptToSave(cleanPrompt);
                                     setShowSavePrompt(true);
                                   }} 
                                   className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
