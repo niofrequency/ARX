@@ -7,8 +7,8 @@ WORKDIR /comfyui/custom_nodes/
 RUN git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git && \
     git clone https://github.com/balazik/ComfyUI-PuLID-Flux.git
 
-# Install InsightFace into the RunPod virtual environment (required for PuLID to scan faces)
-RUN /opt/venv/bin/pip install insightface onnxruntime
+# Install InsightFace and Facexlib (REQUIRED for PuLID to process faces)
+RUN /opt/venv/bin/pip install insightface onnxruntime facexlib
 
 # Map all standard folders PLUS the new 'pulid' folder to your network volume
 RUN echo "runpod_volume:" > /comfyui/extra_model_paths.yaml && \
