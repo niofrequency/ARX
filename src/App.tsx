@@ -236,7 +236,9 @@ const LORA_OPTIONS = [
   { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
   { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" },
   { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
+  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" },
   { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
+  { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
   { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
 ];
 
