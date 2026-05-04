@@ -967,13 +967,13 @@ export default function App() {
             "class_type": "IPAdapterModelLoader"
         };
         workflowObj["202"] = {
-            "inputs": { "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors" },
+            "inputs": { "clip_name": "clip_vision_h.safetensors" },
             "class_type": "CLIPVisionLoader"
         };
         workflowObj["203"] = {
             "inputs": {
                 "weight": ipAdapterStrength,
-                "weight_type": "standard",
+                "weight_type": "linear",
                 "combine_embeds": "concat",
                 "start_at": 0.0,
                 "end_at": 1.0,
