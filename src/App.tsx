@@ -34,7 +34,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // --- Native IndexedDB Wrapper ---
 const DB_NAME = 'ARX_DB';
 const STORE_NAME = 'history';
-const DB_VERSION = 2; // Incremented for schema change
+const DB_VERSION = 2;
 
 const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -77,6 +77,20 @@ const getHistoryDB = async (): Promise<HistoryItem[]> => {
 
 const deleteHistoryItemDB = async (id: string) => {
   const db = await initDB();
+  
+  // 1. Memory Leak Fix: Find the item first to revoke its Blob URL from memory
+  const itemToRevoke: HistoryItem | undefined = await new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(id);
+    request.onsuccess = () => resolve(request.result);
+  });
+
+  if (itemToRevoke?.url && itemToRevoke.url.startsWith('blob:')) {
+    URL.revokeObjectURL(itemToRevoke.url);
+  }
+
+  // 2. Delete the item
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -97,14 +111,21 @@ const clearHistoryDB = async () => {
   });
 };
 
-const pruneHistoryDB = async (keepCount: number = 10000) => {
+const pruneHistoryDB = async (keepCount: number = 100) => {
   const history = await getHistoryDB();
   if (history.length <= keepCount) return;
   const toDelete = history.slice(keepCount);
   const db = await initDB();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  toDelete.forEach(item => store.delete(item.id));
+  
+  // Clean up memory before deleting
+  toDelete.forEach(item => {
+    if (item.url && item.url.startsWith('blob:')) {
+      URL.revokeObjectURL(item.url);
+    }
+    store.delete(item.id);
+  });
 };
 
 // --- Reusable Components ---
@@ -492,6 +513,12 @@ export default function App() {
       setError('Please provide a valid image file.');
       return;
     }
+    
+    // Revoke old URL if it exists to prevent memory leaks during rapid uploads
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    
     const url = URL.createObjectURL(file);
     setSelectedFile(file); 
     setPreviewUrl(url); 
@@ -499,13 +526,63 @@ export default function App() {
     setError(null);
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
+  // --- API Crash Fix: Compression Utility ---
+  const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions while maintaining aspect ratio
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Failed to get canvas context'));
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Compress to JPEG with 0.85 quality
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = (error) => reject(error);
+      };
       reader.onerror = (error) => reject(error);
     });
+  };
+
+  const fileToBase64 = async (file: File): Promise<string> => {
+    // We try to optimize the image first to prevent API Payload crashes.
+    // If the file is smaller than 2MB, we can just pass it through directly to preserve exact bytes.
+    if (file.size < 2 * 1024 * 1024) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      });
+    } else {
+      // If it's a large file, compress it down to prevent HTTP 413 Payload Too Large
+      return optimizeImageForUpload(file);
+    }
   };
 
   const handleSaveSettings = () => {
@@ -689,8 +766,12 @@ export default function App() {
 
     try {
       while (!isCompleted) {
-        if (pollCount >= 150) throw new Error('Polling timed out.');
-        await new Promise(r => setTimeout(r, 2000));
+        // RunPod tasks can take a little longer.
+        if (pollCount >= 200) throw new Error('Polling timed out.');
+        
+        // Dynamic polling interval (faster early on, slower later to save API hits)
+        const delay = pollCount < 10 ? 2000 : 4000;
+        await new Promise(r => setTimeout(r, delay));
         pollCount++;
 
         const headers: any = {};
@@ -790,11 +871,11 @@ export default function App() {
     setHistory(prev => {
       const merged = [newItem, ...prev];
       const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
+      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000); // 10,000 max history items allowed
     });
     
     await saveHistoryItem(newItem);
-    await pruneHistoryDB(10000);
+    await pruneHistoryDB(100);
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
     setResultUrl(finalImage);
@@ -1393,7 +1474,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      RunPod
+                      RunPod ComfyUI Serverless
                     </label>
                     <div className="flex items-center gap-3">
                       <button
@@ -1751,12 +1832,12 @@ export default function App() {
                         <img 
                           src={previewUrl} 
                           alt="Original" 
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-50" 
+                          className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-50" 
                         />
                         <img 
                           src={resultUrl} 
                           alt="Upscaled" 
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                           style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
                         />
                         <div 
@@ -1951,6 +2032,12 @@ export default function App() {
                               src={img.url} 
                               alt="History Entry" 
                               className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                            />
+
+                            {/* Inner Shading Overlay for side cards to guarantee equal darkening */}
+                            <div 
+                              className="absolute inset-0 z-[5] bg-black pointer-events-none transition-opacity duration-500" 
+                              style={{ opacity: isCenter ? 0 : 0.6 }} 
                             />
                             
                             {isCenter && (
