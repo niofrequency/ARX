@@ -5,7 +5,7 @@ WORKDIR /comfyui/custom_nodes/
 
 # Keep IP-Adapter for any future SDXL needs, and add PuLID specifically for FLUX
 RUN git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git && \
-    git clone https://github.com/kijai/ComfyUI-PuLID-Flux.git
+    git clone https://github.com/balazik/ComfyUI-PuLID-Flux.git
 
 # Install InsightFace into the RunPod virtual environment (required for PuLID to scan faces)
 RUN /opt/venv/bin/pip install insightface onnxruntime
