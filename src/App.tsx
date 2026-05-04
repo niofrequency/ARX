@@ -253,6 +253,7 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
+  const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
   
@@ -339,6 +340,7 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
@@ -355,6 +357,7 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
+    setIpAdapterEndpointId(savedIpEndpoint);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
     if (localSavedPrompts) {
@@ -599,6 +602,7 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
+    localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -694,8 +698,14 @@ export default function App() {
 
   const generateEdit = async () => {
     if (mode === 'runpod') {
-      if (!runpodKey || !runpodEndpointId) {
-        setError('Please enter your RunPod API Key and Endpoint ID in settings.');
+      // Validate appropriate endpoint based on face feature usage
+      if (faceRefFile && !ipAdapterEndpointId) {
+        setError('Please enter your IP-Adapter Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (!faceRefFile && (!runpodKey || !runpodEndpointId)) {
+        setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
       }
@@ -904,6 +914,9 @@ export default function App() {
         const rawFaceBase64 = await fileToBase64(faceRefFile);
         faceBase64Data = rawFaceBase64.includes(',') ? rawFaceBase64.split(',')[1] : rawFaceBase64;
     }
+    
+    // DYNAMIC ROUTING: Use IP-Adapter endpoint if face image is present, otherwise standard endpoint
+    const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
 
     // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
@@ -1056,7 +1069,7 @@ export default function App() {
       }
     };
 
-    const response = await fetch(`https://api.runpod.ai/v2/${runpodEndpointId}/run`, {
+    const response = await fetch(`https://api.runpod.ai/v2/${activeEndpointId}/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1082,7 +1095,7 @@ export default function App() {
 
     return {
       id,
-      pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
+      pollUrl: `https://api.runpod.ai/v2/${activeEndpointId}/status/${id}`,
       targetResultUrl: '',
       historyPrompt: prompt,
       modelInfo: usedModelInfo
@@ -2334,13 +2347,25 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod Endpoint ID
+                      RunPod Standard Endpoint ID
                     </label>
                     <input 
                       type="text" 
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod IP-Adapter Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={ipAdapterEndpointId} 
+                      onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
+                      placeholder="e.g. 9yusxkbksgwtyk"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
