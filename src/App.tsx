@@ -27,7 +27,8 @@ import {
   BookmarkPlus,
   Server,
   Settings2,
-  Plus
+  Plus,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -145,7 +146,7 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
+const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -160,7 +161,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
         const f = e.dataTransfer.files?.[0]; 
         if (f) onProcess(f); 
       }}
-      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[180px] ${
+      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] ${
         isDragging 
           ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' 
           : file 
@@ -172,19 +173,18 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
       
       {preview ? (
         <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
-          <img src={preview} alt="Preview" className="max-h-[140px] w-full object-cover rounded-xl" />
+          <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
           <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
-            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace Asset</span>
+            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
             <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
           </div>
         </div>
       ) : (
         <div className="flex flex-col items-center text-center pointer-events-none">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100'}`}>
-            <Upload className="w-5 h-5" />
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-3 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100'}`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <p className="text-[11px] sm:text-xs font-medium text-zinc-100 mb-1 tracking-wide">{label}</p>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{isDragging ? "Drop here" : "Click or Drop"}</p>
+          <p className="text-[10px] sm:text-xs font-medium text-zinc-100 mb-1 tracking-wide">{label}</p>
         </div>
       )}
     </div>
@@ -253,6 +253,7 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
+  const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
   
@@ -274,6 +275,11 @@ export default function App() {
   const [steps, setSteps] = useState<number>(6);
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
+
+  // --- IP Adapter Face Consistency State ---
+  const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
+  const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
+  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -334,6 +340,7 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
@@ -350,6 +357,7 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
+    setIpAdapterEndpointId(savedIpEndpoint);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
     if (localSavedPrompts) {
@@ -594,6 +602,7 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
+    localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -689,8 +698,14 @@ export default function App() {
 
   const generateEdit = async () => {
     if (mode === 'runpod') {
-      if (!runpodKey || !runpodEndpointId) {
-        setError('Please enter your RunPod API Key and Endpoint ID in settings.');
+      // Validate appropriate endpoint based on face feature usage
+      if (faceRefFile && !ipAdapterEndpointId) {
+        setError('Please enter your IP-Adapter Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (!faceRefFile && (!runpodKey || !runpodEndpointId)) {
+        setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
       }
@@ -893,6 +908,16 @@ export default function App() {
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
+    // Process IP Adapter face reference if it exists
+    let faceBase64Data = null;
+    if (faceRefFile) {
+        const rawFaceBase64 = await fileToBase64(faceRefFile);
+        faceBase64Data = rawFaceBase64.includes(',') ? rawFaceBase64.split(',')[1] : rawFaceBase64;
+    }
+    
+    // DYNAMIC ROUTING: Use IP-Adapter endpoint if face image is present, otherwise standard endpoint
+    const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
+
     // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
       "5": { 
@@ -930,6 +955,41 @@ export default function App() {
       
       currentId++;
     });
+
+    // --- IP ADAPTER INJECTION ---
+    if (faceBase64Data) {
+        workflowObj["200"] = {
+            "inputs": { "image": "face_ref.png" },
+            "class_type": "LoadImage"
+        };
+        workflowObj["201"] = {
+            "inputs": { "ipadapter_file": "ip-adapter-plus-face_sdxl_vit-h.safetensors" },
+            "class_type": "IPAdapterModelLoader"
+        };
+        workflowObj["202"] = {
+            "inputs": { "clip_name": "clip_vision_h.safetensors" },
+            "class_type": "CLIPVisionLoader"
+        };
+        workflowObj["203"] = {
+            "inputs": {
+                "weight": ipAdapterStrength,
+                "weight_type": "linear",
+                "combine_embeds": "concat",
+                "start_at": 0.0,
+                "end_at": 1.0,
+                "embeds_scaling": "V only",
+                "model": [lastModelNodeId, lastModelOutputIndex],
+                "ipadapter": ["201", 0],
+                "clip_vision": ["202", 0],
+                "image": ["200", 0]
+            },
+            "class_type": "IPAdapterAdvanced"
+        };
+        
+        // Update pointers so the KSampler gets the IP-Adapter injected model
+        lastModelNodeId = "203";
+        lastModelOutputIndex = 0;
+    }
 
     // Add remaining required nodes
     workflowObj["8"] = {
@@ -995,19 +1055,21 @@ export default function App() {
       "class_type": "KSampler"
     };
 
+    const imagesPayload = [
+        { name: "input_image.png", image: base64Data }
+    ];
+    if (faceBase64Data) {
+        imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
+    }
+
     const payload = {
       input: {
         workflow: workflowObj,
-        images: [
-          {
-            name: "input_image.png",
-            image: base64Data
-          }
-        ]
+        images: imagesPayload
       }
     };
 
-    const response = await fetch(`https://api.runpod.ai/v2/${runpodEndpointId}/run`, {
+    const response = await fetch(`https://api.runpod.ai/v2/${activeEndpointId}/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1023,13 +1085,17 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
     
     // Create string summarizing models used
-    const usedModelInfo = activeLoras.length === 0 
+    let usedModelInfo = activeLoras.length === 0 
       ? 'RunPod AIO Base' 
       : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+      
+    if (faceBase64Data) {
+        usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
+    }
 
     return {
       id,
-      pollUrl: `https://api.runpod.ai/v2/${runpodEndpointId}/status/${id}`,
+      pollUrl: `https://api.runpod.ai/v2/${activeEndpointId}/status/${id}`,
       targetResultUrl: '',
       historyPrompt: prompt,
       modelInfo: usedModelInfo
@@ -1511,6 +1577,51 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* --- NEW IP ADAPTER SECTION --- */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         <div className="h-32">
+                             <UploadZone
+                                label="Upload Face Reference"
+                                file={faceRefFile}
+                                preview={faceRefPreview}
+                                icon={User}
+                                onClear={() => { 
+                                  if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                  setFaceRefFile(null); 
+                                  setFaceRefPreview(null); 
+                                }}
+                                onProcess={(f: File) => {
+                                    if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                    const url = URL.createObjectURL(f);
+                                    setFaceRefFile(f);
+                                    setFaceRefPreview(url);
+                                }}
+                             />
+                         </div>
+                         {faceRefFile ? (
+                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
+                                 </label>
+                                 <input
+                                     type="range" min="0" max="1.5" step="0.05"
+                                     value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
+                                     className="w-full accent-zinc-100"
+                                 />
+                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                     Higher strength forces stricter facial mapping but may distort stylization.
+                                 </p>
+                             </div>
+                         ) : (
+                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
+                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
+                             </div>
+                         )}
+                     </div>
+                  </div>
+
                   <AnimatePresence>
                     {showAdvancedRunpod && (
                       <motion.div 
@@ -1871,6 +1982,7 @@ export default function App() {
                           let dynamicModelInfo = editorModel;
                           if (mode === 'runpod') {
                             dynamicModelInfo = activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+                            if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
                           }
                           
                           setSelectedHistoryItem(match || { 
@@ -2235,13 +2347,25 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod Endpoint ID
+                      RunPod Standard Endpoint ID
                     </label>
                     <input 
                       type="text" 
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod IP-Adapter Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={ipAdapterEndpointId} 
+                      onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
+                      placeholder="e.g. 9yusxkbksgwtyk"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>

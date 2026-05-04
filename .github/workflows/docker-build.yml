@@ -33,4 +33,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: niofrequency/arx-comfyui-worker:v5
+          tags: niofrequency/arx-comfyui-worker:v6
