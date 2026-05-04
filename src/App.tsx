@@ -27,7 +27,8 @@ import {
   BookmarkPlus,
   Server,
   Settings2,
-  Plus
+  Plus,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -145,7 +146,7 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
+const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -160,7 +161,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
         const f = e.dataTransfer.files?.[0]; 
         if (f) onProcess(f); 
       }}
-      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[180px] ${
+      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] ${
         isDragging 
           ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' 
           : file 
@@ -174,17 +175,16 @@ const UploadZone = ({ label, file, preview, onClear, onProcess }: any) => {
         <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
           <img src={preview} alt="Preview" className="max-h-[140px] w-full object-cover rounded-xl" />
           <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
-            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace Asset</span>
+            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
             <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
           </div>
         </div>
       ) : (
         <div className="flex flex-col items-center text-center pointer-events-none">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100'}`}>
-            <Upload className="w-5 h-5" />
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-3 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100'}`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <p className="text-[11px] sm:text-xs font-medium text-zinc-100 mb-1 tracking-wide">{label}</p>
-          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{isDragging ? "Drop here" : "Click or Drop"}</p>
+          <p className="text-[10px] sm:text-xs font-medium text-zinc-100 mb-1 tracking-wide">{label}</p>
         </div>
       )}
     </div>
@@ -274,6 +274,11 @@ export default function App() {
   const [steps, setSteps] = useState<number>(6);
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
+
+  // IP Adapter State
+  const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
+  const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
+  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
   // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -893,6 +898,13 @@ export default function App() {
   const triggerRunPod = async (base64Image: string) => {
     const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
 
+    // Process IP Adapter face reference if it exists
+    let faceBase64Data = null;
+    if (faceRefFile) {
+        const rawFaceBase64 = await fileToBase64(faceRefFile);
+        faceBase64Data = rawFaceBase64.includes(',') ? rawFaceBase64.split(',')[1] : rawFaceBase64;
+    }
+
     // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
       "5": { 
@@ -930,6 +942,41 @@ export default function App() {
       
       currentId++;
     });
+
+    // --- IP ADAPTER INJECTION ---
+    if (faceBase64Data) {
+        workflowObj["200"] = {
+            "inputs": { "image": "face_ref.png" },
+            "class_type": "LoadImage"
+        };
+        workflowObj["201"] = {
+            "inputs": { "ipadapter_file": "ip-adapter-plus-face_sdxl_vit-h.safetensors" },
+            "class_type": "IPAdapterModelLoader"
+        };
+        workflowObj["202"] = {
+            "inputs": { "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors" },
+            "class_type": "CLIPVisionLoader"
+        };
+        workflowObj["203"] = {
+            "inputs": {
+                "weight": ipAdapterStrength,
+                "weight_type": "standard",
+                "combine_embeds": "concat",
+                "start_at": 0.0,
+                "end_at": 1.0,
+                "embeds_scaling": "V only",
+                "model": [lastModelNodeId, lastModelOutputIndex],
+                "ipadapter": ["201", 0],
+                "clip_vision": ["202", 0],
+                "image": ["200", 0]
+            },
+            "class_type": "IPAdapterAdvanced"
+        };
+        
+        // Update pointers so the KSampler gets the IP-Adapter injected model
+        lastModelNodeId = "203";
+        lastModelOutputIndex = 0;
+    }
 
     // Add remaining required nodes
     workflowObj["8"] = {
@@ -995,15 +1042,17 @@ export default function App() {
       "class_type": "KSampler"
     };
 
+    const imagesPayload = [
+        { name: "input_image.png", image: base64Data }
+    ];
+    if (faceBase64Data) {
+        imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
+    }
+
     const payload = {
       input: {
         workflow: workflowObj,
-        images: [
-          {
-            name: "input_image.png",
-            image: base64Data
-          }
-        ]
+        images: imagesPayload
       }
     };
 
@@ -1023,9 +1072,13 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
     
     // Create string summarizing models used
-    const usedModelInfo = activeLoras.length === 0 
+    let usedModelInfo = activeLoras.length === 0 
       ? 'RunPod AIO Base' 
       : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+      
+    if (faceBase64Data) {
+        usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
+    }
 
     return {
       id,
@@ -1511,6 +1564,51 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* IP Adapter Section */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         <div className="h-32">
+                             <UploadZone
+                                label="Upload Face Reference"
+                                file={faceRefFile}
+                                preview={faceRefPreview}
+                                icon={User}
+                                onClear={() => { 
+                                  if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                  setFaceRefFile(null); 
+                                  setFaceRefPreview(null); 
+                                }}
+                                onProcess={(f: File) => {
+                                    if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                    const url = URL.createObjectURL(f);
+                                    setFaceRefFile(f);
+                                    setFaceRefPreview(url);
+                                }}
+                             />
+                         </div>
+                         {faceRefFile ? (
+                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
+                                 </label>
+                                 <input
+                                     type="range" min="0" max="1.5" step="0.05"
+                                     value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
+                                     className="w-full accent-zinc-100"
+                                 />
+                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                     Higher strength forces stricter facial mapping but may heavily distort base stylization.
+                                 </p>
+                             </div>
+                         ) : (
+                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
+                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock character facial identity via IP-Adapter.</p>
+                             </div>
+                         )}
+                     </div>
+                  </div>
+
                   <AnimatePresence>
                     {showAdvancedRunpod && (
                       <motion.div 
@@ -1867,12 +1965,19 @@ export default function App() {
                         className="relative w-full h-full cursor-pointer group/result" 
                         onClick={() => {
                           const match = history.find(h => h.url === resultUrl);
+                          
+                          let dynamicModelInfo = editorModel;
+                          if (mode === 'runpod') {
+                            dynamicModelInfo = activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+                            if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
+                          }
+                          
                           setSelectedHistoryItem(match || { 
                             id: Date.now().toString(), 
                             prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString(),
-                            modelInfo: mode === 'runpod' ? activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ') : editorModel
+                            modelInfo: dynamicModelInfo
                           });
                           setIsFlipped(false);
                         }}
