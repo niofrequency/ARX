@@ -227,6 +227,12 @@ interface ActiveLora {
   strength: number;
 }
 
+// --- NEW: RunPod Models ---
+const RUNPOD_MODELS = [
+  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
+  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
+];
+
 const LORA_OPTIONS = [
   { id: "yarn_qwen.safetensors", name: "YARN" },
   { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
@@ -271,6 +277,7 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
 
   // --- RunPod ComfyUI Settings State ---
+  const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
@@ -345,9 +352,11 @@ export default function App() {
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
     const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
+    const savedRpModel = localStorage.getItem('arx_runpod_model');
     
     setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
+    if (savedRpModel) setRunpodModel(savedRpModel);
     
     if (savedLoras) {
       try {
@@ -385,6 +394,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
+  useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
   // --- Balance Fetching Architecture ---
@@ -924,7 +934,7 @@ export default function App() {
     // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
       "5": { 
-        "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
+        "inputs": { "ckpt_name": runpodModel },
         "class_type": "CheckpointLoaderSimple"
       }
     };
@@ -1088,9 +1098,10 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
     
     // Create string summarizing models used
+    const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
     let usedModelInfo = activeLoras.length === 0 
-      ? 'RunPod AIO Base' 
-      : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+      ? `${modelName} Base` 
+      : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
       
     if (faceBase64Data) {
         usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
@@ -1636,9 +1647,17 @@ export default function App() {
                         <div className="space-y-4 pt-4 border-t border-zinc-800/50">
 
                           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">Base Neural Architecture</p>
-                              <p className="text-[9px] font-mono text-zinc-500">Qwen AIO (Rapid-v23)</p>
+                            <div>
+                              <label className="block text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-3">Base Neural Architecture</label>
+                              <select
+                                value={runpodModel}
+                                onChange={(e) => setRunpodModel(e.target.value)}
+                                className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 font-mono uppercase tracking-widest"
+                              >
+                                {RUNPOD_MODELS.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                              </select>
                             </div>
                             
                             <div className="mt-4 pt-4 border-t border-zinc-800/50">
@@ -1984,7 +2003,8 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'runpod') {
-                            dynamicModelInfo = activeLoras.length === 0 ? 'RunPod AIO Base' : activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+                            const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
+                            dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
                             if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
                           }
                           
