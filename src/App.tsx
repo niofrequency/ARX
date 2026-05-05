@@ -924,7 +924,7 @@ export default function App() {
     // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
       "5": { 
-        "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" },
+        "inputs": { "ckpt_name": "qwen-rapid-nsfw-v7.1-Q6_K.gguf" },
         "class_type": "CheckpointLoaderSimple"
       }
     };
