@@ -10,7 +10,6 @@ docker_base_image_url = "nvidia/cuda:12.1.1-runtime-ubuntu22.04"
 [cerebrium.hardware]
 region = "us-east-1"
 provider = "aws"
-# Using A100 to match your previous Modal configuration for the FLUX/Qwen engine
 compute = "AMPERE_A100" 
 memory = 64.0
 cpu = 8
@@ -19,6 +18,8 @@ gpu_count = 1
 [cerebrium.dependencies.apt]
 git = "latest"
 wget = "latest"
+aria2 = "latest" # Required to bypass download timeouts
+ffmpeg = "latest" # Required for Wan2.2 Video
 "libglib2.0-0" = "latest"
 "libsm6" = "latest"
 "libxrender1" = "latest"
@@ -30,28 +31,46 @@ torch = ">=2.0.0"
 torchvision = "latest"
 torchaudio = "latest"
 fastapi = "latest"
-uvicorn = "latest" # Required by Cerebrium to serve your FastAPI app
+uvicorn = "latest"
+requests = "latest"
 insightface = "latest"
 "onnxruntime-gpu" = "latest"
 facexlib = "latest"
+sageattention = "latest" # Required for Wan2.2 Video
 
 [cerebrium.build]
 pre_build_commands = [
-    # 1. Clone Core ComfyUI & Custom Nodes
+    # 1. Clone Core ComfyUI
     "git clone https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI",
     "cd /workspace/ComfyUI && pip install -r requirements.txt",
+    
+    # 2. Clone ALL Custom Nodes (Image + Video)
     "git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git /workspace/ComfyUI/custom_nodes/ComfyUI_IPAdapter_plus",
     "git clone https://github.com/balazik/ComfyUI-PuLID-Flux.git /workspace/ComfyUI/custom_nodes/ComfyUI-PuLID-Flux",
-    
-    # 2. Create Required Directories
-    "mkdir -p /workspace/ComfyUI/models/checkpoints /workspace/ComfyUI/models/pulid /workspace/ComfyUI/models/loras /workspace/ComfyUI/input /workspace/ComfyUI/output",
-    
-    # 3. Bake Primary Checkpoints & PuLID Models
-    "wget -q -O /workspace/ComfyUI/models/checkpoints/Qwen-Rapid-AIO-NSFW-v23.safetensors 'https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v23/Qwen-Rapid-AIO-NSFW-v23.safetensors'",
-    "wget -q -O /workspace/ComfyUI/models/checkpoints/Qwen-Rapid-AIO-NSFW-v19.safetensors 'https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v19/Qwen-Rapid-AIO-NSFW-v19.safetensors'",
-    "wget -q -O /workspace/ComfyUI/models/pulid/pulid_flux_v0.9.0.safetensors 'https://huggingface.co/guozinan/PuLID/resolve/main/pulid_flux_v0.9.0.safetensors'",
+    "git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git /workspace/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite",
+    "git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git /workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper",
+    "git clone https://github.com/kijai/ComfyUI-KJNodes.git /workspace/ComfyUI/custom_nodes/ComfyUI-KJNodes",
 
-    # 4. Bake ALL Custom LoRAs
+    # 3. Install Custom Node Dependencies
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite && pip install -r requirements.txt",
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper && pip install -r requirements.txt",
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-KJNodes && pip install -r requirements.txt",
+    
+    # 4. Create Required Directories
+    "mkdir -p /workspace/ComfyUI/models/checkpoints /workspace/ComfyUI/models/pulid /workspace/ComfyUI/models/loras /workspace/ComfyUI/input /workspace/ComfyUI/output /workspace/ComfyUI/models/diffusion_models /workspace/ComfyUI/models/clip_vision /workspace/ComfyUI/models/text_encoders /workspace/ComfyUI/models/vae",
+    
+    # 5. FAST DOWNLOAD Massive Checkpoints using aria2c (Prevents Build Timeout)
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v23/Qwen-Rapid-AIO-NSFW-v23.safetensors' -d /workspace/ComfyUI/models/checkpoints -o Qwen-Rapid-AIO-NSFW-v23.safetensors",
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v19/Qwen-Rapid-AIO-NSFW-v19.safetensors' -d /workspace/ComfyUI/models/checkpoints -o Qwen-Rapid-AIO-NSFW-v19.safetensors",
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/guozinan/PuLID/resolve/main/pulid_flux_v0.9.0.safetensors' -d /workspace/ComfyUI/models/pulid -o pulid_flux_v0.9.0.safetensors",
+    
+    # Fast Download Wan2.2 Video Models
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/I2V/Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors' -d /workspace/ComfyUI/models/diffusion_models -o Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors' -d /workspace/ComfyUI/models/clip_vision -o clip_vision_h.safetensors",
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/umt5-xxl-enc-bf16.safetensors' -d /workspace/ComfyUI/models/text_encoders -o umt5-xxl-enc-bf16.safetensors",
+    "aria2c -x 16 -s 16 -k 1M 'https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors' -d /workspace/ComfyUI/models/vae -o Wan2_1_VAE_bf16.safetensors",
+
+    # 6. Bake ALL Custom LoRAs (wget is fine here as they are small)
     "wget -q -O /workspace/ComfyUI/models/loras/yarn_qwen.safetensors 'https://civitai.red/api/download/models/2735099?type=Model&format=SafeTensor&token=85a9d6503e3bd953780fa2250a93452a'",
     "wget -q -O /workspace/ComfyUI/models/loras/hmfemme_qwen.safetensors 'https://civitai.red/api/download/models/2405380?type=Model&format=SafeTensor&token=85a9d6503e3bd953780fa2250a93452a'",
     "wget -q -O /workspace/ComfyUI/models/loras/qwen4play.safetensors 'https://civitai.red/api/download/models/2611939?type=Model&format=SafeTensor&token=85a9d6503e3bd953780fa2250a93452a'",
