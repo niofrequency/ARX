@@ -1,0 +1,69 @@
+[cerebrium.deployment]
+name = "arx-engine"
+python_version = "3.11"
+port = 8000
+# Include your API entrypoint and the JIT boot script
+include = ["./*", "main.py", "boot.sh", "workflow_api.json"]
+exclude = [".git", "venv", "__pycache__", "ComfyUI/models/checkpoints/*"]
+docker_base_image_url = "nvidia/cuda:12.1.1-runtime-ubuntu22.04"
+
+[cerebrium.hardware]
+region = "us-east-1"
+provider = "aws"
+# Using HOPPER_H100 to handle the heavy VRAM load of FLUX + PuLID + Wan2.2
+compute = "HOPPER_H100" 
+memory = 64.0
+cpu = 8
+gpu_count = 1
+
+[cerebrium.dependencies.apt]
+git = "latest"
+wget = "latest"
+ffmpeg = "latest"
+aria2 = "latest" # Critical for your JIT parallel downloading
+"libgl1-mesa-glx" = "latest"
+"libglib2.0-0" = "latest"
+"libsm6" = "latest"
+"libxrender1" = "latest"
+"libxext6" = "latest"
+
+[cerebrium.dependencies.pip]
+torch = ">=2.0.0"
+torchvision = "latest"
+torchaudio = "latest"
+fastapi = "latest"
+uvicorn = "latest"
+requests = "latest"
+insightface = "latest"
+facexlib = "latest"
+"onnxruntime-gpu" = "latest"
+sageattention = "latest"
+
+[cerebrium.build]
+# Pre-build commands execute before PIP packages are installed
+pre_build_commands = [
+    # Core ComfyUI Engine
+    "git clone https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI",
+    "cd /workspace/ComfyUI && pip install -r requirements.txt",
+    
+    # Establish directory structures for models
+    "mkdir -p /workspace/ComfyUI/custom_nodes /workspace/ComfyUI/models/checkpoints /workspace/ComfyUI/models/pulid /workspace/ComfyUI/models/loras /workspace/ComfyUI/input",
+    
+    # Clone Identity & Video Modules
+    "cd /workspace/ComfyUI/custom_nodes && git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git",
+    "cd /workspace/ComfyUI/custom_nodes && git clone https://github.com/balazik/ComfyUI-PuLID-Flux.git",
+    "cd /workspace/ComfyUI/custom_nodes && git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git",
+    "cd /workspace/ComfyUI/custom_nodes && git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git",
+    "cd /workspace/ComfyUI/custom_nodes && git clone https://github.com/kijai/ComfyUI-KJNodes.git"
+]
+
+# Shell commands execute after your local code is copied into the container
+shell_commands = [
+    # Install specific dependencies for custom nodes
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite && pip install -r requirements.txt",
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper && pip install -r requirements.txt",
+    "cd /workspace/ComfyUI/custom_nodes/ComfyUI-KJNodes && pip install -r requirements.txt",
+    
+    # Ensure the JIT boot script has execution permissions
+    "chmod +x ./boot.sh"
+]
