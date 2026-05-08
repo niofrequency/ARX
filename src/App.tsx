@@ -2703,7 +2703,7 @@ const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download Video to PC
+                                  Download Video
                                 </button>
                               ) : (
                                 <button 
@@ -2711,7 +2711,7 @@ const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download Image to PC
+                                  Download Image
                                 </button>
                               )}
 
