@@ -2950,7 +2950,7 @@ export default function App() {
                     </div>
                   ))
                 )}
-              </div>
+              </div> 
             </motion.div>
           </>
         )}
