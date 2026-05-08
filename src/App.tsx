@@ -28,7 +28,11 @@ import {
   Server,
   Settings2,
   Plus,
-  User
+  User,
+  Film,
+  Dices,
+  Camera,
+  UserCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -78,8 +82,6 @@ const getHistoryDB = async (): Promise<HistoryItem[]> => {
 
 const deleteHistoryItemDB = async (id: string) => {
   const db = await initDB();
-  
-  // 1. Memory Leak Fix: Find the item first to revoke its Blob URL from memory
   const itemToRevoke: HistoryItem | undefined = await new Promise((resolve) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
@@ -91,7 +93,6 @@ const deleteHistoryItemDB = async (id: string) => {
     URL.revokeObjectURL(itemToRevoke.url);
   }
 
-  // 2. Delete the item
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -120,7 +121,6 @@ const pruneHistoryDB = async (keepCount: number = 100) => {
   const tx = db.transaction(STORE_NAME, 'readwrite');
   const store = tx.objectStore(STORE_NAME);
   
-  // Clean up memory before deleting
   toDelete.forEach(item => {
     if (item.url && item.url.startsWith('blob:')) {
       URL.revokeObjectURL(item.url);
@@ -191,8 +191,79 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
   );
 };
 
+// --- Utilities ---
+const isVideoUrl = (url?: string | null) => {
+  if (!url) return false;
+  return url.startsWith('data:video') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
+};
+
+// --- Grok Prompt Architect Logic ---
+const GROK_SYSTEM_INSTRUCTION = `You are an expert Cinematic Prompt Generator for AI Image and Video Editing.
+Your only job is to create highly detailed, consistent prompts for editing or animating an existing reference image.
+Every prompt MUST follow this exact structure:
+
+Always begin with exactly:
+the same subject from the image, same overall characteristics,
+
+Clothing & Setting Rules:
+- If the user mentions specific clothing, describe it in intricate detail.
+- If the user does NOT mention clothing at all, ALWAYS add: wearing the same clothing,
+- Emphasize cinematic lighting, atmospheric details, and realistic environments.
+
+After the identity part, strongly maximize the user's requested pose/action. Be extremely explicit and detailed in terms of physical positioning and motion.
+Describe: limb positions, hand placement, body angle, head tilt, facial expression, and interaction with the environment.
+
+Then add Camera Angle and Shot Type if provided.
+
+Always end with exactly this (no changes):
+, photorealistic RAW photo, 8k resolution, cinematic lighting, highly detailed, vivid textures
+
+Rules:
+- Output ONLY the finished prompt. No explanations, no extra text, no quotes.
+- Be extremely descriptive, structural, and precise.`;
+
+async function generateRandomIdea(
+  apiKey: string,
+  baseAction: string,
+  bodyType: string,
+  angle: string,
+  shotType: string
+): Promise<string> {
+  const userMessage = `Generate a structural prompt for this user request:
+Base Action/Pose/Scene: ${baseAction && baseAction.trim() !== '' ? baseAction : 'Randomizer choice (cinematic, dramatic)'}
+Body Type/Build: ${bodyType && bodyType !== 'Random' ? bodyType : 'Randomizer choice'}
+Camera Angle: ${angle && angle !== 'Random' ? angle : 'Randomizer choice'}
+Shot Type: ${shotType && shotType !== 'Random' ? shotType : 'Randomizer choice'}`;
+
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'grok-beta', // Using generic Grok beta for prompt architecture
+      messages: [
+        { role: 'system', content: GROK_SYSTEM_INSTRUCTION },
+        { role: 'user', content: userMessage }
+      ],
+      temperature: 0.82,
+      max_tokens: 900
+    })
+  });
+
+  if (!response.ok) throw new Error(`Grok API Error: ${response.status} ${response.statusText}`);
+  const data = await response.json();
+  return data.choices[0].message.content.trim();
+}
+
+// --- Constants ---
+const BODY_TYPES = ['Random', 'Slim', 'Athletic', 'Average', 'Curvy', 'Muscular', 'Petite'];
+const CAMERA_ANGLES = ['Random', 'Eye-level', 'Low Angle', 'High Angle', 'Drone View', 'Close-up', 'Dutch Angle'];
+const SHOT_TYPES = ['Random', 'Wide Shot', 'Medium Shot', 'Cowboy Shot', 'Portrait', 'Macro', 'Establishing Shot'];
+
 // --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod';
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
 type Resolution = '2k' | '4k' | '8k';
 
@@ -227,7 +298,6 @@ interface ActiveLora {
   strength: number;
 }
 
-// --- NEW: RunPod Models ---
 const RUNPOD_MODELS = [
   { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
   { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
@@ -263,8 +333,16 @@ export default function App() {
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
   const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
+  const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
+  const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
+  const [isRandomizing, setIsRandomizing] = useState(false);
+  
+  // --- Prompt Architect Settings ---
+  const [promptBodyType, setPromptBodyType] = useState('Random');
+  const [promptAngle, setPromptAngle] = useState('Random');
+  const [promptShotType, setPromptShotType] = useState('Random');
   
   // Isolated Balances
   const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
@@ -285,6 +363,14 @@ export default function App() {
   const [steps, setSteps] = useState<number>(6);
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
+
+  // --- RunPod Video State ---
+  const [videoWidth, setVideoWidth] = useState<number>(480);
+  const [videoHeight, setVideoHeight] = useState<number>(832);
+  const [videoLength, setVideoLength] = useState<number>(81);
+  const [videoSteps, setVideoSteps] = useState<number>(10);
+  const [videoCfg, setVideoCfg] = useState<number>(2.0);
+  const [videoSeed, setVideoSeed] = useState<number>(-1);
 
   // --- IP Adapter Face Consistency State ---
   const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
@@ -351,6 +437,8 @@ export default function App() {
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
     const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
+    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
+    const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
     
@@ -370,6 +458,8 @@ export default function App() {
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
     setIpAdapterEndpointId(savedIpEndpoint);
+    setVideoEndpointId(savedVidEndpoint);
+    setGrokKey(savedGrok);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
     if (localSavedPrompts) {
@@ -534,6 +624,27 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
+  // --- GROK RANDOM PROMPT GENERATOR ---
+  const handleRandomizePrompt = async () => {
+    if (!grokKey) {
+      setError('Please enter your Grok API Key in the settings first.');
+      setShowSettings(true);
+      return;
+    }
+
+    setIsRandomizing(true);
+    setError(null);
+
+    try {
+      const generatedPrompt = await generateRandomIdea(grokKey, prompt, promptBodyType, promptAngle, promptShotType);
+      setPrompt(generatedPrompt);
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate prompt from Grok.');
+    } finally {
+      setIsRandomizing(false);
+    }
+  };
+
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please provide a valid image file.');
@@ -616,6 +727,8 @@ export default function App() {
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
     localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
+    localStorage.setItem('arx_video_endpoint', videoEndpointId);
+    localStorage.setItem('arx_grok_key', grokKey);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
@@ -710,14 +823,18 @@ export default function App() {
   };
 
   const generateEdit = async () => {
-    if (mode === 'runpod') {
-      // Validate appropriate endpoint based on face feature usage
-      if (faceRefFile && !ipAdapterEndpointId) {
+    if (mode === 'runpod' || mode === 'video') {
+      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
+        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
         setError('Please enter your IP-Adapter Endpoint ID in settings.');
         setShowSettings(true); 
         return;
       }
-      if (!faceRefFile && (!runpodKey || !runpodEndpointId)) {
+      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
         setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
@@ -730,7 +847,7 @@ export default function App() {
       }
     }
 
-    if ((mode === 'editor' || mode === 'runpod') && !prompt) {
+    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -754,6 +871,9 @@ export default function App() {
         triggerResult = await triggerWavespeedUpscale(selectedFile);
       } else if (mode === 'angles') {
         triggerResult = await triggerWavespeedAngles(selectedFile);
+      } else if (mode === 'video') {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        triggerResult = await triggerRunPodVideo(base64ImageRaw);
       } else if (mode === 'runpod') {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerRunPod(base64ImageRaw);
@@ -808,7 +928,7 @@ export default function App() {
         pollCount++;
 
         const headers: any = {};
-        if (task.mode === 'runpod') {
+        if (task.mode === 'runpod' || task.mode === 'video') {
           headers["Authorization"] = `Bearer ${runpodKey}`;
         } else {
           headers["Authorization"] = `Bearer ${wavespeedKey}`;
@@ -828,15 +948,17 @@ export default function App() {
           clearInterval(progressInterval);
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
-          if (task.mode === 'runpod') {
-            let finalImage = '';
+          if (task.mode === 'runpod' || task.mode === 'video') {
+            let finalOutput = '';
             
             const extractBase64 = (obj: any): string | null => {
               if (typeof obj === 'string') {
-                if (obj.startsWith('data:image') || obj.startsWith('http')) return obj;
+                if (obj.startsWith('data:image') || obj.startsWith('data:video') || obj.startsWith('http')) return obj;
                 if (obj.length > 500 && (obj.startsWith('iVBORw') || obj.startsWith('/9j/'))) return `data:image/png;base64,${obj}`;
               }
               if (typeof obj === 'object' && obj !== null) {
+                if (obj.video) return typeof obj.video === 'string' && obj.video.startsWith('data:') ? obj.video : `data:video/mp4;base64,${obj.video}`;
+                if (obj.image) return obj.image;
                 for (let key in obj) {
                   const res = extractBase64(obj[key]);
                   if (res) return res;
@@ -845,15 +967,15 @@ export default function App() {
               return null;
             };
 
-            finalImage = extractBase64(pollData.output || pollData) || '';
+            finalOutput = extractBase64(pollData.output || pollData) || '';
 
-            if (finalImage) {
+            if (finalOutput) {
               isCompleted = true;
-              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
+              await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
               continue;
             } else {
               const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
-              throw new Error(`RunPod returned success but no image found. Payload preview: ${dump}...`);
+              throw new Error(`RunPod returned success but no output found. Payload preview: ${dump}...`);
             }
           } else {
             let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
@@ -916,6 +1038,45 @@ export default function App() {
     // Update balances after a generation uses credits
     if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
     if (runpodKey) fetchRunPodBalance(runpodKey);
+  };
+
+  const triggerRunPodVideo = async (base64Image: string) => {
+    const payload = {
+      input: {
+        prompt: prompt || "video scene",
+        negative_prompt: negativePrompt,
+        image_base64: base64Image,
+        seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
+        cfg: videoCfg,
+        width: videoWidth,
+        height: videoHeight,
+        length: videoLength,
+        steps: videoSteps
+      }
+    };
+
+    const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${runpodKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`RunPod API Error: ${data.error?.message || data.error || 'Request Failed'}`);
+
+    const id = data.id;
+    if (!id) throw new Error('RunPod API Error: Missing Job ID');
+
+    return {
+      id,
+      pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
+      targetResultUrl: '',
+      historyPrompt: `Video: ${prompt}`,
+      modelInfo: 'Wan 2.2 Img2Vid'
+    };
   };
 
   const triggerRunPod = async (base64Image: string) => {
@@ -1310,7 +1471,8 @@ export default function App() {
       a.href = blobUrl;
       
       const cleanPrompt = promptText.substring(0, 20).replace(/[^a-z0-9]/gi, '_');
-      a.download = `ARX_${cleanPrompt}.png`;
+      const isVid = isVideoUrl(url);
+      a.download = `ARX_${cleanPrompt}${isVid ? '.mp4' : '.png'}`;
       
       document.body.appendChild(a);
       a.click();
@@ -1331,8 +1493,8 @@ export default function App() {
   };
 
   // Determine which balance to show based on the active tab mode
-  const displayBalance = mode === 'runpod' ? runpodBalance : wavespeedBalance;
-  const balanceLabel = mode === 'runpod' ? 'RunPod' : 'Wavespeed';
+  const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
+  const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
@@ -1369,7 +1531,7 @@ export default function App() {
             onClick={() => setShowSettings(!showSettings)} 
             className="p-2.5 hover:bg-zinc-900 rounded-xl border border-transparent hover:border-zinc-800 transition-all group"
           >
-            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && !wavespeedKey) || (mode === 'runpod' && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
+            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && mode !== 'video' && !wavespeedKey) || ((mode === 'runpod' || mode === 'video') && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
           </button>
         </div>
       </nav>
@@ -1380,8 +1542,8 @@ export default function App() {
         {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
-          {/* Master Mode Switcher - Fixed Scrollbar issue for desktop */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-4 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+          {/* Master Mode Switcher */}
+          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
             <button
               onClick={() => setMode('editor')}
               className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
@@ -1403,6 +1565,17 @@ export default function App() {
             >
               <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               RunPod
+            </button>
+            <button
+              onClick={() => setMode('video')}
+              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+                mode === 'video' 
+                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
+                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
+            >
+              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              Video
             </button>
             <button
               onClick={() => setMode('angles')}
@@ -1432,13 +1605,13 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
               <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-400 font-mono">
-                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
+                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
             <div className="h-[200px]">
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for ComfyUI Node' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for ComfyUI Node' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -1555,6 +1728,122 @@ export default function App() {
                 </div>
               )}
 
+              {mode === 'video' && (
+                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                      Wan 2.2 Video Generator
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleRandomizePrompt}
+                        disabled={isRandomizing}
+                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                      >
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        Architect Prompt
+                      </button>
+                      <button
+                        onClick={() => setShowLoadPrompt(true)}
+                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                      >
+                        <Bookmark className="w-3 h-3" />
+                        Presets
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* --- PROMPT CONFIGURATION UI --- */}
+                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <UserCircle className="w-3.5 h-3.5" /> Body Type
+                        </label>
+                        <select 
+                          value={promptBodyType} 
+                          onChange={(e) => setPromptBodyType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Angle
+                        </label>
+                        <select 
+                          value={promptAngle} 
+                          onChange={(e) => setPromptAngle(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Shot Type
+                        </label>
+                        <select 
+                          value={promptShotType} 
+                          onChange={(e) => setPromptShotType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="relative">
+                    <textarea 
+                      value={prompt} 
+                      onChange={(e) => setPrompt(e.target.value)} 
+                      placeholder="Describe the motion and scene details..." 
+                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
+                    />
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                      Positive Prompt
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <textarea 
+                      value={negativePrompt} 
+                      onChange={(e) => setNegativePrompt(e.target.value)} 
+                      placeholder="Negative prompt..." 
+                      className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
+                    />
+                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
+                      Negative
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                        Steps <span>{videoSteps}</span>
+                      </label>
+                      <input 
+                        type="range" min="1" max="50" step="1" 
+                        value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))}
+                        className="w-full accent-zinc-100" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                        CFG <span>{videoCfg.toFixed(1)}</span>
+                      </label>
+                      <input 
+                        type="range" min="1" max="10" step="0.5" 
+                        value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))}
+                        className="w-full accent-zinc-100" 
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {mode === 'runpod' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
@@ -1562,6 +1851,14 @@ export default function App() {
                       RunPod
                     </label>
                     <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleRandomizePrompt}
+                        disabled={isRandomizing}
+                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                      >
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        Architect Prompt
+                      </button>
                       <button
                         onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)}
                         className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
@@ -1579,6 +1876,48 @@ export default function App() {
                     </div>
                   </div>
                   
+                  {/* --- PROMPT CONFIGURATION UI --- */}
+                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <UserCircle className="w-3.5 h-3.5" /> Body Type
+                        </label>
+                        <select 
+                          value={promptBodyType} 
+                          onChange={(e) => setPromptBodyType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Angle
+                        </label>
+                        <select 
+                          value={promptAngle} 
+                          onChange={(e) => setPromptAngle(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Shot Type
+                        </label>
+                        <select 
+                          value={promptShotType} 
+                          onChange={(e) => setPromptShotType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="relative">
                     <textarea 
                       value={prompt} 
@@ -1591,7 +1930,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* --- NEW IP ADAPTER SECTION --- */}
+                  {/* --- IP ADAPTER SECTION --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1784,15 +2123,67 @@ export default function App() {
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
                       AI Editing Engine
                     </label>
-                    <button
-                      onClick={() => setShowLoadPrompt(true)}
-                      className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                    >
-                      <Bookmark className="w-3 h-3" />
-                      Saved Prompts
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleRandomizePrompt}
+                        disabled={isRandomizing}
+                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                      >
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        Architect Prompt
+                      </button>
+                      <button
+                        onClick={() => setShowLoadPrompt(true)}
+                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                      >
+                        <Bookmark className="w-3 h-3" />
+                        Saved Prompts
+                      </button>
+                    </div>
                   </div>
                   
+                  {/* --- PROMPT CONFIGURATION UI --- */}
+                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <UserCircle className="w-3.5 h-3.5" /> Body Type
+                        </label>
+                        <select 
+                          value={promptBodyType} 
+                          onChange={(e) => setPromptBodyType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Angle
+                        </label>
+                        <select 
+                          value={promptAngle} 
+                          onChange={(e) => setPromptAngle(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5" /> Shot Type
+                        </label>
+                        <select 
+                          value={promptShotType} 
+                          onChange={(e) => setPromptShotType(e.target.value)}
+                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                        >
+                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-3 mb-6">
                     <button
                       onClick={() => setEditorModel('wan-2.6')}
@@ -1852,12 +2243,14 @@ export default function App() {
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
                     {mode === 'runpod' && <Server className="w-5 h-5" />}
+                    {mode === 'video' && <Film className="w-5 h-5" />}
                     {mode === 'angles' && <Box className="w-5 h-5" />}
                   </>
                 )}
                 {isSubmitting ? 'Uploading to Server...' 
                  : mode === 'upscaler' ? 'Queue Resolution Enhancement' 
                  : mode === 'angles' ? 'Queue 3D Camera Angle' 
+                 : mode === 'video' ? 'Queue Video Generation'
                  : mode === 'runpod' ? 'Queue RunPod Task'
                  : 'Queue AI Edit'}
               </button>
@@ -1883,7 +2276,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod' : task.mode === 'video' ? 'Video' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -1960,7 +2353,7 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }} 
                     className="w-full h-full p-2 sm:p-4"
                   >
-                    {mode === 'upscaler' && previewUrl && !selectedHistoryItem ? (
+                    {mode === 'upscaler' && previewUrl && !selectedHistoryItem && !isVideoUrl(resultUrl) ? (
                       /* --- INTERACTIVE BEFORE/AFTER SLIDER FOR UPSCALER --- */
                       <div 
                         ref={sliderContainerRef}
@@ -1995,14 +2388,16 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      /* --- STANDARD IMAGE VIEWER --- */
+                      /* --- STANDARD MEDIA VIEWER --- */
                       <div 
                         className="relative w-full h-full cursor-pointer group/result" 
                         onClick={() => {
                           const match = history.find(h => h.url === resultUrl);
                           
                           let dynamicModelInfo = editorModel;
-                          if (mode === 'runpod') {
+                          if (mode === 'video') {
+                             dynamicModelInfo = 'Wan 2.2 Video';
+                          } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
                             if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
@@ -2018,11 +2413,20 @@ export default function App() {
                           setIsFlipped(false);
                         }}
                       >
-                        <img 
-                          src={resultUrl} 
-                          alt="Result" 
-                          className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
-                        />
+                        {isVideoUrl(resultUrl) ? (
+                            <video 
+                              src={resultUrl} 
+                              autoPlay loop muted playsInline controls
+                              className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                            />
+                        ) : (
+                            <img 
+                              src={resultUrl} 
+                              alt="Result" 
+                              className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                            />
+                        )}
+                        
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300">
                           <div className="bg-zinc-950/80 px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl backdrop-blur-sm">
                             <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">
@@ -2076,15 +2480,28 @@ export default function App() {
                 key={item.id} 
                 className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
               >
-                <img 
-                  src={item.url} 
-                  alt={item.prompt} 
-                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
-                  onClick={() => { 
-                    setSelectedHistoryItem(item); 
-                    setIsFlipped(false); 
-                  }} 
-                />
+                {isVideoUrl(item.url) ? (
+                   <video 
+                     src={item.url} 
+                     autoPlay loop muted playsInline
+                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                     onClick={() => { 
+                       setSelectedHistoryItem(item); 
+                       setIsFlipped(false); 
+                     }} 
+                   />
+                ) : (
+                   <img 
+                     src={item.url} 
+                     alt={item.prompt} 
+                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                     onClick={() => { 
+                       setSelectedHistoryItem(item); 
+                       setIsFlipped(false); 
+                     }} 
+                   />
+                )}
+                
                 <button 
                   onClick={(e) => handleDeleteHistory(item.id, e)} 
                   className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
@@ -2175,11 +2592,19 @@ export default function App() {
                             className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
                             style={{ backfaceVisibility: 'hidden' }}
                           >
-                            <img 
-                              src={img.url} 
-                              alt="History Entry" 
-                              className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
-                            />
+                            {isVideoUrl(img.url) ? (
+                                <video 
+                                  src={img.url} 
+                                  autoPlay loop muted playsInline controls={isCenter}
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                />
+                            ) : (
+                                <img 
+                                  src={img.url} 
+                                  alt="History Entry" 
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                />
+                            )}
                             
                             {isCenter && (
                               <>
@@ -2300,8 +2725,8 @@ export default function App() {
                             )}
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
-                              <span className="sm:hidden">Double tap to view image</span>
-                              <span className="hidden sm:inline">Space to view image</span>
+                              <span className="sm:hidden">Double tap to view media</span>
+                              <span className="hidden sm:inline">Space to view media</span>
                             </p>
                           </div>
                         </motion.div>
@@ -2389,6 +2814,33 @@ export default function App() {
                       value={ipAdapterEndpointId} 
                       onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
                       placeholder="e.g. 9yusxkbksgwtyk"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod Video Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={videoEndpointId} 
+                      onChange={(e) => setVideoEndpointId(e.target.value)} 
+                      placeholder="e.g. 7h6lpbp8ebiw6q"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      Grok API Key (xAI)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={grokKey} 
+                      onChange={(e) => setGrokKey(e.target.value)} 
+                      placeholder="Enter Grok API Key"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
