@@ -216,25 +216,16 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum on your tongue": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "drooling cum from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum drooling": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "shaking your ass": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
-  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cum dripping": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "pussy": { high: "pussy.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "spreading her legs": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.8 },
 };
 
 export default function App() {
