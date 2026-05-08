@@ -1843,68 +1843,73 @@ export default function App() {
                     </div>
                   </div>
                   
-                  {/* --- PROMPT CONFIGURATION UI --- */}
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <UserCircle className="w-3.5 h-3.5" /> Body Type
-                        </label>
-                        <select 
-                          value={promptBodyType} 
-                          onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
-                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Angle
-                        </label>
-                        <select 
-                          value={promptAngle} 
-                          onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
-                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Shot Type
-                        </label>
-                        <select 
-                          value={promptShotType} 
-                          onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
-                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+{/* --- PROMPT CONFIGURATION UI --- */}
+<div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    
+    {/* Body Type */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Body Type
+      </label>
+      <select
+        value={promptBodyType}
+        onChange={(e) => setPromptBodyType(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {BODY_TYPES.map(bt => (
+          <option key={bt} value={bt}>{bt}</option>
+        ))}
+      </select>
+    </div>
 
-                  <div className="relative">
-                    <textarea 
-                      value={prompt} 
-                      onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Enter a base position (e.g., 'doggy') or leave blank for a totally random prompt..." 
-                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
-                    />
-                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                      <button 
-                        onClick={enhancePrompt}
-                        className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
-                        title="Magic Prompt Enhancer"
-                      >
-                        <Wand2 className="w-3.5 h-3.5" />
-                      </button>
-                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                        Positive Prompt
-                      </div>
-                    </div>
-                  </div>
+    {/* Angle */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Camera Angle
+      </label>
+      <select
+        value={promptAngle}
+        onChange={(e) => setPromptAngle(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {CAMERA_ANGLES.map(a => (
+          <option key={a} value={a}>{a}</option>
+        ))}
+      </select>
+    </div>
+
+    {/* Shot Type */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Shot Type
+      </label>
+      <select
+        value={promptShotType}
+        onChange={(e) => setPromptShotType(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {SHOT_TYPES.map(st => (
+          <option key={st} value={st}>{st}</option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
+
+{/* Prompt Textarea */}
+<div className="relative">
+  <textarea
+    value={prompt}
+    onChange={(e) => setPrompt(e.target.value)}
+    placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
+    className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
+  />
+  
+  <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+    Positive Prompt
+  </div>
+</div>
 
                   {/* --- IP ADAPTER SECTION --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
