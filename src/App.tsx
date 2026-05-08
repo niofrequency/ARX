@@ -32,7 +32,8 @@ import {
   Film,
   Dices,
   Camera,
-  UserCircle
+  UserCircle,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadToFirebase } from './lib/firebase';
@@ -773,7 +774,53 @@ export default function App() {
     }
   };
 
-  // --- NEW FEATURE: Send History Image to Video UI ---
+  // --- ONE-CLICK: Instant Quick Animate (Generates motion directly from history image) ---
+  const handleQuickAnimate = async (item: HistoryItem) => {
+    setSelectedHistoryItem(null);
+    setIsFlipped(false);
+    
+    if (!runpodKey || !videoEndpointId) {
+      setError('Please enter your RunPod API Key and Video Endpoint ID in settings to generate motion.');
+      setShowSettings(true);
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch(item.url);
+      const blob = await response.blob();
+      const file = new File([blob], "quick_animate.png", { type: blob.type });
+      const base64ImageRaw = await fileToBase64(file);
+      
+      const triggerResult = await triggerRunPodVideo(base64ImageRaw, item.prompt);
+      
+      const newTask: QueueTask = {
+        id: triggerResult.id,
+        mode: 'video',
+        prompt: triggerResult.historyPrompt,
+        progress: 15,
+        message: 'Synthesizing Neural Motion...',
+        pollUrl: triggerResult.pollUrl,
+        targetResultUrl: triggerResult.targetResultUrl,
+        modelInfo: triggerResult.modelInfo
+      };
+      
+      setQueue(prev => [...prev, newTask]);
+      pollBackground(newTask);
+      
+      if (window.innerWidth < 1024 && resultRef.current) {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch (e: any) {
+      console.error(e);
+      setError("Neural Motion Failed: " + (e.message || "Network Error"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- Send to Video Tab (Advanced Edit) ---
   const handleAnimateFromHistory = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -943,7 +990,7 @@ export default function App() {
         triggerResult = await triggerWavespeedAngles(selectedFile);
       } else if (mode === 'video') {
         const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPodVideo(base64ImageRaw);
+        triggerResult = await triggerRunPodVideo(base64ImageRaw, prompt);
       } else if (mode === 'runpod') {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerRunPod(base64ImageRaw);
@@ -1126,13 +1173,15 @@ export default function App() {
     if (runpodKey) fetchRunPodBalance(runpodKey);
   };
 
-  const triggerRunPodVideo = async (base64Image: string) => {
+  const triggerRunPodVideo = async (base64Image: string, customPrompt?: string) => {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
+    
+    const activePrompt = customPrompt || prompt || "video scene";
 
     // 2. Auto-detect LoRAs from prompt (Uses longest match first logic)
     const autoLorasMap = new Map();
-    const lowerPrompt = (prompt || "").toLowerCase();
+    const lowerPrompt = activePrompt.toLowerCase();
     
     const sortedTriggers = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
@@ -1149,7 +1198,7 @@ export default function App() {
 
     const payload = {
       input: {
-        prompt: prompt || "video scene",
+        prompt: activePrompt,
         negative_prompt: negativePrompt,
         image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
@@ -1186,7 +1235,7 @@ export default function App() {
       id,
       pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `Video: ${prompt}`,
+      historyPrompt: `Video: ${activePrompt}`,
       modelInfo: usedModelInfo
     };
   };
@@ -2812,14 +2861,16 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                                 
-                                {/* NEW: DOWNLOAD BUTTON (Works for both Videos and Images) */}
-                                <button 
-                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
-                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Download className="w-4 h-4" />
-                                  Download {isVideoUrl(img.url) ? 'Video' : 'Image'} to PC
-                                </button>
+                                {/* NEW: DOWNLOAD BUTTON (Works ONLY for Videos) */}
+                                {isVideoUrl(img.url) && (
+                                  <button 
+                                    onClick={(e) => handleDownload(img.url, img.prompt, e)} 
+                                    className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Download
+                                  </button>
+                                )}
 
                                 {/* NEW: SAVE PROMPT (Works for both Videos and Images) */}
                                 {!img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
@@ -2840,7 +2891,19 @@ export default function App() {
                                 {/* Actions for Images Only */}
                                 {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                                   <>
-                                    {/* USE IMAGE IN VIDEO BUTTON */}
+                                    {/* 1-CLICK QUICK ANIMATE */}
+                                    <button 
+                                      onClick={(e) => { 
+                                        e.stopPropagation();
+                                        handleQuickAnimate(img);
+                                      }} 
+                                      className="w-full py-4 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-purple-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                    >
+                                      <Film className="w-4 h-4" />
+                                      Generate Motion (Video)
+                                    </button>
+
+                                    {/* SEND TO ADVANCED VIDEO EDITOR TAB */}
                                     <button 
                                       onClick={(e) => { 
                                         e.stopPropagation();
@@ -2848,10 +2911,11 @@ export default function App() {
                                       }} 
                                       className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                     >
-                                      <Film className="w-4 h-4" />
-                                      Use Image in Video
+                                      <Settings2 className="w-4 h-4" />
+                                      Send to Video Editor
                                     </button>
 
+                                    {/* USE PROMPT IN EDITOR */}
                                     <button 
                                       onClick={() => { 
                                         const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
