@@ -195,7 +195,13 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
   if (!url) return false;
-  return url.startsWith('data:video') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
+  // Firebase appends query parameters that break .endsWith('.mp4'), so we strip them for the check
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  return cleanUrl.startsWith('data:video') || 
+         cleanUrl.endsWith('.mp4') || 
+         cleanUrl.endsWith('.webm') || 
+         cleanUrl.endsWith('.mov') || 
+         url.includes('video/mp4');
 };
 
 const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Blob => {
@@ -224,6 +230,7 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 // --- AUTO LORA CONFIGURATION (Video Generator) ---
+// Add keywords and their corresponding LoRA paths/weights here.
 const AUTO_LORA_MAP: Record<string, any> = {
   "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
@@ -972,6 +979,43 @@ export default function App() {
     }
   };
 
+  const extractBase64 = (obj: any): string | null => {
+    if (typeof obj === 'string') {
+      if (obj.startsWith('data:video') || obj.startsWith('http')) return obj;
+      if (obj.startsWith('data:image')) return obj;
+      
+      // Common base64 patterns - carefully distinguish image vs video
+      if (obj.length > 1000) {
+        if (obj.startsWith('/9j/')) return `data:image/jpeg;base64,${obj}`;
+        if (obj.startsWith('iVBORw')) return `data:image/png;base64,${obj}`;
+        // If it's not a known image header, assume video for this pipeline
+        return `data:video/mp4;base64,${obj}`;
+      }
+      return null;
+    }
+    
+    if (typeof obj === 'object' && obj !== null) {
+      // Direct video field (most common from Wan video endpoints)
+      if (obj.video) {
+        if (typeof obj.video === 'string') {
+          return obj.video.startsWith('data:') ? obj.video : `data:video/mp4;base64,${obj.video}`;
+        }
+      }
+      if (obj.output?.video) {
+         return typeof obj.output.video === 'string' 
+           ? (obj.output.video.startsWith('data:') ? obj.output.video : `data:video/mp4;base64,${obj.output.video}`)
+           : null;
+      }
+      
+      // Recursive search
+      for (let key in obj) {
+        const res = extractBase64(obj[key]);
+        if (res) return res;
+      }
+    }
+    return null;
+  };
+
   const pollBackground = async (task: QueueTask) => {
     let isCompleted = false;
     let pollCount = 0;
@@ -1017,25 +1061,7 @@ export default function App() {
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
           if (task.mode === 'runpod' || task.mode === 'video') {
-            let finalOutput = '';
-            
-            const extractBase64 = (obj: any): string | null => {
-              if (typeof obj === 'string') {
-                if (obj.startsWith('data:image') || obj.startsWith('data:video') || obj.startsWith('http')) return obj;
-                if (obj.length > 500 && (obj.startsWith('iVBORw') || obj.startsWith('/9j/'))) return `data:image/png;base64,${obj}`;
-              }
-              if (typeof obj === 'object' && obj !== null) {
-                if (obj.video) return typeof obj.video === 'string' && obj.video.startsWith('data:') ? obj.video : `data:video/mp4;base64,${obj.video}`;
-                if (obj.image) return obj.image;
-                for (let key in obj) {
-                  const res = extractBase64(obj[key]);
-                  if (res) return res;
-                }
-              }
-              return null;
-            };
-
-            finalOutput = extractBase64(pollData.output || pollData) || '';
+            let finalOutput = extractBase64(pollData.output || pollData) || '';
 
             if (finalOutput) {
               isCompleted = true;
@@ -1043,10 +1069,12 @@ export default function App() {
               // Upload to Firebase if it's a base64 string
               if (finalOutput.startsWith('data:')) {
                 setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: 'Uploading to Firebase...' } : t));
-                const isVid = isVideoUrl(finalOutput);
-                const fileBlob = base64ToBlob(finalOutput, isVid ? 'video/mp4' : 'image/png');
+                const isVid = finalOutput.startsWith('data:video') || isVideoUrl(finalOutput);
+                const contentType = isVid ? 'video/mp4' : 'image/png';
                 const fileExt = isVid ? 'mp4' : 'png';
+                
                 try {
+                  const fileBlob = base64ToBlob(finalOutput, contentType);
                   const firebaseUrl = await uploadToFirebase(fileBlob, `outputs/${task.id}.${fileExt}`);
                   await handleFinalSuccess(firebaseUrl, task.id, task.prompt, task.modelInfo);
                 } catch (fbErr) {
@@ -1126,7 +1154,13 @@ export default function App() {
 
   const triggerRunPodVideo = async (base64Image: string) => {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
-    const safeBase64 = cleanAndPadBase64(base64Image);
+    let safeBase64 = cleanAndPadBase64(base64Image);
+
+    // Extra compression for mobile / large images
+    if (safeBase64.length > 4_000_000 && selectedFile) {  // ~3MB base64
+      const compressed = await optimizeImageForUpload(selectedFile, 1024); // max 1024px
+      safeBase64 = cleanAndPadBase64(compressed);
+    }
 
     const activePrompt = prompt || "video scene";
 
