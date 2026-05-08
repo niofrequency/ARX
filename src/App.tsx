@@ -1,43 +1,18 @@
-/** 
- * @license
+/**
+ * @license 
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { generateRandomIdea } from './lib/grok';
+import { uploadToFirebase } from './lib/firebase';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Upload, 
-  Sparkles,
-  Settings, 
-  Loader2, 
-  AlertCircle, 
-  Download,
-  Image as ImageIcon,
-  X,
-  History,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Trash2,
-  Maximize,
-  SlidersHorizontal,
-  Box,
-  Layers,
-  CloudDownload,
-  Bookmark,
-  BookmarkPlus,
-  Server,
-  Settings2,
-  Plus,
-  User,
-  Film,
-  Dices,
-  Camera,
-  UserCircle,
-  Wand2
+  Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
+  Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
+  Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
+  Bookmark, BookmarkPlus, Server, Settings2, Plus, User, Dices, Camera,
+  UserCircle, Wand2, Film
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { uploadToFirebase } from './lib/firebase';
-import { generateRandomIdea } from './lib/grok';
 
 // --- Native IndexedDB Wrapper ---
 const DB_NAME = 'ARX_DB';
@@ -91,11 +66,9 @@ const deleteHistoryItemDB = async (id: string) => {
     const request = store.get(id);
     request.onsuccess = () => resolve(request.result);
   });
-
   if (itemToRevoke?.url && itemToRevoke.url.startsWith('blob:')) {
     URL.revokeObjectURL(itemToRevoke.url);
   }
-
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -123,26 +96,15 @@ const pruneHistoryDB = async (keepCount: number = 100) => {
   const db = await initDB();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  
   toDelete.forEach(item => {
-    if (item.url && item.url.startsWith('blob:')) {
-      URL.revokeObjectURL(item.url);
-    }
+    if (item.url && item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
     store.delete(item.id);
   });
 };
 
 // --- Reusable Components ---
 const TechApexIcon = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="1.5" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M12 22L2 2h20L12 22z" />
     <path d="M12 22V2" />
     <path d="M2 2l10 10 10-10" />
@@ -152,28 +114,17 @@ const TechApexIcon = ({ className }: { className?: string }) => (
 const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-
   return (
     <div 
       onClick={() => !file && fileInputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => { 
-        e.preventDefault(); 
-        setIsDragging(false); 
-        const f = e.dataTransfer.files?.[0]; 
-        if (f) onProcess(f); 
-      }}
+      onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onProcess(f); }}
       className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] ${
-        isDragging 
-          ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' 
-          : file 
-            ? 'bg-zinc-900 border-zinc-800/80' 
-            : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
+        isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
       }`}
     >
       <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept="image/*" />
-      
       {preview ? (
         <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
           <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
@@ -193,6 +144,41 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
     </div>
   );
 };
+
+// --- Types ---
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
+type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
+type Resolution = '2k' | '4k' | '8k';
+
+interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
+interface SavedPrompt { id: string; name: string; prompt: string; }
+interface QueueTask { id: string; mode: AppMode; prompt: string; progress: number; message: string; pollUrl: string; targetResultUrl: string; modelInfo: string; }
+interface ActiveLora { id: string; name: string; strength: number; }
+
+const RUNPOD_MODELS = [
+  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
+  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
+];
+
+const LORA_OPTIONS = [
+  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
+  { id: "qwen4play.safetensors", name: "QWEN4PLAY" }, { id: "FemNde.safetensors", name: "FEMNUDE" },
+  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" }, { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
+  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" }, { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
+  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" }, { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
+  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" }, { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
+  { id: "IR_BJ.safetensors", name: "IR_BJ" }, { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
+  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" }, { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
+  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
+];
+
+const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
+const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
+const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
+
+const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
+const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
+const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -229,7 +215,6 @@ const cleanAndPadBase64 = (base64Str: string) => {
   return cleanStr;
 };
 
-// --- AUTO LORA CONFIGURATION (Video Generator) ---
 const AUTO_LORA_MAP: Record<string, any> = {
   "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
@@ -252,78 +237,9 @@ const AUTO_LORA_MAP: Record<string, any> = {
   "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
 
-// --- Constants ---
-const BODY_TYPES = ['Random', 'Slim', 'Athletic', 'Average', 'Curvy', 'Muscular', 'Petite'];
-const CAMERA_ANGLES = ['Random', 'Eye-level', 'Low Angle', 'High Angle', 'Drone View', 'Close-up', 'Dutch Angle'];
-const SHOT_TYPES = ['Random', 'Wide Shot', 'Medium Shot', 'Cowboy Shot', 'Portrait', 'Macro', 'Establishing Shot'];
-
-// --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
-type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
-type Resolution = '2k' | '4k' | '8k';
-
-interface HistoryItem {
-  id: string;
-  prompt: string;
-  url: string;
-  date: string;
-  modelInfo?: string;
-}
-
-interface SavedPrompt {
-  id: string;
-  name: string;
-  prompt: string;
-}
-
-interface QueueTask {
-  id: string;
-  mode: AppMode;
-  prompt: string;
-  progress: number;
-  message: string;
-  pollUrl: string;
-  targetResultUrl: string;
-  modelInfo: string;
-}
-
-interface ActiveLora {
-  id: string;
-  name: string;
-  strength: number;
-}
-
-const RUNPOD_MODELS = [
-  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
-  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
-];
-
-const LORA_OPTIONS = [
-  { id: "yarn_qwen.safetensors", name: "YARN" },
-  { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
-  { id: "qwen4play.safetensors", name: "QWEN4PLAY" },
-  { id: "FemNde.safetensors", name: "FEMNUDE" },
-  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" },
-  { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
-  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" },
-  { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
-  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" },
-  { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
-  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" },
-  { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
-  { id: "IR_BJ.safetensors", name: "IR_BJ" },
-  { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
-  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" },
-  { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
-  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
-];
-
 export default function App() {
-  // --- Core State ---
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
-  
-  // API Keys
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
@@ -333,23 +249,18 @@ export default function App() {
   
   const [prompt, setPrompt] = useState<string>('');
   const [isRandomizing, setIsRandomizing] = useState(false);
-  
-  // --- Prompt Architect Settings ---
   const [promptBodyType, setPromptBodyType] = useState('Random');
   const [promptAngle, setPromptAngle] = useState('Random');
   const [promptShotType, setPromptShotType] = useState('Random');
   
-  // Isolated Balances
   const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
   const [runpodBalance, setRunpodBalance] = useState<string | null>(null);
-  
-  // --- Parameters State ---
+
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
   const [verticalAngle, setVerticalAngle] = useState<number>(0);
   const [distance, setDistance] = useState<number>(1);
 
-  // --- RunPod ComfyUI Settings State ---
   const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
   const [sampler, setSampler] = useState<string>('euler');
@@ -359,7 +270,6 @@ export default function App() {
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
-  // --- RunPod Video State ---
   const [videoWidth, setVideoWidth] = useState<number>(480);
   const [videoHeight, setVideoHeight] = useState<number>(832);
   const [videoLength, setVideoLength] = useState<number>(81);
@@ -367,22 +277,18 @@ export default function App() {
   const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
 
-  // --- IP Adapter Face Consistency State ---
   const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
   const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
   const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
-  // --- Input State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // --- Queue Engine State ---
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultId, setResultId] = useState<string | null>(null);
 
-  // --- UI State (Slider & Modals) ---
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -390,7 +296,6 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [showAdvancedRunpod, setShowAdvancedRunpod] = useState(false);
   
-  // --- Saved Prompts State ---
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [showLoadPrompt, setShowLoadPrompt] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -400,11 +305,11 @@ export default function App() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
-  
-  // --- Touch Tracking for Carousel ---
   const touchStartX = useRef<number | null>(null);
 
-  // --- Initialization & Cloud Sync ---
+  const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
+  const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
+
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
@@ -414,17 +319,15 @@ export default function App() {
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
+    const savedMode = localStorage.getItem('arx_mode') as AppMode;
     
-    setMode((localStorage.getItem('arx_mode') as AppMode) || 'editor');
+    setMode(savedMode || 'editor');
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
     if (savedRpModel) setRunpodModel(savedRpModel);
     
     if (savedLoras) {
-      try {
-        setActiveLoras(JSON.parse(savedLoras));
-      } catch (e) {
-        console.error("Failed to parse saved LoRAs", e);
-      }
+      try { setActiveLoras(JSON.parse(savedLoras)); } 
+      catch (e) { console.error("Failed to parse saved LoRAs", e); }
     }
     
     setWavespeedKey(savedWsKey);
@@ -436,11 +339,8 @@ export default function App() {
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
     if (localSavedPrompts) {
-      try {
-        setSavedPrompts(JSON.parse(localSavedPrompts));
-      } catch (e) {
-        console.error("Failed to parse saved prompts", e);
-      }
+      try { setSavedPrompts(JSON.parse(localSavedPrompts)); } 
+      catch (e) { console.error("Failed to parse saved prompts", e); }
     }
 
     getHistoryDB().then(localData => {
@@ -460,7 +360,6 @@ export default function App() {
   useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
-  // --- Balance Fetching Architecture ---
   const fetchWavespeedBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
     try {
@@ -510,15 +409,10 @@ export default function App() {
       const res = await fetch("https://api.wavespeed.ai/api/v3/predictions?page=1&page_size=100", {
         headers: { "Authorization": `Bearer ${keyToUse}` }
       });
-      
-      if (!res.ok) {
-        console.warn(`Wavespeed history sync failed with status ${res.status}`);
-        return; 
-      }
+      if (!res.ok) return;
       
       const json = await res.json();
       const items = json.data?.items || json.items || [];
-      
       const cloudHistory = items
         .filter((item: any) => item.status === "completed" || item.status === "succeeded" || item.outputs?.length > 0 || item.data?.outputs?.length > 0)
         .map((item: any) => {
@@ -547,7 +441,6 @@ export default function App() {
         const merged = [...cloudHistory, ...prev];
         const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
         const sorted = unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
-        
         sorted.forEach(item => saveHistoryItem(item));
         return sorted;
       });
@@ -565,10 +458,7 @@ export default function App() {
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
-          if (file) { 
-            handleFileProcess(file); 
-            break; 
-          }
+          if (file) { handleFileProcess(file); break; }
         }
       }
     };
@@ -597,14 +487,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
-  // --- GROK RANDOM PROMPT GENERATOR ---
   const handleRandomizePrompt = async () => {
     if (!grokKey && !process.env.GROK_API_KEY) {
       setError('Please enter your Grok API Key in the settings first.');
       setShowSettings(true);
       return;
     }
-
     setIsRandomizing(true);
     setError(null);
 
@@ -619,7 +507,7 @@ export default function App() {
   };
 
   const enhancePrompt = () => {
-    const enhancer = " masterpiece, best quality, ultra-detailed, highly realistic, 8k resolution, intricate details, cinematic lighting";
+    const enhancer = " masterpiece, best quality, ultra-detailed, highly realistic, cinematic lighting";
     if (!prompt.includes("masterpiece")) {
       setPrompt(p => p ? p.trim() + "," + enhancer : enhancer.trim());
     }
@@ -630,20 +518,17 @@ export default function App() {
       setError('Please provide a valid image file.');
       return;
     }
-    
-    // Revoke old URL if it exists to prevent memory leaks during rapid uploads
     if (previewUrl && previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl);
     }
-    
     const url = URL.createObjectURL(file);
     setSelectedFile(file); 
     setPreviewUrl(url); 
     setResultUrl(null);
+    setResultId(null);
     setError(null);
   };
 
-  // --- API Crash Fix: Compression Utility ---
   const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -683,7 +568,7 @@ export default function App() {
   };
 
   const fileToBase64 = async (file: File): Promise<string> => {
-    if (file.size < 2 * 1024 * 1024) {
+    if (file.size < 500 * 1024) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -695,7 +580,6 @@ export default function App() {
     }
   };
 
-  // --- NEW FEATURE: Send History Image to Video UI ---
   const handleAnimateFromHistory = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -795,7 +679,6 @@ export default function App() {
     localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
   };
 
-  // --- Lora Management Functions ---
   const addLora = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === 'none') return;
@@ -814,117 +697,35 @@ export default function App() {
     setActiveLoras(prev => prev.filter(l => l.id !== id));
   };
 
-  const generateEdit = async () => {
-    if (mode === 'runpod' || mode === 'video') {
-      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
-        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
-        setError('Please enter your IP-Adapter Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
-        setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-    } else {
-      if (!wavespeedKey) {
-        setError('Please enter your Wavespeed API Key in settings.');
-        setShowSettings(true); 
-        return;
-      }
-    }
-
-    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
-      setError('Please enter a generation prompt.');
-      return;
-    }
-
-    if (!selectedFile) {
-      setError('Please upload a primary image to process.');
-      return;
-    }
-
-    setError(null); 
-    setIsSubmitting(true);
-
-    try {
-      if (window.innerWidth < 1024 && resultRef.current) {
-        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-
-      let triggerResult;
-      
-      if (mode === 'upscaler') {
-        triggerResult = await triggerWavespeedUpscale(selectedFile);
-      } else if (mode === 'angles') {
-        triggerResult = await triggerWavespeedAngles(selectedFile);
-      } else if (mode === 'video') {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPodVideo(base64ImageRaw);
-      } else if (mode === 'runpod') {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPod(base64ImageRaw);
-      } else {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerWavespeed(base64ImageRaw);
-      } 
-
-      const newTask: QueueTask = {
-        id: triggerResult.id,
-        mode: mode,
-        prompt: triggerResult.historyPrompt,
-        progress: 15,
-        message: 'Queued...',
-        pollUrl: triggerResult.pollUrl,
-        targetResultUrl: triggerResult.targetResultUrl,
-        modelInfo: triggerResult.modelInfo
-      };
-
-      setQueue(prev => [...prev, newTask]);
-      pollBackground(newTask);
-
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'An unexpected error occurred.');
-      setIsSubmitting(false);
-    }
-  };
-
   const extractBase64 = (obj: any): string | null => {
     if (typeof obj === 'string') {
       if (obj.startsWith('data:video') || obj.startsWith('http')) return obj;
       if (obj.startsWith('data:image')) return obj;
-      
-      // Common base64 patterns - carefully distinguish image vs video
-      if (obj.length > 1000) {
-        if (obj.startsWith('/9j/')) return `data:image/jpeg;base64,${obj}`;
-        if (obj.startsWith('iVBORw')) return `data:image/png;base64,${obj}`;
-        // If it's not a known image header, assume video for this pipeline
+      if (obj.length > 2000) {
         return `data:video/mp4;base64,${obj}`;
       }
       return null;
     }
-    
     if (typeof obj === 'object' && obj !== null) {
-      // Direct video field (most common from Wan video endpoints)
       if (obj.video) {
-        if (typeof obj.video === 'string') {
-          return obj.video.startsWith('data:') ? obj.video : `data:video/mp4;base64,${obj.video}`;
-        }
+        const v = obj.video;
+        return typeof v === 'string' 
+          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
+          : null;
       }
       if (obj.output?.video) {
-         return typeof obj.output.video === 'string' 
-           ? (obj.output.video.startsWith('data:') ? obj.output.video : `data:video/mp4;base64,${obj.output.video}`)
-           : null;
+        const v = obj.output.video;
+        return typeof v === 'string' 
+          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
+          : null;
       }
-      
-      // Recursive search
-      for (let key in obj) {
+      if (obj.data?.video) {
+        const v = obj.data.video;
+        return typeof v === 'string' 
+          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
+          : null;
+      }
+      for (const key in obj) {
         const res = extractBase64(obj[key]);
         if (res) return res;
       }
@@ -932,175 +733,31 @@ export default function App() {
     return null;
   };
 
-  const pollBackground = async (task: QueueTask) => {
-    let isCompleted = false;
-    let pollCount = 0;
-
-    const progressInterval = setInterval(() => {
-      setQueue(prev => prev.map(t => {
-        if (t.id === task.id && t.progress < 85) {
-          return { ...t, progress: t.progress + Math.max(0.5, (85 - t.progress) * 0.05) };
-        }
-        return t;
-      }));
-    }, 500);
-
-    try {
-      while (!isCompleted) {
-        // RunPod tasks can take a little longer.
-        if (pollCount >= 200) throw new Error('Polling timed out.');
-        
-        // Dynamic polling interval (faster early on, slower later to save API hits)
-        const delay = pollCount < 10 ? 2000 : 4000;
-        await new Promise(r => setTimeout(r, delay));
-        pollCount++;
-
-        const headers: any = {};
-        if (task.mode === 'runpod' || task.mode === 'video') {
-          headers["Authorization"] = `Bearer ${runpodKey}`;
-        } else {
-          headers["Authorization"] = `Bearer ${wavespeedKey}`;
-        }
-
-        const pollResponse = await fetch(task.pollUrl, { headers });
-
-        if (!pollResponse.ok) {
-          if (pollResponse.status === 404 && pollCount < 10) continue; 
-          throw new Error(`Server polling failed with status ${pollResponse.status}`);
-        }
-
-        const pollData = await pollResponse.json();
-        const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
-
-        if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
-          clearInterval(progressInterval);
-          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
-
-          if (task.mode === 'runpod' || task.mode === 'video') {
-            let finalOutput = extractBase64(pollData.output || pollData) || '';
-
-            if (finalOutput) {
-              isCompleted = true;
-
-              // Upload to Firebase if it's a base64 string
-              if (finalOutput.startsWith('data:')) {
-                setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: 'Uploading to Firebase...' } : t));
-                const isVid = finalOutput.startsWith('data:video') || isVideoUrl(finalOutput);
-                const contentType = isVid ? 'video/mp4' : 'image/png';
-                const fileExt = isVid ? 'mp4' : 'png';
-                
-                try {
-                  const fileBlob = base64ToBlob(finalOutput, contentType);
-                  const firebaseUrl = await uploadToFirebase(fileBlob, `outputs/${task.id}.${fileExt}`);
-                  await handleFinalSuccess(firebaseUrl, task.id, task.prompt, task.modelInfo);
-                } catch (fbErr) {
-                  console.error("Firebase upload failed, falling back to local base64.", fbErr);
-                  await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
-                }
-              } else {
-                await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
-              }
-              continue;
-            } else {
-              const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
-              throw new Error(`RunPod returned success but no output found. Payload preview: ${dump}...`);
-            }
-          } else {
-            let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-
-            if (!outputs || outputs.length === 0) {
-              const fetchTarget = task.targetResultUrl;
-              const resultResponse = await fetch(fetchTarget, {
-                headers: { "Authorization": `Bearer ${wavespeedKey}` }
-              });
-              if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
-              const resultData = await resultResponse.json();
-              outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
-            }
-
-            if (outputs && outputs.length > 0) {
-              let finalImage = outputs[0];
-              if (typeof finalImage === 'object' && finalImage !== null) {
-                  finalImage = finalImage.url || finalImage.file?.url;
-              }
-              isCompleted = true;
-              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
-            } else {
-              throw new Error("Generation succeeded but no output URL was found.");
-            }
-          }
-        } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
-          throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
-        } else {
-          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: `Status: ${currentStatus || 'Processing'}` } : t));
-        }
-      }
-    } catch (err: any) {
-      clearInterval(progressInterval);
-      setQueue(prev => prev.filter(t => t.id !== task.id));
-      setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleFinalSuccess = async (finalImage: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
-    const newItem: HistoryItem = { 
-      id: taskId, 
-      prompt: taskPrompt, 
-      url: finalImage, 
-      date: new Date().toISOString(),
-      modelInfo: modelInfoStr
-    };
-    
-    setHistory(prev => {
-      const merged = [newItem, ...prev];
-      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000); 
-    });
-    
-    await saveHistoryItem(newItem);
-    await pruneHistoryDB(100);
-
-    setQueue(prev => prev.filter(t => t.id !== taskId));
-    setResultUrl(finalImage);
-    
-    // Update balances after a generation uses credits
-    if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
-    if (runpodKey) fetchRunPodBalance(runpodKey);
-  };
-
   const triggerRunPodVideo = async (base64Image: string) => {
-    // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     let safeBase64 = cleanAndPadBase64(base64Image);
 
-    // Extra compression for mobile / large images
-    if (safeBase64.length > 4_000_000 && selectedFile) {  // ~3MB base64
-      const compressed = await optimizeImageForUpload(selectedFile, 1024); // max 1024px
+    // Much more aggressive compression for mobile
+    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
+      console.log("🔄 Heavy compression for mobile...");
+      const compressed = await optimizeImageForUpload(selectedFile, 768); // smaller for mobile/video
       safeBase64 = cleanAndPadBase64(compressed);
     }
 
     const activePrompt = prompt || "video scene";
 
-    // 2. Auto-detect LoRAs from prompt (PROVEN WORKING LOGIC + your new rich map)
     const autoLoras: any[] = [];
     const lowerPrompt = activePrompt.toLowerCase();
-
-    // Use the exact same detection style as the working version (word boundary + longest first)
     const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
     for (const keyword of sortedKeywords) {
-      // Word boundary regex is safer and matches what the working code used
       if (new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lowerPrompt)) {
         const config = AUTO_LORA_MAP[keyword];
-        // Avoid duplicates (same high lora)
         if (!autoLoras.some(l => l.high === config.high)) {
           autoLoras.push(config);
         }
       }
     }
 
-    // Limit to max 4 LoRAs (prevents backend overload)
     const finalAutoLoras = autoLoras.slice(0, 4);
 
     const payload = {
@@ -1114,7 +771,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras   // ← this is what the backend expects
+        lora_pairs: finalAutoLoras
       }
     };
 
@@ -1148,20 +805,15 @@ export default function App() {
   };
 
   const triggerRunPod = async (base64Image: string) => {
-    // Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
-
-    // Process IP Adapter face reference if it exists
     let faceBase64Data = null;
     if (faceRefFile) {
         const rawFaceBase64 = await fileToBase64(faceRefFile);
         faceBase64Data = cleanAndPadBase64(rawFaceBase64);
     }
     
-    // DYNAMIC ROUTING: Use IP-Adapter endpoint if face image is present, otherwise standard endpoint
     const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
 
-    // --- DYNAMIC LORA CHAIN WORKFLOW ---
     const workflowObj: any = {
       "5": { 
         "inputs": { "ckpt_name": runpodModel },
@@ -1173,10 +825,8 @@ export default function App() {
     let lastModelOutputIndex = 0;
     let lastClipNodeId = "5";
     let lastClipOutputIndex = 1;
-
     let currentId = 100;
 
-    // Dynamically build the LoraLoader chain
     activeLoras.forEach(lora => {
       const nodeId = currentId.toString();
       workflowObj[nodeId] = {
@@ -1189,17 +839,13 @@ export default function App() {
         },
         "class_type": "LoraLoader"
       };
-      
-      // Update pointers to output from this new node
       lastModelNodeId = nodeId;
       lastModelOutputIndex = 0;
       lastClipNodeId = nodeId;
       lastClipOutputIndex = 1;
-      
       currentId++;
     });
 
-    // --- IP ADAPTER INJECTION ---
     if (faceBase64Data) {
         workflowObj["200"] = {
             "inputs": { "image": "face_ref.png" },
@@ -1228,60 +874,17 @@ export default function App() {
             },
             "class_type": "IPAdapterAdvanced"
         };
-        
-        // Update pointers so the KSampler gets the IP-Adapter injected model
         lastModelNodeId = "203";
         lastModelOutputIndex = 0;
     }
 
-    // Add remaining required nodes
-    workflowObj["8"] = {
-      "inputs": { "samples": ["3", 0], "vae": ["5", 2] },
-      "class_type": "VAEDecode"
-    };
-    workflowObj["60"] = {
-      "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] },
-      "class_type": "SaveImage"
-    };
-    workflowObj["78"] = {
-      "inputs": { "image": "input_image.png" },
-      "class_type": "LoadImage"
-    };
-    workflowObj["88"] = {
-      "inputs": { "pixels": ["93", 0], "vae": ["5", 2] },
-      "class_type": "VAEEncode"
-    };
-    workflowObj["93"] = {
-      "inputs": {
-        "upscale_method": "lanczos",
-        "megapixels": 1,
-        "resolution_steps": 64, 
-        "image": ["78", 0]
-      },
-      "class_type": "ImageScaleToTotalPixels"
-    };
-
-    // Text Encoders connected to the END of the CLIP chain
-    workflowObj["110"] = {
-      "inputs": {
-        "prompt": negativePrompt, 
-        "clip": [lastClipNodeId, lastClipOutputIndex],
-        "vae": ["5", 2],
-        "image1": ["93", 0]
-      },
-      "class_type": "TextEncodeQwenImageEditPlus"
-    };
-    workflowObj["111"] = {
-      "inputs": {
-        "prompt": prompt || "change to red", 
-        "clip": [lastClipNodeId, lastClipOutputIndex],
-        "vae": ["5", 2],
-        "image1": ["93", 0]
-      },
-      "class_type": "TextEncodeQwenImageEditPlus"
-    };
-
-    // Sampler connected to the END of the MODEL chain
+    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
+    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
+    workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
+    workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
+    workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
+    workflowObj["110"] = { "inputs": { "prompt": negativePrompt, "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
+    workflowObj["111"] = { "inputs": { "prompt": prompt || "change to red", "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
     workflowObj["3"] = {
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000), 
@@ -1327,7 +930,6 @@ export default function App() {
     const id = data.id;
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
     
-    // Create string summarizing models used
     const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
     let usedModelInfo = activeLoras.length === 0 
       ? `${modelName} Base` 
@@ -1470,8 +1072,9 @@ export default function App() {
   };
 
   const triggerWavespeed = async (base64Image: string) => {
+    const safeBase64 = cleanAndPadBase64(base64Image);
     const payload: any = { 
-        images: [base64Image], 
+        images: [safeBase64], 
         prompt: prompt, 
         seed: -1
     };
@@ -1529,13 +1132,251 @@ export default function App() {
     };
   };
 
+  const generateEdit = async () => {
+    if (mode === 'runpod' || mode === 'video') {
+      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
+        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
+        setError('Please enter your IP-Adapter Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
+        setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+    } else {
+      if (!wavespeedKey) {
+        setError('Please enter your Wavespeed API Key in settings.');
+        setShowSettings(true); 
+        return;
+      }
+    }
+
+    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
+      setError('Please enter a generation prompt.');
+      return;
+    }
+
+    if (!selectedFile) {
+      setError('Please upload a primary image to process.');
+      return;
+    }
+
+    setError(null); 
+    setIsSubmitting(true);
+
+    try {
+      if (window.innerWidth < 1024 && resultRef.current) {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      let triggerResult;
+      
+      if (mode === 'upscaler') {
+        triggerResult = await triggerWavespeedUpscale(selectedFile);
+      } else if (mode === 'angles') {
+        triggerResult = await triggerWavespeedAngles(selectedFile);
+      } else if (mode === 'video') {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        triggerResult = await triggerRunPodVideo(base64ImageRaw);
+      } else if (mode === 'runpod') {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        triggerResult = await triggerRunPod(base64ImageRaw);
+      } else {
+        const base64ImageRaw = await fileToBase64(selectedFile);
+        triggerResult = await triggerWavespeed(base64ImageRaw);
+      } 
+
+      const newTask: QueueTask = {
+        id: triggerResult.id,
+        mode: mode,
+        prompt: triggerResult.historyPrompt,
+        progress: 15,
+        message: 'Queued...',
+        pollUrl: triggerResult.pollUrl,
+        targetResultUrl: triggerResult.targetResultUrl,
+        modelInfo: triggerResult.modelInfo
+      };
+
+      setQueue(prev => [...prev, newTask]);
+      pollBackground(newTask);
+
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'An unexpected error occurred.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const pollBackground = async (task: QueueTask) => {
+    let isCompleted = false;
+    let pollCount = 0;
+
+    const progressInterval = setInterval(() => {
+      setQueue(prev => prev.map(t => {
+        if (t.id === task.id && t.progress < 85) {
+          return { ...t, progress: t.progress + Math.max(0.5, (85 - t.progress) * 0.05) };
+        }
+        return t;
+      }));
+    }, 500);
+
+    try {
+      while (!isCompleted) {
+        if (pollCount >= 200) throw new Error('Polling timed out.');
+        
+        const delay = pollCount < 10 ? 2000 : 4000;
+        await new Promise(r => setTimeout(r, delay));
+        pollCount++;
+
+        const headers: any = {};
+        if (task.mode === 'runpod' || task.mode === 'video') {
+          headers["Authorization"] = `Bearer ${runpodKey}`;
+        } else {
+          headers["Authorization"] = `Bearer ${wavespeedKey}`;
+        }
+
+        const pollResponse = await fetch(task.pollUrl, { headers });
+
+        if (!pollResponse.ok) {
+          if (pollResponse.status === 404 && pollCount < 10) continue; 
+          throw new Error(`Server polling failed with status ${pollResponse.status}`);
+        }
+
+        const pollData = await pollResponse.json();
+        const currentStatus = (pollData.status || pollData.state || pollData.data?.status || '').toLowerCase();
+
+        if (currentStatus === "completed" || currentStatus === "succeeded" || currentStatus === "success") {
+          clearInterval(progressInterval);
+          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
+
+          if (task.mode === 'runpod' || task.mode === 'video') {
+            let finalOutput = extractBase64(pollData.output || pollData) || '';
+
+            if (finalOutput) {
+              isCompleted = true;
+
+              if (finalOutput.startsWith('data:')) {
+                setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: 'Uploading to Firebase...' } : t));
+                const isVid = finalOutput.startsWith('data:video') || isVideoUrl(finalOutput);
+                const contentType = isVid ? 'video/mp4' : 'image/png';
+                const fileExt = isVid ? 'mp4' : 'png';
+                
+                try {
+                  const fileBlob = base64ToBlob(finalOutput, contentType);
+                  const firebaseUrl = await uploadToFirebase(fileBlob, `outputs/${task.id}.${fileExt}`);
+                  await handleFinalSuccess(firebaseUrl, task.id, task.prompt, task.modelInfo);
+                } catch (fbErr) {
+                  console.error("Firebase upload failed, falling back to local base64.", fbErr);
+                  await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
+                }
+              } else {
+                await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
+              }
+              continue;
+            } else {
+              const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
+              throw new Error(`RunPod returned success but no output found. Payload preview: ${dump}...`);
+            }
+          } else {
+            let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
+
+            if (!outputs || outputs.length === 0) {
+              const fetchTarget = task.targetResultUrl;
+              const resultResponse = await fetch(fetchTarget, {
+                headers: { "Authorization": `Bearer ${wavespeedKey}` }
+              });
+              if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
+              const resultData = await resultResponse.json();
+              outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
+            }
+
+            if (outputs && outputs.length > 0) {
+              let finalImage = outputs[0];
+              if (typeof finalImage === 'object' && finalImage !== null) {
+                  finalImage = finalImage.url || finalImage.file?.url;
+              }
+              isCompleted = true;
+              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
+            } else {
+              throw new Error("Generation succeeded but no output URL was found.");
+            }
+          }
+        } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
+          throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
+        } else {
+          setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: `Status: ${currentStatus || 'Processing'}` } : t));
+        }
+      }
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setQueue(prev => prev.filter(t => t.id !== task.id));
+      setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
+    let displayUrl = finalDataUrl;
+
+    // Create a local blob specifically for rendering the active UI if it's base64
+    // (This prevents sluggish UI rendering for massive base64 strings)
+    if (finalDataUrl.startsWith('data:video')) {
+      try {
+        const blob = base64ToBlob(finalDataUrl, 'video/mp4');
+        displayUrl = URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn("Could not create blob URL for video", e);
+      }
+    } else if (finalDataUrl.startsWith('data:image')) {
+      try {
+        const blob = base64ToBlob(finalDataUrl, 'image/png');
+        displayUrl = URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn("Could not create blob URL for image", e);
+      }
+    }
+
+    // Save the PERMANENT URL (Firebase or Base64) to history, never the blob
+    const newItem: HistoryItem = { 
+      id: taskId, 
+      prompt: taskPrompt, 
+      url: finalDataUrl, 
+      date: new Date().toISOString(),
+      modelInfo: modelInfoStr 
+    };
+    
+    setHistory(prev => {
+      const merged = [newItem, ...prev];
+      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
+    });
+    
+    await saveHistoryItem(newItem);
+    await pruneHistoryDB(100);
+
+    setQueue(prev => prev.filter(t => t.id !== taskId));
+    
+    // Set the live UI to use the efficient Blob URL
+    setResultUrl(displayUrl);
+    setResultId(taskId);
+    
+    if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
+    if (runpodKey) fetchRunPodBalance(runpodKey);
+  };
+
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     try {
       let blobUrlToDownload = url;
       let blobToRevoke: string | null = null;
 
-      // Check if it's a Base64 history string or a Wavespeed web URL
       if (url.startsWith('data:')) {
         const blob = base64ToBlob(url);
         blobUrlToDownload = URL.createObjectURL(blob);
@@ -1574,7 +1415,6 @@ export default function App() {
     setSliderPosition(percentage);
   };
 
-  // Determine which balance to show based on the active tab mode
   const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
   const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
 
@@ -1589,7 +1429,6 @@ export default function App() {
         </div>
         <div className="flex items-center gap-4">
           
-          {/* Dynamic Dual Balance Display */}
           {displayBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
@@ -2504,7 +2343,7 @@ export default function App() {
                           }
                           
                           setSelectedHistoryItem(match || { 
-                            id: Date.now().toString(), 
+                            id: resultId || Date.now().toString(), 
                             prompt: prompt || 'Latest Output', 
                             url: resultUrl, 
                             date: new Date().toISOString(),
@@ -2515,9 +2354,23 @@ export default function App() {
                       >
                         {isVideoUrl(resultUrl) ? (
                             <video 
+                              key={resultUrl}
                               src={resultUrl} 
                               autoPlay loop muted playsInline controls
-                              className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                              className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                              onError={(e) => {
+                                console.error("Video playback error:", e);
+                                // Fallback: try creating blob URL
+                                if (resultUrl.startsWith('data:')) {
+                                  try {
+                                    const blob = base64ToBlob(resultUrl, 'video/mp4');
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    e.currentTarget.src = blobUrl;
+                                  } catch(err) {
+                                    console.error("Fallback blob creation failed", err);
+                                  }
+                                }
+                              }}
                             />
                         ) : (
                             <img 
@@ -2527,8 +2380,8 @@ export default function App() {
                             />
                         )}
                         
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300">
-                          <div className="bg-zinc-950/80 px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl backdrop-blur-sm">
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300 pointer-events-none">
+                          <div className="bg-zinc-950/80 px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl backdrop-blur-sm pointer-events-auto">
                             <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">
                               Click to Expand Data
                             </span>
@@ -2696,7 +2549,7 @@ export default function App() {
                                 <video 
                                   src={img.url} 
                                   autoPlay loop muted playsInline controls={isCenter}
-                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
                                 />
                             ) : (
                                 <img 
@@ -2796,7 +2649,7 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* DOWNLOAD MEDIA BUTTONS */}
+                              {/* DOWNLOAD MEDIA BUTTONS (Separated for clarity) */}
                               {isVideoUrl(img.url) ? (
                                 <button 
                                   onClick={(e) => handleDownload(img.url, img.prompt, e)} 
