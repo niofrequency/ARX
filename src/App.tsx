@@ -2695,25 +2695,14 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* DOWNLOAD MEDIA BUTTONS (Separated for clarity) */}
-                              {isVideoUrl(img.url) ? (
-                                <button 
-                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
-                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Download className="w-4 h-4" />
-                                  Download Video to PC
-                                </button>
-                              ) : (
-                                <button 
-                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
-                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Download className="w-4 h-4" />
-                                  Download Image to PC
-                                </button>
-                              )}
-
+ {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+<button
+  onClick={(e) => handleDownload(img.url, img.prompt, e)}
+  className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+>
+  <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+  Download
+</button>
                               {/* Actions for Images Only */}
                               {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                                 <>
