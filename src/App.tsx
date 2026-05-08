@@ -2915,7 +2915,7 @@ export default function App() {
                                       className="w-full py-4 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-purple-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                     >
                                       <Film className="w-4 h-4" />
-                                      Generate Motion (Video)
+                                      Neural Motion (1-Click Video)
                                     </button>
 
                                     {/* SEND TO ADVANCED VIDEO EDITOR TAB */}
