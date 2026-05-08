@@ -32,10 +32,12 @@ import {
   Film,
   Dices,
   Camera,
-  UserCircle
+  UserCircle,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadToFirebase } from './lib/firebase';
+import { generateRandomIdea } from './lib/grok';
 
 // --- Native IndexedDB Wrapper ---
 const DB_NAME = 'ARX_DB';
@@ -195,7 +197,6 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
   if (!url) return false;
-  // Firebase appends query parameters that break .endsWith('.mp4'), so we strip them for the check
   const cleanUrl = url.split('?')[0].toLowerCase();
   return cleanUrl.startsWith('data:video') || 
          cleanUrl.endsWith('.mp4') || 
@@ -220,7 +221,6 @@ const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Bl
   return new Blob(byteArrays, { type: contentType });
 };
 
-// --- CRITICAL FRONTEND FIX: Clean and pad Base64 for Python backend ---
 const cleanAndPadBase64 = (base64Str: string) => {
   let cleanStr = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
   while (cleanStr.length % 4 !== 0) {
@@ -230,7 +230,6 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 // --- AUTO LORA CONFIGURATION (Video Generator) ---
-// Add keywords and their corresponding LoRA paths/weights here.
 const AUTO_LORA_MAP: Record<string, any> = {
   "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
@@ -252,66 +251,6 @@ const AUTO_LORA_MAP: Record<string, any> = {
   "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
   "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
-
-// --- Grok Prompt Architect Logic ---
-const GROK_SYSTEM_INSTRUCTION = `You are an expert Cinematic Prompt Generator for AI Image and Video Editing.
-Your only job is to create highly detailed, consistent prompts for editing or animating an existing reference image.
-Every prompt MUST follow this exact structure:
-
-Always begin with exactly:
-the same subject from the image, same overall characteristics,
-
-Clothing & Setting Rules:
-- If the user mentions specific clothing, describe it in intricate detail.
-- If the user does NOT mention clothing at all, ALWAYS add: wearing the same clothing,
-- Emphasize cinematic lighting, atmospheric details, and realistic environments.
-
-After the identity part, strongly maximize the user's requested pose/action. Be extremely explicit and detailed in terms of physical positioning and motion.
-Describe: limb positions, hand placement, body angle, head tilt, facial expression, and interaction with the environment.
-
-Then add Camera Angle and Shot Type if provided.
-
-Always end with exactly this (no changes):
-, photorealistic RAW photo, 8k resolution, cinematic lighting, highly detailed, vivid textures
-
-Rules:
-- Output ONLY the finished prompt. No explanations, no extra text, no quotes.
-- Be extremely descriptive, structural, and precise.`;
-
-async function generateRandomIdea(
-  apiKey: string,
-  baseAction: string,
-  bodyType: string,
-  angle: string,
-  shotType: string
-): Promise<string> {
-  const userMessage = `Generate a structural prompt for this user request:
-Base Action/Pose/Scene: ${baseAction && baseAction.trim() !== '' ? baseAction : 'Randomizer choice (cinematic, dramatic)'}
-Body Type/Build: ${bodyType && bodyType !== 'Random' ? bodyType : 'Randomizer choice'}
-Camera Angle: ${angle && angle !== 'Random' ? angle : 'Randomizer choice'}
-Shot Type: ${shotType && shotType !== 'Random' ? shotType : 'Randomizer choice'}`;
-
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'grok-beta',
-      messages: [
-        { role: 'system', content: GROK_SYSTEM_INSTRUCTION },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.82,
-      max_tokens: 900
-    })
-  });
-
-  if (!response.ok) throw new Error(`Grok API Error: ${response.status} ${response.statusText}`);
-  const data = await response.json();
-  return data.choices[0].message.content.trim();
-}
 
 // --- Constants ---
 const BODY_TYPES = ['Random', 'Slim', 'Athletic', 'Average', 'Curvy', 'Muscular', 'Petite'];
@@ -464,28 +403,6 @@ export default function App() {
   
   // --- Touch Tracking for Carousel ---
   const touchStartX = useRef<number | null>(null);
-
-  // --- Parameter Configs ---
-  const horizontalOptions = [
-    { v: 0, l: '0° Front' }, { v: 45, l: '45° F-Right' }, { v: 90, l: '90° Right' }, { v: 135, l: '135° B-Right' },
-    { v: 180, l: '180° Back' }, { v: 225, l: '225° B-Left' }, { v: 270, l: '270° Left' }, { v: 315, l: '315° F-Left' }
-  ];
-  const verticalOptions = [
-    { v: -30, l: '-30° Low' }, { v: 0, l: '0° Eye' }, { v: 30, l: '30° Elev' }, { v: 60, l: '60° High' }
-  ];
-  const distanceOptions = [
-    { v: 0, l: 'Close' }, { v: 1, l: 'Medium' }, { v: 2, l: 'Wide' }
-  ];
-
-  const COMFY_SAMPLERS = [
-    "euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral",
-    "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu",
-    "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
-    "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"
-  ];
-  const COMFY_SCHEDULERS = [
-    "normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"
-  ];
 
   // --- Initialization & Cloud Sync ---
   useEffect(() => {
@@ -682,7 +599,7 @@ export default function App() {
 
   // --- GROK RANDOM PROMPT GENERATOR ---
   const handleRandomizePrompt = async () => {
-    if (!grokKey) {
+    if (!grokKey && !process.env.GROK_API_KEY) {
       setError('Please enter your Grok API Key in the settings first.');
       setShowSettings(true);
       return;
@@ -698,6 +615,13 @@ export default function App() {
       setError(err.message || 'Failed to generate prompt from Grok.');
     } finally {
       setIsRandomizing(false);
+    }
+  };
+
+  const enhancePrompt = () => {
+    const enhancer = " masterpiece, best quality, ultra-detailed, highly realistic, 8k resolution, intricate details, cinematic lighting";
+    if (!prompt.includes("masterpiece")) {
+      setPrompt(p => p ? p.trim() + "," + enhancer : enhancer.trim());
     }
   };
 
@@ -732,7 +656,6 @@ export default function App() {
           let width = img.width;
           let height = img.height;
 
-          // Calculate new dimensions while maintaining aspect ratio
           if (width > height) {
             if (width > maxSize) {
               height = Math.round((height * maxSize) / width);
@@ -751,10 +674,7 @@ export default function App() {
           if (!ctx) return reject(new Error('Failed to get canvas context'));
           
           ctx.drawImage(img, 0, 0, width, height);
-          
-          // Compress to JPEG with 0.85 quality
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          resolve(compressedDataUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
         img.onerror = (error) => reject(error);
       };
@@ -763,8 +683,6 @@ export default function App() {
   };
 
   const fileToBase64 = async (file: File): Promise<string> => {
-    // We try to optimize the image first to prevent API Payload crashes.
-    // If the file is smaller than 2MB, we can just pass it through directly to preserve exact bytes.
     if (file.size < 2 * 1024 * 1024) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -773,7 +691,6 @@ export default function App() {
         reader.onerror = (error) => reject(error);
       });
     } else {
-      // If it's a large file, compress it down to prevent HTTP 413 Payload Too Large
       return optimizeImageForUpload(file);
     }
   };
@@ -974,7 +891,6 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An unexpected error occurred.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1123,6 +1039,8 @@ export default function App() {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
       setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1138,7 +1056,7 @@ export default function App() {
     setHistory(prev => {
       const merged = [newItem, ...prev];
       const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000); // 10,000 max history items allowed
+      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000); 
     });
     
     await saveHistoryItem(newItem);
@@ -1552,11 +1470,8 @@ export default function App() {
   };
 
   const triggerWavespeed = async (base64Image: string) => {
-    // Sanitize base64 here as well just to be safe
-    const safeBase64 = cleanAndPadBase64(base64Image);
-    
     const payload: any = { 
-        images: [safeBase64], 
+        images: [base64Image], 
         prompt: prompt, 
         seed: -1
     };
@@ -1617,12 +1532,23 @@ export default function App() {
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+      let blobUrlToDownload = url;
+      let blobToRevoke: string | null = null;
+
+      // Check if it's a Base64 history string or a Wavespeed web URL
+      if (url.startsWith('data:')) {
+        const blob = base64ToBlob(url);
+        blobUrlToDownload = URL.createObjectURL(blob);
+        blobToRevoke = blobUrlToDownload;
+      } else if (url.startsWith('http')) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        blobUrlToDownload = URL.createObjectURL(blob);
+        blobToRevoke = blobUrlToDownload;
+      }
       
       const a = document.createElement('a');
-      a.href = blobUrl;
+      a.href = blobUrlToDownload;
       
       const cleanPrompt = promptText.substring(0, 20).replace(/[^a-z0-9]/gi, '_');
       const isVid = isVideoUrl(url);
@@ -1632,7 +1558,9 @@ export default function App() {
       a.click();
       document.body.removeChild(a);
       
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+      if (blobToRevoke) {
+          setTimeout(() => URL.revokeObjectURL(blobToRevoke!), 1000);
+      }
     } catch (err) {
       window.open(url, '_blank');
     }
@@ -1765,7 +1693,7 @@ export default function App() {
             
             <div className="h-[200px]">
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for ComfyUI Node' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -1948,7 +1876,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="relative">
                     <textarea 
                       value={prompt} 
@@ -2002,7 +1930,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      RunPod
+                      RunPod Endpoint
                     </label>
                     <div className="flex items-center gap-3">
                       <button
@@ -2076,11 +2004,20 @@ export default function App() {
                     <textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)} 
-                      placeholder="Be specific: 'Change the man's black shirt to a red shirt'..." 
+                      placeholder="Enter a base position (e.g., 'doggy') or leave blank for a totally random prompt..." 
                       className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      Positive Prompt
+                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                      <button 
+                        onClick={enhancePrompt}
+                        className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
+                        title="Magic Prompt Enhancer"
+                      >
+                        <Wand2 className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                        Positive Prompt
+                      </div>
                     </div>
                   </div>
 
@@ -2378,8 +2315,17 @@ export default function App() {
                       placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')...." 
                       className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
                     />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
+                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                      <button 
+                        onClick={enhancePrompt}
+                        className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
+                        title="Magic Prompt Enhancer"
+                      >
+                        <Wand2 className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                        {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2430,7 +2376,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod' : task.mode === 'video' ? 'Video' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod Serverless' : task.mode === 'video' ? 'Video' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -2546,7 +2492,7 @@ export default function App() {
                       <div 
                         className="relative w-full h-full cursor-pointer group/result" 
                         onClick={() => {
-                          const match = history.find(h => h.url === resultUrl);
+                          const match = history.find(h => h.id === resultId) || history.find(h => h.url === resultUrl);
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
@@ -2608,7 +2554,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* History Grid (Restored to original static grid layout) */}
+      {/* History Grid */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-16 border-t border-zinc-800/50 pb-12">
           <div className="flex items-center justify-between mb-8">
@@ -2850,7 +2796,7 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* DOWNLOAD MEDIA BUTTONS (Separated for clarity) */}
+                              {/* DOWNLOAD MEDIA BUTTONS */}
                               {isVideoUrl(img.url) ? (
                                 <button 
                                   onClick={(e) => handleDownload(img.url, img.prompt, e)} 
