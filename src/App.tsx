@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { uploadToFirebase } from './lib/firebase';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, 
