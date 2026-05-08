@@ -224,21 +224,28 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 // --- AUTO LORA CONFIGURATION (Video Generator) ---
-// Add keywords and their corresponding LoRA paths/weights here.
+// Formatted to comply with your handler.py requirements (high, low, high_weight, low_weight)
 const AUTO_LORA_MAP: Record<string, any> = {
-  "walking": {
-    high: "walking_high.safetensors",
-    low: "walking_low.safetensors",
-    high_weight: 1.0,
-    low_weight: 1.0
-  },
-  "running": {
-    high: "running_high.safetensors",
-    low: "running_low.safetensors",
-    high_weight: 1.0,
-    low_weight: 1.0
-  },
-  // "dancing": { high: "dancing_high.safetensors", low: "dancing_low.safetensors", ... }
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum on your tongue": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "drooling cum from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum drooling": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "shaking your ass": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  // Basic movement placeholders
+  "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
+  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
 
 // --- Grok Prompt Architect Logic ---
@@ -1123,14 +1130,22 @@ export default function App() {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
 
-    // 2. Auto-detect LoRAs from prompt
-    const autoLoras: any[] = [];
+    // 2. Auto-detect LoRAs from prompt (Uses longest match first logic)
+    const autoLorasMap = new Map();
     const lowerPrompt = (prompt || "").toLowerCase();
-    Object.entries(AUTO_LORA_MAP).forEach(([keyword, loraConfig]) => {
-        if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerPrompt)) {
-            autoLoras.push(loraConfig);
+    
+    const sortedTriggers = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+
+    for (const trigger of sortedTriggers) {
+        if (lowerPrompt.includes(trigger)) {
+            const config = AUTO_LORA_MAP[trigger];
+            // Keying by high name to prevent duplicate LoRAs if multiple triggers map to the same file
+            autoLorasMap.set(config.high, config);
         }
-    });
+    }
+    
+    // Your handler.py safely supports up to 4 LoRA pairs, so we slice just in case
+    const finalAutoLoras = Array.from(autoLorasMap.values()).slice(0, 4);
 
     const payload = {
       input: {
@@ -1143,7 +1158,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: autoLoras // Inject detected LoRAs into payload!
+        lora_pairs: finalAutoLoras // Injects automatically mapped {high, low, high_weight, low_weight} array
       }
     };
 
@@ -1163,8 +1178,8 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
 
     let usedModelInfo = 'Wan 2.2 Img2Vid';
-    if (autoLoras.length > 0) {
-      usedModelInfo += ` + AutoLoRAs (${autoLoras.length})`;
+    if (finalAutoLoras.length > 0) {
+      usedModelInfo += ` + AutoLoRAs (${finalAutoLoras.length})`;
     }
 
     return {
