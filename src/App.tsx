@@ -2810,48 +2810,63 @@ export default function App() {
                               </p>
                             </div>
                             
-                            {/* Actions for Images Only */}
-                            {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
-                              <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                            <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                                 
-                                {/* NEW: USE IMAGE IN VIDEO BUTTON */}
+                                {/* NEW: DOWNLOAD BUTTON (Works for both Videos and Images) */}
                                 <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation();
-                                    handleAnimateFromHistory(img.url);
-                                  }} 
-                                  className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Film className="w-4 h-4" />
-                                  Use Image in Video
-                                </button>
-
-                                <button 
-                                  onClick={() => { 
-                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                    setPrompt(cleanPrompt); 
-                                    setSelectedHistoryItem(null); 
-                                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                                  }} 
+                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
-                                  <Sparkles className="w-4 h-4" />
-                                  Use This Prompt
+                                  <Download className="w-4 h-4" />
+                                  Download {isVideoUrl(img.url) ? 'Video' : 'Image'} to PC
                                 </button>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation();
-                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                    setPromptToSave(cleanPrompt);
-                                    setShowSavePrompt(true);
-                                  }} 
-                                  className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <BookmarkPlus className="w-4 h-4" />
-                                  Save Prompt
-                                </button>
-                              </div>
-                            )}
+
+                                {/* NEW: SAVE PROMPT (Works for both Videos and Images) */}
+                                {!img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPromptToSave(cleanPrompt);
+                                      setShowSavePrompt(true);
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                    Save Prompt
+                                  </button>
+                                )}
+
+                                {/* Actions for Images Only */}
+                                {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                  <>
+                                    {/* USE IMAGE IN VIDEO BUTTON */}
+                                    <button 
+                                      onClick={(e) => { 
+                                        e.stopPropagation();
+                                        handleAnimateFromHistory(img.url);
+                                      }} 
+                                      className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                    >
+                                      <Film className="w-4 h-4" />
+                                      Use Image in Video
+                                    </button>
+
+                                    <button 
+                                      onClick={() => { 
+                                        const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                        setPrompt(cleanPrompt); 
+                                        setSelectedHistoryItem(null); 
+                                        window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                      }} 
+                                      className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                    >
+                                      <Sparkles className="w-4 h-4" />
+                                      Use This Prompt
+                                    </button>
+                                  </>
+                                )}
+                            </div>
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
                               <span className="sm:hidden">Double tap to view media</span>
