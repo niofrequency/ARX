@@ -32,8 +32,7 @@ import {
   Film,
   Dices,
   Camera,
-  UserCircle,
-  Wand2
+  UserCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadToFirebase } from './lib/firebase';
@@ -225,28 +224,21 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 // --- AUTO LORA CONFIGURATION (Video Generator) ---
-// Formatted to comply with your handler.py requirements (high, low, high_weight, low_weight)
+// Add keywords and their corresponding LoRA paths/weights here.
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum on your tongue": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum dripping from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "drooling cum from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cum drooling": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "shaking your ass": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  // Basic movement placeholders
-  "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
-  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
+  "walking": {
+    high: "walking_high.safetensors",
+    low: "walking_low.safetensors",
+    high_weight: 1.0,
+    low_weight: 1.0
+  },
+  "running": {
+    high: "running_high.safetensors",
+    low: "running_low.safetensors",
+    high_weight: 1.0,
+    low_weight: 1.0
+  },
+  // "dancing": { high: "dancing_high.safetensors", low: "dancing_low.safetensors", ... }
 };
 
 // --- Grok Prompt Architect Logic ---
@@ -385,7 +377,7 @@ export default function App() {
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
   const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
-  const [videoEndpointId, setVideoEndpointId] = useState<string>('uwvb8igtwkdrs2');
+  const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
   const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
@@ -489,7 +481,7 @@ export default function App() {
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
     const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
-    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || 'uwvb8igtwkdrs2';
+    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
@@ -774,53 +766,7 @@ export default function App() {
     }
   };
 
-  // --- ONE-CLICK: Instant Quick Animate (Generates motion directly from history image) ---
-  const handleQuickAnimate = async (item: HistoryItem) => {
-    setSelectedHistoryItem(null);
-    setIsFlipped(false);
-    
-    if (!runpodKey || !videoEndpointId) {
-      setError('Please enter your RunPod API Key and Video Endpoint ID in settings to generate motion.');
-      setShowSettings(true);
-      return;
-    }
-
-    setIsSubmitting(true);
-    
-    try {
-      const response = await fetch(item.url);
-      const blob = await response.blob();
-      const file = new File([blob], "quick_animate.png", { type: blob.type });
-      const base64ImageRaw = await fileToBase64(file);
-      
-      const triggerResult = await triggerRunPodVideo(base64ImageRaw, item.prompt);
-      
-      const newTask: QueueTask = {
-        id: triggerResult.id,
-        mode: 'video',
-        prompt: triggerResult.historyPrompt,
-        progress: 15,
-        message: 'Synthesizing Neural Motion...',
-        pollUrl: triggerResult.pollUrl,
-        targetResultUrl: triggerResult.targetResultUrl,
-        modelInfo: triggerResult.modelInfo
-      };
-      
-      setQueue(prev => [...prev, newTask]);
-      pollBackground(newTask);
-      
-      if (window.innerWidth < 1024 && resultRef.current) {
-        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    } catch (e: any) {
-      console.error(e);
-      setError("Neural Motion Failed: " + (e.message || "Network Error"));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // --- Send to Video Tab (Advanced Edit) ---
+  // --- NEW FEATURE: Send History Image to Video UI ---
   const handleAnimateFromHistory = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -990,7 +936,7 @@ export default function App() {
         triggerResult = await triggerWavespeedAngles(selectedFile);
       } else if (mode === 'video') {
         const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPodVideo(base64ImageRaw, prompt);
+        triggerResult = await triggerRunPodVideo(base64ImageRaw);
       } else if (mode === 'runpod') {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerRunPod(base64ImageRaw);
@@ -1173,32 +1119,22 @@ export default function App() {
     if (runpodKey) fetchRunPodBalance(runpodKey);
   };
 
-  const triggerRunPodVideo = async (base64Image: string, customPrompt?: string) => {
+  const triggerRunPodVideo = async (base64Image: string) => {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
-    
-    const activePrompt = customPrompt || prompt || "video scene";
 
-    // 2. Auto-detect LoRAs from prompt (Uses longest match first logic)
-    const autoLorasMap = new Map();
-    const lowerPrompt = activePrompt.toLowerCase();
-    
-    const sortedTriggers = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
-
-    for (const trigger of sortedTriggers) {
-        if (lowerPrompt.includes(trigger)) {
-            const config = AUTO_LORA_MAP[trigger];
-            // Keying by high name to prevent duplicate LoRAs if multiple triggers map to the same file
-            autoLorasMap.set(config.high, config);
+    // 2. Auto-detect LoRAs from prompt
+    const autoLoras: any[] = [];
+    const lowerPrompt = (prompt || "").toLowerCase();
+    Object.entries(AUTO_LORA_MAP).forEach(([keyword, loraConfig]) => {
+        if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerPrompt)) {
+            autoLoras.push(loraConfig);
         }
-    }
-    
-    // Your handler.py safely supports up to 4 LoRA pairs, so we slice just in case
-    const finalAutoLoras = Array.from(autoLorasMap.values()).slice(0, 4);
+    });
 
     const payload = {
       input: {
-        prompt: activePrompt,
+        prompt: prompt || "video scene",
         negative_prompt: negativePrompt,
         image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
@@ -1207,7 +1143,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras // Injects automatically mapped {high, low, high_weight, low_weight} array
+        lora_pairs: autoLoras // Inject detected LoRAs into payload!
       }
     };
 
@@ -1227,15 +1163,15 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
 
     let usedModelInfo = 'Wan 2.2 Img2Vid';
-    if (finalAutoLoras.length > 0) {
-      usedModelInfo += ` + AutoLoRAs (${finalAutoLoras.length})`;
+    if (autoLoras.length > 0) {
+      usedModelInfo += ` + AutoLoRAs (${autoLoras.length})`;
     }
 
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `Video: ${activePrompt}`,
+      historyPrompt: `Video: ${prompt}`,
       modelInfo: usedModelInfo
     };
   };
@@ -2619,7 +2555,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* History Grid */}
+      {/* History Grid (Restored to original static grid layout) */}
       {history.length > 0 && (
         <section className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-16 border-t border-zinc-800/50 pb-12">
           <div className="flex items-center justify-between mb-8">
@@ -2667,24 +2603,9 @@ export default function App() {
                    />
                 )}
                 
-                {/* 1-CLICK MOTION HOVER OVERLAY (For Images Only) */}
-                {!isVideoUrl(item.url) && (
-                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center pointer-events-none">
-                      <button
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           handleQuickAnimate(item);
-                         }}
-                         className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white rounded-full font-bold text-[9px] uppercase tracking-widest shadow-xl transition-transform active:scale-95"
-                      >
-                         <Wand2 className="w-3.5 h-3.5" /> Generate Motion
-                      </button>
-                   </div>
-                )}
-
                 <button 
                   onClick={(e) => handleDeleteHistory(item.id, e)} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20 z-10"
+                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -2874,78 +2795,48 @@ export default function App() {
                               </p>
                             </div>
                             
-                            <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                            {/* Actions for Images Only */}
+                            {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                              <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                                 
-                                {/* NEW: DOWNLOAD BUTTON (Works ONLY for Videos) */}
-                                {isVideoUrl(img.url) && (
-                                  <button 
-                                    onClick={(e) => handleDownload(img.url, img.prompt, e)} 
-                                    className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                    Download Video to PC
-                                  </button>
-                                )}
+                                {/* NEW: USE IMAGE IN VIDEO BUTTON */}
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation();
+                                    handleAnimateFromHistory(img.url);
+                                  }} 
+                                  className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <Film className="w-4 h-4" />
+                                  Use Image in Video
+                                </button>
 
-                                {/* NEW: SAVE PROMPT (Works for both Videos and Images) */}
-                                {!img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
-                                  <button 
-                                    onClick={(e) => { 
-                                      e.stopPropagation();
-                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                      setPromptToSave(cleanPrompt);
-                                      setShowSavePrompt(true);
-                                    }} 
-                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                  >
-                                    <BookmarkPlus className="w-4 h-4" />
-                                    Save Prompt
-                                  </button>
-                                )}
-
-                                {/* Actions for Images Only */}
-                                {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
-                                  <>
-                                    {/* 1-CLICK QUICK ANIMATE */}
-                                    <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation();
-                                        handleQuickAnimate(img);
-                                      }} 
-                                      className="w-full py-4 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-purple-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                    >
-                                      <Film className="w-4 h-4" />
-                                      Neural Motion (1-Click Video)
-                                    </button>
-
-                                    {/* SEND TO ADVANCED VIDEO EDITOR TAB */}
-                                    <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation();
-                                        handleAnimateFromHistory(img.url);
-                                      }} 
-                                      className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                    >
-                                      <Settings2 className="w-4 h-4" />
-                                      Send to Video Editor
-                                    </button>
-
-                                    {/* USE PROMPT IN EDITOR */}
-                                    <button 
-                                      onClick={() => { 
-                                        const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                        setPrompt(cleanPrompt); 
-                                        setSelectedHistoryItem(null); 
-                                        window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                                      }} 
-                                      className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                    >
-                                      <Sparkles className="w-4 h-4" />
-                                      Use This Prompt
-                                    </button>
-                                  </>
-                                )}
-                            </div>
+                                <button 
+                                  onClick={() => { 
+                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                    setPrompt(cleanPrompt); 
+                                    setSelectedHistoryItem(null); 
+                                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                  }} 
+                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <Sparkles className="w-4 h-4" />
+                                  Use This Prompt
+                                </button>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation();
+                                    const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                    setPromptToSave(cleanPrompt);
+                                    setShowSavePrompt(true);
+                                  }} 
+                                  className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <BookmarkPlus className="w-4 h-4" />
+                                  Save Prompt
+                                </button>
+                              </div>
+                            )}
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
                               <span className="sm:hidden">Double tap to view media</span>
@@ -3048,7 +2939,7 @@ export default function App() {
                       type="text" 
                       value={videoEndpointId} 
                       onChange={(e) => setVideoEndpointId(e.target.value)} 
-                      placeholder="e.g. uwvb8igtwkdrs2"
+                      placeholder="e.g. 7h6lpbp8ebiw6q"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
