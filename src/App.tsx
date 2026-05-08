@@ -242,7 +242,6 @@ const AUTO_LORA_MAP: Record<string, any> = {
   "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  // Basic movement placeholders
   "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
   "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
@@ -1128,23 +1127,29 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string) => {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
-    
+
     const activePrompt = prompt || "video scene";
 
-    // 2. Auto-detect LoRAs from prompt (Uses longest match first logic)
-    const autoLorasMap = new Map();
+    // 2. Auto-detect LoRAs from prompt (PROVEN WORKING LOGIC + your new rich map)
+    const autoLoras: any[] = [];
     const lowerPrompt = activePrompt.toLowerCase();
-    
-    const sortedTriggers = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
-    for (const trigger of sortedTriggers) {
-        if (lowerPrompt.includes(trigger)) {
-            const config = AUTO_LORA_MAP[trigger];
-            autoLorasMap.set(config.high, config);
+    // Use the exact same detection style as the working version (word boundary + longest first)
+    const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+
+    for (const keyword of sortedKeywords) {
+      // Word boundary regex is safer and matches what the working code used
+      if (new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lowerPrompt)) {
+        const config = AUTO_LORA_MAP[keyword];
+        // Avoid duplicates (same high lora)
+        if (!autoLoras.some(l => l.high === config.high)) {
+          autoLoras.push(config);
         }
+      }
     }
-    
-    const finalAutoLoras = Array.from(autoLorasMap.values()).slice(0, 4);
+
+    // Limit to max 4 LoRAs (prevents backend overload)
+    const finalAutoLoras = autoLoras.slice(0, 4);
 
     const payload = {
       input: {
@@ -1157,7 +1162,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras
+        lora_pairs: finalAutoLoras   // ← this is what the backend expects
       }
     };
 
@@ -2826,7 +2831,7 @@ export default function App() {
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download
+                                  Download Image to PC
                                 </button>
                               )}
 
