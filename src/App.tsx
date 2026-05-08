@@ -161,7 +161,7 @@ const RUNPOD_MODELS = [
 ];
 
 const LORA_OPTIONS = [
-  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
+  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hairypussy.safetensors", name: "HRYPSY" }, { id: "hmfemme_qwen.safetensors", name: "HMFEM" },
   { id: "qwen4play.safetensors", name: "QWEN4PLAY" }, { id: "FemNde.safetensors", name: "FEMNUDE" },
   { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" }, { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
   { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" }, { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
@@ -263,8 +263,7 @@ const AUTO_LORA_MAP: Record<string, any> = {
     low: "twerk.safetensors", 
     high_weight: 0.85, 
     low_weight: 0.8 
-  },
-  // You can add more from your list later
+  }
 };
 
 export default function App() {
@@ -727,12 +726,12 @@ export default function App() {
     setActiveLoras(prev => prev.filter(l => l.id !== id));
   };
 
-  const extractBase64 = (obj: any): string | null => {
+  const extractBase64 = (obj: any, isVideo: boolean = false): string | null => {
     if (typeof obj === 'string') {
       if (obj.startsWith('data:video') || obj.startsWith('http')) return obj;
       if (obj.startsWith('data:image')) return obj;
       if (obj.length > 2000) {
-        return `data:video/mp4;base64,${obj}`;
+        return isVideo ? `data:video/mp4;base64,${obj}` : `data:image/png;base64,${obj}`;
       }
       return null;
     }
@@ -756,100 +755,100 @@ export default function App() {
           : null;
       }
       for (const key in obj) {
-        const res = extractBase64(obj[key]);
+        const res = extractBase64(obj[key], isVideo);
         if (res) return res;
       }
     }
     return null;
   };
 
-const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
-  let safeBase64 = cleanAndPadBase64(base64Image);
+  const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
+    let safeBase64 = cleanAndPadBase64(base64Image);
 
-  // Aggressive compression for large images
-  if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
-    const compressed = await optimizeImageForUpload(selectedFile, 768);
-    safeBase64 = cleanAndPadBase64(compressed);
-  }
+    // Aggressive compression for large images
+    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
+      const compressed = await optimizeImageForUpload(selectedFile, 768);
+      safeBase64 = cleanAndPadBase64(compressed);
+    }
 
-  // Generalized default prompt with good Wan 2.2 enhancers
-  let activePrompt = prompt.trim();
-  if (!activePrompt) {
-    activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
-  }
+    // Generalized default prompt with good Wan 2.2 enhancers
+    let activePrompt = prompt.trim();
+    if (!activePrompt) {
+      activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
+    }
 
-  const lowerPrompt = activePrompt.toLowerCase();
+    const lowerPrompt = activePrompt.toLowerCase();
 
-  const autoLoras: any[] = [];
-  const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+    const autoLoras: any[] = [];
+    const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
-  for (const keyword of sortedKeywords) {
-    const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    if (regex.test(lowerPrompt)) {
-      const config = AUTO_LORA_MAP[keyword];
-      if (!autoLoras.some(l => l.high === config.high)) {
-        autoLoras.push(config);
+    for (const keyword of sortedKeywords) {
+      const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (regex.test(lowerPrompt)) {
+        const config = AUTO_LORA_MAP[keyword];
+        if (!autoLoras.some(l => l.high === config.high)) {
+          autoLoras.push(config);
+        }
       }
     }
-  }
 
-  const finalAutoLoras = autoLoras.slice(0, 2);
-  
-  console.log("📤 Sending to RunPod Video:", {
-    prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-    loraCount: finalAutoLoras.length,
-    loras: finalAutoLoras.map(l => l.high)
-  });
-
-  const payload = {
-    input: {
-      prompt: activePrompt,
-      negative_prompt: negativePrompt || "blurry, low quality, deformed, ugly, static, frozen, jitter, artifacts",
-      image_base64: safeBase64,
-      seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
-      cfg: videoCfg,
-      width: videoWidth,
-      height: videoHeight,
-      length: videoLength,
-      steps: videoSteps,
-      lora_pairs: finalAutoLoras
-    }
-  };
-
-  try {
-    const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${runpodKey}`
-      },
-      body: JSON.stringify(payload)
+    const finalAutoLoras = autoLoras.slice(0, 2);
+    
+    console.log("📤 Sending to RunPod Video:", {
+      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
+      loraCount: finalAutoLoras.length,
+      loras: finalAutoLoras.map(l => l.high)
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("🚨 RunPod Error Response:", errorText);
-      
-      if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
-        console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
-        await new Promise(r => setTimeout(r, 5000));
-        return triggerRunPodVideo(base64Image, retryCount + 1);
+    const payload = {
+      input: {
+        prompt: activePrompt,
+        negative_prompt: negativePrompt || "blurry, low quality, deformed, ugly, static, frozen, jitter, artifacts",
+        image_base64: safeBase64,
+        seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
+        cfg: videoCfg,
+        width: videoWidth,
+        height: videoHeight,
+        length: videoLength,
+        steps: videoSteps,
+        lora_pairs: finalAutoLoras
       }
-      throw new Error(`RunPod rejected request: ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-    return {
-      id: data.id,
-      pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
-      historyPrompt: activePrompt,
-      modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2'
     };
-  } catch (err: any) {
-    console.error("Video trigger failed:", err);
-    throw err;
-  }
-};
+
+    try {
+      const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${runpodKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("🚨 RunPod Error Response:", errorText);
+        
+        if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
+          console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
+          await new Promise(r => setTimeout(r, 5000));
+          return triggerRunPodVideo(base64Image, retryCount + 1);
+        }
+        throw new Error(`RunPod rejected request: ${errorText.substring(0, 200)}`);
+      }
+
+      const data = await response.json();
+      return {
+        id: data.id,
+        pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
+        historyPrompt: activePrompt,
+        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2'
+      };
+    } catch (err: any) {
+      console.error("Video trigger failed:", err);
+      throw err;
+    }
+  };
 
   const triggerRunPod = async (base64Image: string) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
@@ -1303,7 +1302,7 @@ const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
           if (task.mode === 'runpod' || task.mode === 'video') {
-            let finalOutput = extractBase64(pollData.output || pollData) || '';
+            let finalOutput = extractBase64(pollData.output || pollData, task.mode === 'video') || '';
 
             if (finalOutput) {
               isCompleted = true;
@@ -2703,7 +2702,7 @@ const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download Video
+                                  Download Video to PC
                                 </button>
                               ) : (
                                 <button 
@@ -2711,7 +2710,7 @@ const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download Image
+                                  Download Image to PC
                                 </button>
                               )}
 
