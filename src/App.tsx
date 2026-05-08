@@ -216,16 +216,25 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "cum dripping": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.8 },
-  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
-  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
-  "pussy": { high: "pussy.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "spreading her legs": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum on your tongue": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "drooling cum from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum drooling": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "shaking your ass": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
+  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
 
 export default function App() {
@@ -724,9 +733,8 @@ export default function App() {
     return null;
   };
 
-  const triggerRunPodVideo = async (base64Image: string) => {
+  const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
     let safeBase64 = cleanAndPadBase64(base64Image);
-    // Strong mobile compression
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
@@ -735,22 +743,19 @@ export default function App() {
     const autoLoras: any[] = [];
     const lowerPrompt = activePrompt.toLowerCase();
     const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+    
     for (const keyword of sortedKeywords) {
       if (new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lowerPrompt)) {
         const config = AUTO_LORA_MAP[keyword];
-        // Strict deduplication
         if (!autoLoras.some(l => l.high === config.high)) {
-          autoLoras.push({
-            high: config.high,
-            low: config.low,
-            high_weight: config.high_weight || 0.85,
-            low_weight: config.low_weight || 0.85
-          });
+          autoLoras.push(config);
         }
       }
     }
-    const finalAutoLoras = autoLoras.slice(0, 2); // Max 2 for stability
-    console.log("📤 Sending LoRAs:", finalAutoLoras); // ← Helpful for debugging
+    
+    const finalAutoLoras = autoLoras.slice(0, 2);
+    console.log("📤 Sending LoRAs:", finalAutoLoras);
+    
     const payload = {
       input: {
         prompt: activePrompt,
@@ -762,32 +767,48 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras   // Must be clean array
+        lora_pairs: finalAutoLoras
       }
     };
-    const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${runpodKey}`
-      },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      const errorData = await response.text(); // Get raw response for better debug
-      console.error("🚨 RunPod Raw Error:", errorData);
-      throw new Error(`RunPod Error: ${errorData.substring(0, 300)}`);
+    
+    try {
+      const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${runpodKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("🚨 RunPod Raw Error:", errorText);
+        
+        if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection refused"))) {
+          console.log(`🔄 Retrying... (${retryCount + 1}/3)`);
+          await new Promise(r => setTimeout(r, 4000));
+          return triggerRunPodVideo(base64Image, retryCount + 1);
+        }
+        
+        throw new Error(`RunPod Error: ${errorText.substring(0, 300)}`);
+      }
+      
+      const data = await response.json();
+      const id = data.id;
+      if (!id) throw new Error('Missing Job ID');
+      
+      return {
+        id,
+        pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
+        targetResultUrl: '',
+        historyPrompt: `Video: ${activePrompt}`,
+        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRA` : 'Wan 2.2 Img2Vid'
+      };
+    } catch (err) {
+      console.error(err);
+      throw err;
     }
-    const data = await response.json();
-    const id = data.id;
-    if (!id) throw new Error('Missing Job ID from RunPod');
-    return {
-      id,
-      pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
-      targetResultUrl: '',
-      historyPrompt: `Video: ${activePrompt}`,
-      modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRA` : 'Wan 2.2 Img2Vid'
-    };
   };
 
   const triggerRunPod = async (base64Image: string) => {
@@ -2950,7 +2971,7 @@ export default function App() {
                     </div>
                   ))
                 )}
-              </div> 
+              </div>
             </motion.div>
           </>
         )}
