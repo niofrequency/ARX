@@ -735,35 +735,35 @@ export default function App() {
 
   const triggerRunPodVideo = async (base64Image: string) => {
     let safeBase64 = cleanAndPadBase64(base64Image);
-
-    // Much more aggressive compression for mobile
+    // Strong mobile compression
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
-      console.log("🔄 Heavy compression for mobile...");
-      const compressed = await optimizeImageForUpload(selectedFile, 768); // smaller for mobile/video
+      const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
     }
-
     const activePrompt = prompt || "video scene";
-
     const autoLoras: any[] = [];
     const lowerPrompt = activePrompt.toLowerCase();
     const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
-
     for (const keyword of sortedKeywords) {
       if (new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lowerPrompt)) {
         const config = AUTO_LORA_MAP[keyword];
+        // Strict deduplication
         if (!autoLoras.some(l => l.high === config.high)) {
-          autoLoras.push(config);
+          autoLoras.push({
+            high: config.high,
+            low: config.low,
+            high_weight: config.high_weight || 0.85,
+            low_weight: config.low_weight || 0.85
+          });
         }
       }
     }
-
-    const finalAutoLoras = autoLoras.slice(0, 4);
-
+    const finalAutoLoras = autoLoras.slice(0, 2); // Max 2 for stability
+    console.log("📤 Sending LoRAs:", finalAutoLoras); // ← Helpful for debugging
     const payload = {
       input: {
         prompt: activePrompt,
-        negative_prompt: negativePrompt,
+        negative_prompt: negativePrompt || "",
         image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
         cfg: videoCfg,
@@ -771,10 +771,9 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras
+        lora_pairs: finalAutoLoras   // Must be clean array
       }
     };
-
     const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
       method: 'POST',
       headers: {
@@ -783,24 +782,20 @@ export default function App() {
       },
       body: JSON.stringify(payload)
     });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(`RunPod API Error: ${data.error?.message || data.error || 'Request Failed'}`);
-
-    const id = data.id;
-    if (!id) throw new Error('RunPod API Error: Missing Job ID');
-
-    let usedModelInfo = 'Wan 2.2 Img2Vid';
-    if (finalAutoLoras.length > 0) {
-      usedModelInfo += ` + AutoLoRAs (${finalAutoLoras.length})`;
+    if (!response.ok) {
+      const errorData = await response.text(); // Get raw response for better debug
+      console.error("🚨 RunPod Raw Error:", errorData);
+      throw new Error(`RunPod Error: ${errorData.substring(0, 300)}`);
     }
-
+    const data = await response.json();
+    const id = data.id;
+    if (!id) throw new Error('Missing Job ID from RunPod');
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
       targetResultUrl: '',
       historyPrompt: `Video: ${activePrompt}`,
-      modelInfo: usedModelInfo
+      modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRA` : 'Wan 2.2 Img2Vid'
     };
   };
 
@@ -2335,7 +2330,7 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                             dynamicModelInfo = 'Wan 2.2 Video';
+                              dynamicModelInfo = 'Wan 2.2 Video';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
