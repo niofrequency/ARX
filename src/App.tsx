@@ -2826,7 +2826,7 @@ export default function App() {
                                   className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" />
-                                  Download Image to PC
+                                  Download
                                 </button>
                               )}
 
