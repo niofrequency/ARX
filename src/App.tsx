@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { uploadToFirebase } from './lib/firebase';
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, 
@@ -35,6 +35,7 @@ import {
   UserCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { uploadToFirebase } from './lib/firebase';
 
 // --- Native IndexedDB Wrapper ---
 const DB_NAME = 'ARX_DB';
@@ -197,6 +198,36 @@ const isVideoUrl = (url?: string | null) => {
   return url.startsWith('data:video') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov');
 };
 
+const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Blob => {
+  const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const byteCharacters = atob(base64String);
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+};
+
+// --- CRITICAL FRONTEND FIX: Clean and pad Base64 for Python backend ---
+const cleanAndPadBase64 = (base64Str: string) => {
+  // 1. Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
+  let cleanStr = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+  
+  // 2. Pad the string with '=' until its length is a multiple of 4
+  // This prevents the "binascii.Error: Incorrect padding" crash in Python
+  while (cleanStr.length % 4 !== 0) {
+    cleanStr += '=';
+  }
+  
+  return cleanStr;
+};
+
 // --- Grok Prompt Architect Logic ---
 const GROK_SYSTEM_INSTRUCTION = `You are an expert Cinematic Prompt Generator for AI Image and Video Editing.
 Your only job is to create highly detailed, consistent prompts for editing or animating an existing reference image.
@@ -242,7 +273,7 @@ Shot Type: ${shotType && shotType !== 'Random' ? shotType : 'Randomizer choice'}
       'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: 'grok-beta', // Using generic Grok beta for prompt architecture
+      model: 'grok-beta',
       messages: [
         { role: 'system', content: GROK_SYSTEM_INSTRUCTION },
         { role: 'user', content: userMessage }
@@ -971,7 +1002,23 @@ export default function App() {
 
             if (finalOutput) {
               isCompleted = true;
-              await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
+
+              // Upload to Firebase if it's a base64 string
+              if (finalOutput.startsWith('data:')) {
+                setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: 'Uploading to Firebase...' } : t));
+                const isVid = isVideoUrl(finalOutput);
+                const fileBlob = base64ToBlob(finalOutput, isVid ? 'video/mp4' : 'image/png');
+                const fileExt = isVid ? 'mp4' : 'png';
+                try {
+                  const firebaseUrl = await uploadToFirebase(fileBlob, `outputs/${task.id}.${fileExt}`);
+                  await handleFinalSuccess(firebaseUrl, task.id, task.prompt, task.modelInfo);
+                } catch (fbErr) {
+                  console.error("Firebase upload failed, falling back to local base64.", fbErr);
+                  await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
+                }
+              } else {
+                await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
+              }
               continue;
             } else {
               const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
@@ -1041,11 +1088,14 @@ export default function App() {
   };
 
   const triggerRunPodVideo = async (base64Image: string) => {
+    // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
+    const safeBase64 = cleanAndPadBase64(base64Image);
+
     const payload = {
       input: {
         prompt: prompt || "video scene",
         negative_prompt: negativePrompt,
-        image_base64: base64Image,
+        image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
         cfg: videoCfg,
         width: videoWidth,
@@ -1080,13 +1130,14 @@ export default function App() {
   };
 
   const triggerRunPod = async (base64Image: string) => {
-    const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+    // Sanitize the base64 string so the python backend doesn't crash on incorrect padding
+    const safeBase64 = cleanAndPadBase64(base64Image);
 
     // Process IP Adapter face reference if it exists
     let faceBase64Data = null;
     if (faceRefFile) {
         const rawFaceBase64 = await fileToBase64(faceRefFile);
-        faceBase64Data = rawFaceBase64.includes(',') ? rawFaceBase64.split(',')[1] : rawFaceBase64;
+        faceBase64Data = cleanAndPadBase64(rawFaceBase64);
     }
     
     // DYNAMIC ROUTING: Use IP-Adapter endpoint if face image is present, otherwise standard endpoint
@@ -1230,7 +1281,7 @@ export default function App() {
     };
 
     const imagesPayload = [
-        { name: "input_image.png", image: base64Data }
+        { name: "input_image.png", image: safeBase64 }
     ];
     if (faceBase64Data) {
         imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
@@ -1401,8 +1452,11 @@ export default function App() {
   };
 
   const triggerWavespeed = async (base64Image: string) => {
+    // Sanitize base64 here as well just to be safe
+    const safeBase64 = cleanAndPadBase64(base64Image);
+    
     const payload: any = { 
-        images: [base64Image], 
+        images: [safeBase64], 
         prompt: prompt, 
         seed: -1
     };
