@@ -225,31 +225,25 @@ const cleanAndPadBase64 = (base64Str: string) => {
 
 // --- AUTO LORA CONFIGURATION (Video Generator) ---
 const AUTO_LORA_MAP: Record<string, any> = {
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your pussy": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your vagina": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum on your tongue": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum dripping from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "drooling cum from your mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cum drooling": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "shaking your ass": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
-  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
-  "yarn": { high: "yarn_qwen.safetensors", low: "yarn_qwen.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "hmfem": { high: "hmfemme_qwen.safetensors", low: "hmfemme_qwen.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "qwen4play": { high: "qwen4play.safetensors", low: "qwen4play.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "femnude": { high: "FemNde.safetensors", low: "FemNde.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "nude": { high: "FemNde.safetensors", low: "FemNde.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "enzo": { high: "ENZOM_BJ.safetensors", low: "ENZOM_BJ.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "zootallures": { high: "ZOOTALLURES_BJ.safetensors", low: "ZOOTALLURES_BJ.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "gnass": { high: "GNASS_SXE.safetensors", low: "GNASS_SXE.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "fok": { high: "FOK_SXE.safetensors", low: "FOK_SXE.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "brand enhancer": { high: "BRAND_ENHANCER.safetensors", low: "BRAND_ENHANCER.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "hearme": { high: "HEARME_BOOBS.safetensors", low: "HEARME_BOOBS.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "boobs": { high: "HEARME_BOOBS.safetensors", low: "HEARME_BOOBS.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "limabog": { high: "LIMABOG_PUSSY.safetensors", low: "LIMABOG_PUSSY.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "pussy": { high: "LIMABOG_PUSSY.safetensors", low: "LIMABOG_PUSSY.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "harpy": { high: "HARPY_BKAKKE.safetensors", low: "HARPY_BKAKKE.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "ir bj": { high: "IR_BJ.safetensors", low: "IR_BJ.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "ir": { high: "IR_BJ.safetensors", low: "IR_BJ.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "jib skin": { high: "JIB_SKIN.safetensors", low: "JIB_SKIN.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "jib": { high: "JIB_SKIN.safetensors", low: "JIB_SKIN.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "nrdx": { high: "NRDX_LIGHTING.safetensors", low: "NRDX_LIGHTING.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "alcaitiff": { high: "ALCAITIFF.safetensors", low: "ALCAITIFF.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "natural skin": { high: "NATURALSKIN.safetensors", low: "NATURALSKIN.safetensors", high_weight: 0.85, low_weight: 0.85 },
-  "natural": { high: "NATURALSKIN.safetensors", low: "NATURALSKIN.safetensors", high_weight: 0.85, low_weight: 0.85 }
+  "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
 
 // --- Grok Prompt Architect Logic ---
@@ -449,7 +443,6 @@ export default function App() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showAdvancedRunpod, setShowAdvancedRunpod] = useState(false);
-  const [historyViewMode, setHistoryViewMode] = useState<'motion' | 'static'>('motion');
   
   // --- Saved Prompts State ---
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
@@ -2524,7 +2517,6 @@ export default function App() {
                             modelInfo: dynamicModelInfo
                           });
                           setIsFlipped(false);
-                          setHistoryViewMode('motion');
                         }}
                       >
                         {isVideoUrl(resultUrl) ? (
@@ -2602,7 +2594,6 @@ export default function App() {
                      onClick={() => { 
                        setSelectedHistoryItem(item); 
                        setIsFlipped(false); 
-                       setHistoryViewMode('motion');
                      }} 
                    />
                 ) : (
@@ -2686,6 +2677,7 @@ export default function App() {
                       style={{
                         transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
                         zIndex: 1000 - Math.abs(offset),
+                        // Keep mounted but opacity 0.4 if further than 1 slot away
                         opacity: isCenter ? 1 : (isVisible ? 0.4 : 0),
                         pointerEvents: isCenter ? 'auto' : 'none',
                         transformStyle: 'preserve-3d',
@@ -2708,14 +2700,8 @@ export default function App() {
                           >
                             {isVideoUrl(img.url) ? (
                                 <video 
-                                  key={`video-${img.id}-${historyViewMode}`}
-                                  id={`video-${img.id}`}
                                   src={img.url} 
-                                  autoPlay={historyViewMode === 'motion'} 
-                                  loop={historyViewMode === 'motion'} 
-                                  muted 
-                                  playsInline 
-                                  controls={isCenter && historyViewMode === 'motion'}
+                                  autoPlay loop muted playsInline controls={isCenter}
                                   className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
                                 />
                             ) : (
@@ -2814,106 +2800,59 @@ export default function App() {
                               </p>
                             </div>
                             
-                            {/* Actions for Images & Videos */}
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {isVideoUrl(img.url) && (
-                                <div className="bg-zinc-900/50 p-2 rounded-xl flex items-center justify-between border border-zinc-800 mb-2">
-                                   <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-widest pl-2">Display Mode</span>
-                                   <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
-                                     <button 
-                                       onClick={(e) => { e.stopPropagation(); setHistoryViewMode('static'); }}
-                                       className={`px-3 py-1.5 rounded-md text-[9px] font-medium uppercase tracking-widest transition-all ${historyViewMode === 'static' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                                     >
-                                       Static
-                                     </button>
-                                     <button 
-                                       onClick={(e) => { e.stopPropagation(); setHistoryViewMode('motion'); }}
-                                       className={`px-3 py-1.5 rounded-md text-[9px] font-medium uppercase tracking-widest transition-all ${historyViewMode === 'motion' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                                     >
-                                       Motion
-                                     </button>
-                                   </div>
-                                </div>
-                              )}
-
-                              {isVideoUrl(img.url) ? (
-                                historyViewMode === 'motion' ? (
-                                  <button 
-                                    onClick={(e) => handleDownload(img.url, img.prompt, e)}
-                                    className="w-full py-4 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-emerald-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                  >
-                                    <Download className="w-4 h-4" /> Save Video (.mp4)
-                                  </button>
-                                ) : (
-                                  <button 
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       const videoEl = document.getElementById(`video-${img.id}`) as HTMLVideoElement;
-                                       if (videoEl) {
-                                          const canvas = document.createElement('canvas');
-                                          canvas.width = videoEl.videoWidth;
-                                          canvas.height = videoEl.videoHeight;
-                                          canvas.getContext('2d')?.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                                          const dataUrl = canvas.toDataURL('image/png');
-                                          const a = document.createElement('a');
-                                          a.href = dataUrl;
-                                          const cleanPrompt = img.prompt.substring(0, 20).replace(/[^a-z0-9]/gi, '_');
-                                          a.download = `ARX_Snapshot_${cleanPrompt}.png`;
-                                          a.click();
-                                       }
-                                    }}
-                                    className="w-full py-4 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-emerald-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                  >
-                                    <Camera className="w-4 h-4" /> Save Snapshot (.png)
-                                  </button>
-                                )
-                              ) : (
-                                <button 
-                                  onClick={(e) => handleDownload(img.url, img.prompt, e)}
-                                  className="w-full py-4 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-emerald-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Download className="w-4 h-4" /> Download Image
-                                </button>
-                              )}
-                              
-                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation();
-                                    handleAnimateFromHistory(img.url);
-                                  }} 
-                                  className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                  <Film className="w-4 h-4" />
-                                  Use Image in Video
-                                </button>
-                              )}
-
+                              {/* DOWNLOAD MEDIA BUTTON (Works for both Video and Image) */}
                               <button 
-                                onClick={() => { 
-                                  const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                  setPrompt(cleanPrompt); 
-                                  setSelectedHistoryItem(null); 
-                                  window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                                }} 
+                                onClick={(e) => handleDownload(img.url, img.prompt, e)} 
                                 className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                               >
-                                <Sparkles className="w-4 h-4" />
-                                Use This Prompt
+                                <Download className="w-4 h-4" />
+                                {isVideoUrl(img.url) ? 'Download Video to PC' : 'Download Image to PC'}
                               </button>
-                              <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation();
-                                  const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                                  setPromptToSave(cleanPrompt);
-                                  setShowSavePrompt(true);
-                                }} 
-                                className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                              >
-                                <BookmarkPlus className="w-4 h-4" />
-                                Save Prompt
-                              </button>
+
+                              {/* Actions for Images Only */}
+                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                <>
+                                  {/* NEW: USE IMAGE IN VIDEO BUTTON */}
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      handleAnimateFromHistory(img.url);
+                                    }} 
+                                    className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Film className="w-4 h-4" />
+                                    Use Image in Video
+                                  </button>
+
+                                  <button 
+                                    onClick={() => { 
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPrompt(cleanPrompt); 
+                                      setSelectedHistoryItem(null); 
+                                      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                    Use This Prompt
+                                  </button>
+
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPromptToSave(cleanPrompt);
+                                      setShowSavePrompt(true);
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                    Save Prompt
+                                  </button>
+                                </>
+                              )}
                             </div>
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
