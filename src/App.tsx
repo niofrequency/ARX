@@ -1,4 +1,4 @@
-/** 
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -216,16 +216,29 @@ const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Bl
 
 // --- CRITICAL FRONTEND FIX: Clean and pad Base64 for Python backend ---
 const cleanAndPadBase64 = (base64Str: string) => {
-  // 1. Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
   let cleanStr = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
-  
-  // 2. Pad the string with '=' until its length is a multiple of 4
-  // This prevents the "binascii.Error: Incorrect padding" crash in Python
   while (cleanStr.length % 4 !== 0) {
     cleanStr += '=';
   }
-  
   return cleanStr;
+};
+
+// --- AUTO LORA CONFIGURATION (Video Generator) ---
+// Add keywords and their corresponding LoRA paths/weights here.
+const AUTO_LORA_MAP: Record<string, any> = {
+  "walking": {
+    high: "walking_high.safetensors",
+    low: "walking_low.safetensors",
+    high_weight: 1.0,
+    low_weight: 1.0
+  },
+  "running": {
+    high: "running_high.safetensors",
+    low: "running_low.safetensors",
+    high_weight: 1.0,
+    low_weight: 1.0
+  },
+  // "dancing": { high: "dancing_high.safetensors", low: "dancing_low.safetensors", ... }
 };
 
 // --- Grok Prompt Architect Logic ---
@@ -753,6 +766,25 @@ export default function App() {
     }
   };
 
+  // --- NEW FEATURE: Send History Image to Video UI ---
+  const handleAnimateFromHistory = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const file = new File([blob], "animate.png", { type: blob.type });
+      
+      setSelectedFile(file);
+      setPreviewUrl(url);
+      setMode('video');
+      setSelectedHistoryItem(null);
+      setIsFlipped(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      console.error("Could not extract file from history", e);
+      setError("Failed to extract that image to the video engine. (CORS or network error)");
+    }
+  };
+
   const handleSaveSettings = () => {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
@@ -1091,6 +1123,15 @@ export default function App() {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
 
+    // 2. Auto-detect LoRAs from prompt
+    const autoLoras: any[] = [];
+    const lowerPrompt = (prompt || "").toLowerCase();
+    Object.entries(AUTO_LORA_MAP).forEach(([keyword, loraConfig]) => {
+        if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerPrompt)) {
+            autoLoras.push(loraConfig);
+        }
+    });
+
     const payload = {
       input: {
         prompt: prompt || "video scene",
@@ -1101,7 +1142,8 @@ export default function App() {
         width: videoWidth,
         height: videoHeight,
         length: videoLength,
-        steps: videoSteps
+        steps: videoSteps,
+        lora_pairs: autoLoras // Inject detected LoRAs into payload!
       }
     };
 
@@ -1120,12 +1162,17 @@ export default function App() {
     const id = data.id;
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
 
+    let usedModelInfo = 'Wan 2.2 Img2Vid';
+    if (autoLoras.length > 0) {
+      usedModelInfo += ` + AutoLoRAs (${autoLoras.length})`;
+    }
+
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
       targetResultUrl: '',
       historyPrompt: `Video: ${prompt}`,
-      modelInfo: 'Wan 2.2 Img2Vid'
+      modelInfo: usedModelInfo
     };
   };
 
@@ -2748,9 +2795,22 @@ export default function App() {
                               </p>
                             </div>
                             
-                            {/* Only show 'Use prompt' and 'Save Prompt' if it's an editor request */}
-                            {!img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                            {/* Actions for Images Only */}
+                            {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                               <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                                
+                                {/* NEW: USE IMAGE IN VIDEO BUTTON */}
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation();
+                                    handleAnimateFromHistory(img.url);
+                                  }} 
+                                  className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <Film className="w-4 h-4" />
+                                  Use Image in Video
+                                </button>
+
                                 <button 
                                   onClick={() => { 
                                     const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
