@@ -242,6 +242,7 @@ const AUTO_LORA_MAP: Record<string, any> = {
   "pussy": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "cunt": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
   "vagina": { high: "vagina.safetensors", low: "vagina.safetensors", high_weight: 0.85, low_weight: 0.85 },
+  // Basic movement placeholders
   "walking": { high: "walking_high.safetensors", low: "walking_low.safetensors", high_weight: 1.0, low_weight: 1.0 },
   "running": { high: "running_high.safetensors", low: "running_low.safetensors", high_weight: 1.0, low_weight: 1.0 }
 };
@@ -1127,19 +1128,27 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string) => {
     // 1. Sanitize the base64 string so the python backend doesn't crash on incorrect padding
     const safeBase64 = cleanAndPadBase64(base64Image);
+    
+    const activePrompt = prompt || "video scene";
 
-    // 2. Auto-detect LoRAs from prompt
-    const autoLoras: any[] = [];
-    const lowerPrompt = (prompt || "").toLowerCase();
-    Object.entries(AUTO_LORA_MAP).forEach(([keyword, loraConfig]) => {
-        if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerPrompt)) {
-            autoLoras.push(loraConfig);
+    // 2. Auto-detect LoRAs from prompt (Uses longest match first logic)
+    const autoLorasMap = new Map();
+    const lowerPrompt = activePrompt.toLowerCase();
+    
+    const sortedTriggers = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+
+    for (const trigger of sortedTriggers) {
+        if (lowerPrompt.includes(trigger)) {
+            const config = AUTO_LORA_MAP[trigger];
+            autoLorasMap.set(config.high, config);
         }
-    });
+    }
+    
+    const finalAutoLoras = Array.from(autoLorasMap.values()).slice(0, 4);
 
     const payload = {
       input: {
-        prompt: prompt || "video scene",
+        prompt: activePrompt,
         negative_prompt: negativePrompt,
         image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 1000000) : videoSeed,
@@ -1148,7 +1157,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: autoLoras // Inject detected LoRAs into payload!
+        lora_pairs: finalAutoLoras
       }
     };
 
@@ -1168,15 +1177,15 @@ export default function App() {
     if (!id) throw new Error('RunPod API Error: Missing Job ID');
 
     let usedModelInfo = 'Wan 2.2 Img2Vid';
-    if (autoLoras.length > 0) {
-      usedModelInfo += ` + AutoLoRAs (${autoLoras.length})`;
+    if (finalAutoLoras.length > 0) {
+      usedModelInfo += ` + AutoLoRAs (${finalAutoLoras.length})`;
     }
 
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${id}`,
       targetResultUrl: '',
-      historyPrompt: `Video: ${prompt}`,
+      historyPrompt: `Video: ${activePrompt}`,
       modelInfo: usedModelInfo
     };
   };
@@ -2802,19 +2811,29 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* DOWNLOAD MEDIA BUTTON (Works for both Video and Image) */}
-                              <button 
-                                onClick={(e) => handleDownload(img.url, img.prompt, e)} 
-                                className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                              >
-                                <Download className="w-4 h-4" />
-                                {isVideoUrl(img.url) ? 'Download Video to PC' : 'Download Image to PC'}
-                              </button>
+                              {/* DOWNLOAD MEDIA BUTTONS (Separated for clarity) */}
+                              {isVideoUrl(img.url) ? (
+                                <button 
+                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
+                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download Video to PC
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={(e) => handleDownload(img.url, img.prompt, e)} 
+                                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download Image to PC
+                                </button>
+                              )}
 
                               {/* Actions for Images Only */}
                               {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                                 <>
-                                  {/* NEW: USE IMAGE IN VIDEO BUTTON */}
+                                  {/* USE IMAGE IN VIDEO BUTTON */}
                                   <button 
                                     onClick={(e) => { 
                                       e.stopPropagation();
