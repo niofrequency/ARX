@@ -2608,8 +2608,8 @@ export default function App() {
                 </>
               )}
 
-              {/* 3D Carousel Mapper - Mobile Optimized */}
-              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
+              {/* 3D Carousel Mapper */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
@@ -2619,7 +2619,7 @@ export default function App() {
                   else if (offset < -len / 2) offset += len;
                   
                   const isCenter = offset === 0;
-                  const isVisible = Math.abs(offset) <= 2;   // ← Reduced visible range
+                  const isVisible = Math.abs(offset) <= 2;
 
                   return (
                     <div
@@ -2630,82 +2630,48 @@ export default function App() {
                         zIndex: 1000 - Math.abs(offset),
                         opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.65 : 0.25),
                         pointerEvents: isCenter ? 'auto' : 'none',
-                        transformStyle: 'preserve-3d'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px' }}>
+                        
                         <motion.div 
-                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
-                          style={{ transformStyle: 'preserve-3d' }} 
-                          animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
-                          transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
-                          onDoubleClick={() => { if (isCenter) setIsFlipped(!isFlipped) }}
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer select-none"
+                          style={{ transformStyle: 'preserve-3d' }}
+                          animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }}
+                          transition={{ duration: 0.65, type: 'spring', stiffness: 280, damping: 22 }}
+                          onDoubleClick={() => {
+                            if (isCenter) setIsFlipped(prev => !prev);
+                          }}
+                          onClick={() => {
+                            if (isCenter) setIsFlipped(prev => !prev);   // Also allow single tap on mobile as fallback
+                          }}
                         >
                           
-                          {/* --- FRONT OF CARD --- */}
+                          {/* FRONT */}
                           <div 
-                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
+                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center"
                             style={{ backfaceVisibility: 'hidden' }}
                           >
                             {isVideoUrl(img.url) ? (
-                                <video 
-                                  src={img.url} 
-                                  autoPlay loop muted playsInline controls={isCenter}
-                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
-                                />
+                              <video 
+                                src={img.url} 
+                                autoPlay loop muted playsInline 
+                                controls={isCenter}
+                                className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain bg-black"
+                              />
                             ) : (
-                                <img 
-                                  src={img.url} 
-                                  alt="History Entry" 
-                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
-                                />
+                              <img 
+                                src={img.url} 
+                                alt="History Entry" 
+                                className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain"
+                              />
                             )}
-                            
                             {isCenter && (
-                              <>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    setSelectedHistoryItem(null); 
-                                  }} 
-                                  className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800 z-10"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-
-                                <button 
-                                  onClick={(e) => handleDeleteHistory(img.id, e)} 
-                                  className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20 z-10"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-
-                                <motion.div 
-                                  key={img.id}
-                                  initial={{ opacity: 1 }}
-                                  animate={{ opacity: 0 }}
-                                  transition={{ delay: 2.5, duration: 0.8 }}
-                                  className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
-                                >
-                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
-                                    <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
-                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
-                                      Double tap to flip
-                                    </span>
-                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 hidden sm:inline">
-                                      Space to flip
-                                    </span>
-                                  </div>
-                                  
-                                  {img.modelInfo && (
-                                    <div className="bg-zinc-950/80 border border-zinc-800 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
-                                      <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
-                                        Model: {img.modelInfo}
-                                      </span>
-                                    </div>
-                                  )}
-                                </motion.div>
-                              </>
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                                <div className="bg-black/70 px-6 py-3 rounded-2xl text-xs uppercase tracking-widest text-white/80">
+                                  Double tap to flip • Spacebar on desktop
+                                </div>
+                              </div>
                             )}
                           </div>
 
@@ -2776,7 +2742,8 @@ export default function App() {
                                   </button>
 
                                   <button 
-                                    onClick={() => { 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
                                       const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                                       setPrompt(cleanPrompt); 
                                       setSelectedHistoryItem(null); 
