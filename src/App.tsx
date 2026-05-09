@@ -681,7 +681,7 @@ export default function App() {
     setIsFlipped(false);
   };
 
-  // --- UPDATED TOUCH HANDLERS TO PREVENT GHOST CLICKS ---
+   // --- TOUCH & SWIPE HANDLERS ---
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     isSwiping.current = false;
@@ -691,7 +691,7 @@ export default function App() {
     if (touchStartX.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
-    
+   
     if (Math.abs(diff) > 50) {
       isSwiping.current = true;
       if (diff > 0) handleNextHistory();
@@ -700,14 +700,20 @@ export default function App() {
     touchStartX.current = null;
   };
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isSwiping.current) {
-      isSwiping.current = false;
-      return;
+  // Double Tap Handler (works on BOTH front and back)
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (window.lastTap && now - window.lastTap < 280) {
+      setIsFlipped(prev => !prev);
+      window.lastTap = 0;
+    } else {
+      window.lastTap = now;
     }
-    setIsFlipped(!isFlipped);
   };
+
+  // Remove or keep handleCardClick only if you want single click somewhere else
+  // For now, you can remove it if not used elsewhere:
+  // const handleCardClick = ... (you can delete this)
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -2579,10 +2585,16 @@ export default function App() {
       >
         {history.length > 1 && (
           <>
-            <button onClick={(e) => { e.stopPropagation(); handlePrevHistory(); }} className="hidden sm:flex fixed left-4 sm:left-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800">
+            <button
+              onClick={(e) => { e.stopPropagation(); handlePrevHistory(); }}
+              className="hidden sm:flex fixed left-4 sm:left-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
+            >
               <ChevronLeft className="w-7 h-7" />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); handleNextHistory(); }} className="hidden sm:flex fixed right-4 sm:right-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleNextHistory(); }}
+              className="hidden sm:flex fixed right-4 sm:right-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
+            >
               <ChevronRight className="w-7 h-7" />
             </button>
           </>
@@ -2600,52 +2612,60 @@ export default function App() {
             animate={{ rotateY: isFlipped ? 180 : 0 }}
             transition={{ duration: 0.75, type: 'spring', stiffness: 280, damping: 26 }}
           >
-            {/* FRONT SIDE */}
+            {/* FRONT */}
             <div
               className="relative backface-hidden rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-black"
               style={{ backfaceVisibility: 'hidden' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDoubleTap();
-              }}
+              onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
-                <video src={selectedHistoryItem.url} autoPlay loop muted playsInline controls className="max-h-[82vh] w-auto max-w-full object-contain" />
+                <video
+                  src={selectedHistoryItem.url}
+                  autoPlay loop muted playsInline controls
+                  className="max-h-[82vh] w-auto max-w-full object-contain"
+                />
               ) : (
-                <img src={selectedHistoryItem.url} alt={selectedHistoryItem.prompt} className="max-h-[82vh] w-auto max-w-full object-contain" />
+                <img
+                  src={selectedHistoryItem.url}
+                  alt={selectedHistoryItem.prompt}
+                  className="max-h-[82vh] w-auto max-w-full object-contain"
+                />
               )}
 
-              {/* Top Controls - X Left, Trash Right */}
+              {/* Top Controls */}
               <div className="absolute top-4 left-4 z-50">
-                <button onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }} className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
+                  className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-all"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="absolute top-4 right-4 z-50">
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }} className="p-3 bg-black/70 hover:bg-red-950 rounded-2xl text-red-400">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
+                  className="p-3 bg-black/70 hover:bg-red-950 rounded-2xl text-red-400 transition-all"
+                >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Subtle Auto-Hide Hint - Only on Front */}
+              {/* Subtle Auto-Hide Hint */}
               <motion.div
                 initial={{ opacity: 0.75 }}
                 animate={{ opacity: 0 }}
-                transition={{ delay: 5, duration: 1.5 }}
+                transition={{ delay: 5, duration: 1.2 }}
                 className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/30 text-white/50 text-[10px] px-5 py-1.5 rounded-full pointer-events-none tracking-widest backdrop-blur-md"
               >
                 double tap to flip
               </motion.div>
             </div>
 
-            {/* BACK SIDE */}
+            {/* BACK */}
             <div
               className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-2xl"
               style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDoubleTap();
-              }}
+              onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
             >
               <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
                 <div className="flex justify-center mb-8">
@@ -2664,26 +2684,44 @@ export default function App() {
               </div>
 
               <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
-                <button onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)} className="w-full py-4 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-3 active:scale-95">
+                <button
+                  onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
+                  className="w-full py-4 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-3 active:scale-95"
+                >
                   <Download className="w-5 h-5" /> DOWNLOAD
                 </button>
 
-                {!isVideoUrl(selectedHistoryItem.url) && 
-                 !selectedHistoryItem.prompt?.startsWith('Multi-Angle') && 
+                {!isVideoUrl(selectedHistoryItem.url) &&
+                 !selectedHistoryItem.prompt?.startsWith('Multi-Angle') &&
                  !selectedHistoryItem.prompt?.startsWith('Upscaled') && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }} className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm">Use in Video</button>
-                    <button onClick={() => { 
-                      const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                      setPrompt(clean); 
-                      setSelectedHistoryItem(null);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }} className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">Load Prompt</button>
-                    <button onClick={() => { 
-                      const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                      setPromptToSave(clean); 
-                      setShowSavePrompt(true);
-                    }} className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">Save Prompt</button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }}
+                      className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm"
+                    >
+                      Use in Video
+                    </button>
+                    <button
+                      onClick={() => {
+                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                        setPrompt(clean);
+                        setSelectedHistoryItem(null);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                    >
+                      Load Prompt
+                    </button>
+                    <button
+                      onClick={() => {
+                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                        setPromptToSave(clean);
+                        setShowSavePrompt(true);
+                      }}
+                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                    >
+                      Save Prompt
+                    </button>
                   </div>
                 )}
               </div>
