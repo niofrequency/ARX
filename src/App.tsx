@@ -517,21 +517,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
-  // Lock body scroll when modal is open
-  useEffect(() => {
-    if (selectedHistoryItem) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';      // Prevent zoom & background scroll
-    } else {
-      document.body.style.overflow = 'auto';
-      document.body.style.touchAction = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-      document.body.style.touchAction = 'auto';
-    };
-  }, [selectedHistoryItem]);
-
   const handleRandomizePrompt = async () => {
     if (!grokKey && !process.env.GROK_API_KEY) {
       setError('Please enter your Grok API Key in the settings first.');
@@ -695,34 +680,11 @@ export default function App() {
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
-    const isDeletingCurrent = selectedHistoryItem?.id === id;
-    
-    // Update UI immediately
     setHistory(prev => prev.filter(item => item.id !== id));
-    
-    // Delete from IndexedDB
     await deleteHistoryItemDB(id);
-
-    if (isDeletingCurrent) {
-      const remainingHistory = history.filter(h => h.id !== id);
-      
-      if (remainingHistory.length === 0) {
-        // Last image deleted → close modal
-        setSelectedHistoryItem(null);
-        setIsFlipped(false);
-      } else {
-        // Automatically move to next image (or previous if it was the last one)
-        const oldIndex = history.findIndex(h => h.id === id);
-        let newIndex = oldIndex;
-        
-        if (oldIndex === history.length - 1) {
-          newIndex = oldIndex - 1; // Was last → go to previous
-        }
-        
-        setSelectedHistoryItem(remainingHistory[Math.min(newIndex, remainingHistory.length - 1)]);
-        setIsFlipped(false);
-      }
+    if (selectedHistoryItem?.id === id) {
+      setSelectedHistoryItem(null);
+      setIsFlipped(false);
     }
   };
 
@@ -2567,21 +2529,18 @@ export default function App() {
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
-            {/* Backdrop - Prevent any background interaction */}
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setSelectedHistoryItem(null)} 
-              className="fixed inset-0 bg-zinc-950/95 backdrop-blur-sm z-[80]"
-              style={{ touchAction: 'none' }}
+              className="fixed inset-0 bg-zinc-950/90 backdrop-blur-sm z-[80]" 
             />
             
             <div 
               className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden touch-none"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
-              style={{ touchAction: 'pan-y' }}   // Allow vertical pan only for swipe, block others
             >
               
               {/* Navigation Controls */}
@@ -2602,8 +2561,8 @@ export default function App() {
                 </>
               )}
 
-              {/* 3D Carousel Mapper - Mobile Optimized */}
-              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
+              {/* 3D Carousel Mapper - OPTIMIZED */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
@@ -2745,15 +2704,14 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
-                              <button
-                                onClick={(e) => handleDownload(img.url, img.prompt, e)}
-                                className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
-                              >
-                                <Download className="w-5 h-5 transition-transform group-active:scale-110" />
-                                Download
-                              </button>
-                              
+{/* SINGLE CLEAN DOWNLOAD BUTTON */}
+<button
+  onClick={(e) => handleDownload(img.url, img.prompt, e)}
+  className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+>
+  <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+  Download
+</button>
                               {/* Actions for Images Only */}
                               {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                                 <>
