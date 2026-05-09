@@ -2562,24 +2562,26 @@ export default function App() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* 1. Wrapper strictly for Perspective and Scale animation */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-[92vw] md:max-w-3xl max-h-[92vh] bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-[92vw] md:max-w-3xl max-h-[92vh] bg-transparent"
+          style={{ perspective: '1400px' }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Flip Container */}
+          {/* 2. The Flip Container doing the actual 3D Rotation */}
           <motion.div
-            className="relative"
-            style={{ perspective: '1400px' }}
+            className="relative w-full h-full shadow-2xl"
+            style={{ transformStyle: 'preserve-3d' }} // <- CRITICAL FIX 1
             animate={{ rotateY: isFlipped ? 180 : 0 }}
             transition={{ duration: 0.65, type: 'spring', stiffness: 300, damping: 28 }}
           >
             {/* FRONT - IMAGE / VIDEO */}
             <div
-              className="relative backface-hidden cursor-pointer"
-              style={{ backfaceVisibility: 'hidden' }}
+              className="relative w-full h-full bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden cursor-pointer"
+              style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }} // <- CRITICAL FIX 2
               onClick={() => setIsFlipped(!isFlipped)}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
@@ -2622,8 +2624,12 @@ export default function App() {
 
             {/* BACK - INFO & BUTTONS */}
             <div
-              className="absolute inset-0 backface-hidden bg-zinc-950 flex flex-col rounded-3xl"
-              style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+              className="absolute inset-0 w-full h-full bg-zinc-950 border border-zinc-700 flex flex-col rounded-3xl overflow-hidden"
+              style={{
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+                transform: 'rotateY(180deg)' // <- CRITICAL FIX 3
+              }}
             >
               <div className="flex-1 p-6 sm:p-8 overflow-y-auto">
                 <button
