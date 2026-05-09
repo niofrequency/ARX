@@ -2544,7 +2544,7 @@ export default function App() {
         </section>
       )}
 
-    {/* === CLEAN SINGLE CARD FLIP MODAL === */}
+{/* === FIXED SINGLE CARD FLIP MODAL === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
@@ -2566,33 +2566,32 @@ export default function App() {
         onTouchEnd={handleTouchEnd}
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 20 }}
-          className="relative w-full max-w-[94vw] md:max-w-3xl max-h-[94vh] bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden shadow-2xl"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-[94vw] md:max-w-3xl max-h-[94vh] bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden"
           onClick={e => e.stopPropagation()}
         >
-          {/* Flip Wrapper */}
+          {/* Main Flip Container */}
           <motion.div
             className="relative w-full h-full"
-            style={{ perspective: '1400px' }}
+            style={{ 
+              perspective: '1400px',
+              transformStyle: 'preserve-3d'   // ← This was missing!
+            }}
             animate={{ rotateY: isFlipped ? 180 : 0 }}
-            transition={{ duration: 0.7, type: 'spring', stiffness: 280, damping: 26 }}
+            transition={{ duration: 0.65, type: 'spring', stiffness: 300, damping: 28 }}
           >
             {/* FRONT - MEDIA */}
             <div
-              className="absolute inset-0 backface-hidden cursor-pointer"
+              className="absolute inset-0 cursor-pointer backface-hidden"
               style={{ backfaceVisibility: 'hidden' }}
               onClick={() => setIsFlipped(!isFlipped)}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
                 <video
                   src={selectedHistoryItem.url}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  controls
+                  autoPlay loop muted playsInline controls
                   className="w-full h-full object-contain bg-black rounded-3xl"
                 />
               ) : (
@@ -2603,12 +2602,12 @@ export default function App() {
                 />
               )}
 
-              {/* Tap Hint */}
+              {/* Visual Feedback */}
               <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 text-white/90 text-xs px-6 py-3 rounded-2xl flex items-center gap-2 pointer-events-none">
-                TAP TO FLIP →
+                TAP TO SEE DETAILS →
               </div>
 
-              {/* Top Buttons */}
+              {/* Top Controls */}
               <button
                 onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
                 className="absolute top-5 right-5 z-30 p-3 bg-black/70 hover:bg-black rounded-2xl text-white"
@@ -2623,28 +2622,31 @@ export default function App() {
               </button>
             </div>
 
-            {/* BACK - DETAILS */}
+            {/* BACK - INFO */}
             <div
               className="absolute inset-0 backface-hidden bg-zinc-950 flex flex-col rounded-3xl"
-              style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+              style={{ 
+                backfaceVisibility: 'hidden', 
+                transform: 'rotateY(180deg)' 
+              }}
             >
               <div className="flex-1 p-6 sm:p-8 overflow-y-auto">
                 <button
                   onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="absolute top-5 right-5 z-30 p-3 text-zinc-400 hover:text-white"
+                  className="absolute top-5 right-5 p-3 text-zinc-400 hover:text-white z-30"
                 >
                   <X className="w-5 h-5" />
                 </button>
 
-                <History className="w-10 h-10 text-zinc-700 mx-auto mb-6" />
+                <History className="w-10 h-10 text-zinc-600 mx-auto mb-6" />
 
                 {selectedHistoryItem.modelInfo && (
-                  <p className="text-center text-[10px] text-zinc-500 mb-4 font-mono">
+                  <p className="text-center text-[10px] text-zinc-500 mb-6 font-mono">
                     {selectedHistoryItem.modelInfo}
                   </p>
                 )}
 
-                <p className="text-zinc-100 leading-relaxed text-center text-[15px] px-4">
+                <p className="text-zinc-100 text-[15px] leading-relaxed text-center px-4">
                   {selectedHistoryItem.prompt}
                 </p>
               </div>
@@ -2653,7 +2655,7 @@ export default function App() {
               <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
                 <button
                   onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
-                  className="w-full py-4 bg-white text-black rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-[0.97]"
+                  className="w-full py-4 bg-white text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-[0.97]"
                 >
                   <Download className="w-5 h-5" />
                   Download
