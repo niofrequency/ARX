@@ -825,8 +825,14 @@ export default function App() {
       const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
       if (regex.test(lowerPrompt)) {
         const config = AUTO_LORA_MAP[keyword];
-        if (!autoLoras.some(l => l.high === config.high)) {
-          autoLoras.push(config);
+        
+        // Convert to the format your handler expects
+        if (!autoLoras.some(l => l.path === config.high)) {
+          autoLoras.push({
+            path: config.high,                    // Use high as the main model
+            model_weight: config.high_weight || 0.85,
+            clip_weight: config.low_weight || 0.85
+          });
         }
       }
     }
@@ -836,7 +842,7 @@ export default function App() {
     console.log("📤 Sending to RunPod Video:", {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
       loraCount: finalAutoLoras.length,
-      loras: finalAutoLoras.map(l => l.high)
+      loras: finalAutoLoras.map(l => l.path)
     });
 
     const payload = {
