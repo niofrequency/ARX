@@ -2532,8 +2532,9 @@ export default function App() {
             {history.map((item) => (
               <div 
                 key={item.id} 
-                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square cursor-pointer"
+                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square cursor-pointer active:scale-[0.98] transition-transform"
                 onClick={() => { 
+                  console.log("🖼️ Opening history item:", item.id); // Debug log
                   setSelectedHistoryItem(item); 
                   setIsFlipped(false); 
                 }}
@@ -2545,13 +2546,13 @@ export default function App() {
                      loop 
                      muted 
                      playsInline
-                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                     className="w-full h-full object-cover pointer-events-none" 
                    />
                 ) : (
                    <img 
                      src={item.url} 
                      alt={item.prompt} 
-                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                     className="w-full h-full object-cover pointer-events-none" 
                    />
                 )}
                 
@@ -2561,14 +2562,13 @@ export default function App() {
                     e.stopPropagation();
                     handleDeleteHistory(item.id, e);
                   }} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500/20 z-10"
+                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500/20 z-20"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
 
-                {/* Optional label */}
-                <div className="absolute bottom-2 right-2 bg-black/60 text-[9px] px-2 py-0.5 rounded text-white/70 font-mono pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                  Click to view
+                <div className="absolute bottom-2 right-2 bg-black/70 text-[9px] px-2.5 py-1 rounded font-mono text-white/70 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  TAP TO VIEW
                 </div>
               </div>
             ))}
