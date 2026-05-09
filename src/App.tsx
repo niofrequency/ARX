@@ -517,6 +517,21 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (selectedHistoryItem) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
+    } else {
+      document.body.style.overflow = 'auto';
+      document.body.style.touchAction = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+      document.body.style.touchAction = 'auto';
+    };
+  }, [selectedHistoryItem]);
+
   const handleRandomizePrompt = async () => {
     if (!grokKey && !process.env.GROK_API_KEY) {
       setError('Please enter your Grok API Key in the settings first.');
@@ -2529,18 +2544,21 @@ export default function App() {
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
+            {/* Backdrop - Prevent any background interaction */}
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setSelectedHistoryItem(null)} 
-              className="fixed inset-0 bg-zinc-950/90 backdrop-blur-sm z-[80]" 
+              className="fixed inset-0 bg-zinc-950/95 backdrop-blur-sm z-[80]"
+              style={{ touchAction: 'none' }}
             />
             
             <div 
               className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden touch-none"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
+              style={{ touchAction: 'pan-y' }}   // Allow vertical pan only for swipe, block others
             >
               
               {/* Navigation Controls */}
@@ -2561,8 +2579,8 @@ export default function App() {
                 </>
               )}
 
-              {/* 3D Carousel Mapper - OPTIMIZED */}
-              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px' }}>
+              {/* 3D Carousel Mapper - Mobile Optimized */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
@@ -2704,14 +2722,15 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-{/* SINGLE CLEAN DOWNLOAD BUTTON */}
-<button
-  onClick={(e) => handleDownload(img.url, img.prompt, e)}
-  className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
->
-  <Download className="w-5 h-5 transition-transform group-active:scale-110" />
-  Download
-</button>
+                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+                              <button
+                                onClick={(e) => handleDownload(img.url, img.prompt, e)}
+                                className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+                              >
+                                <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+                                Download
+                              </button>
+                              
                               {/* Actions for Images Only */}
                               {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
                                 <>
