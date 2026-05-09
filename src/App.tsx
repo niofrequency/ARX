@@ -2525,6 +2525,7 @@ export default function App() {
                 <CloudDownload className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce text-zinc-100' : ''}`} />
                 {isSyncing ? 'Syncing...' : 'Fetch Cloud Sync'}
               </button>
+              <History className="w-4 h-4 text-zinc-500 hidden sm:block" />
             </div>
           </div>
           
@@ -2532,51 +2533,43 @@ export default function App() {
             {history.map((item) => (
               <div 
                 key={item.id} 
-                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square cursor-pointer active:scale-[0.98] transition-transform"
-                onClick={() => { 
-                  console.log("🖼️ Opening history item:", item.id); // Debug log
-                  setSelectedHistoryItem(item); 
-                  setIsFlipped(false); 
-                }}
+                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
               >
                 {isVideoUrl(item.url) ? (
                    <video 
                      src={item.url} 
-                     autoPlay 
-                     loop 
-                     muted 
-                     playsInline
-                     className="w-full h-full object-cover pointer-events-none" 
+                     autoPlay loop muted playsInline
+                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                     onClick={() => { 
+                       setSelectedHistoryItem(item); 
+                       setIsFlipped(false); 
+                     }} 
                    />
                 ) : (
                    <img 
                      src={item.url} 
                      alt={item.prompt} 
-                     className="w-full h-full object-cover pointer-events-none" 
+                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
+                     onClick={() => { 
+                       setSelectedHistoryItem(item); 
+                       setIsFlipped(false); 
+                     }} 
                    />
                 )}
                 
-                {/* Delete Button */}
                 <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteHistory(item.id, e);
-                  }} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500/20 z-20"
+                  onClick={(e) => handleDeleteHistory(item.id, e)} 
+                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
-
-                <div className="absolute bottom-2 right-2 bg-black/70 text-[9px] px-2.5 py-1 rounded font-mono text-white/70 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  TAP TO VIEW
-                </div>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* History Card Modal (Simple & Reliable) */}
+      {/* History Card Modal (Fullscreen Carousel with Flips) */}
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
@@ -2590,93 +2583,239 @@ export default function App() {
               style={{ touchAction: 'none' }}
             />
             
-            {(() => {
-              try {
-                return (
-                  <div 
-                    className="fixed inset-0 z-[90] flex items-center justify-center p-4 touch-none"
-                    onTouchStart={handleTouchStart}
-                    onTouchEnd={handleTouchEnd}
-                    style={{ touchAction: 'pan-y' }}
-                    onClick={(e) => {
-                      // Close only if clicking backdrop
-                      if (e.target === e.currentTarget) setSelectedHistoryItem(null);
-                    }}
+            <div 
+              className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden touch-none"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              style={{ touchAction: 'pan-y' }}   // Allow vertical pan only for swipe, block others
+            >
+              
+              {/* Navigation Controls */}
+              {history.length > 1 && (
+                <>
+                  <button 
+                    onClick={handlePrevHistory} 
+                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
                   >
-                    {/* Navigation Controls */}
-                    {history.length > 1 && (
-                      <>
-                        <button 
-                          onClick={handlePrevHistory} 
-                          className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
-                        >
-                          <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
-                        </button>
-                        <button 
-                          onClick={handleNextHistory} 
-                          className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
-                        >
-                          <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
-                        </button>
-                      </>
-                    )}
+                    <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                  <button 
+                    onClick={handleNextHistory} 
+                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                  >
+                    <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                </>
+              )}
 
-                    <div 
-                      className="relative max-w-[95vw] max-h-[95vh] bg-zinc-950 rounded-3xl overflow-hidden shadow-2xl border border-zinc-700"
-                      onClick={e => e.stopPropagation()}
+              {/* 3D Carousel Mapper - Mobile Optimized */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
+                {history.map((img, idx) => {
+                  const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
+                  let offset = idx - currentIndex;
+                  const len = history.length;
+                  
+                  if (offset > len / 2) offset -= len;
+                  else if (offset < -len / 2) offset += len;
+                  
+                  const isCenter = offset === 0;
+                  const isVisible = Math.abs(offset) <= 2;   // ← Reduced visible range
+
+                  return (
+                    <div
+                      key={`carousel-${img.id}`}
+                      className={`absolute transition-all duration-700 ease-out flex items-center justify-center ${!isVisible ? 'hidden' : ''}`}
+                      style={{
+                        transform: `translateX(${offset * 72}vw) translateZ(${isCenter ? 0 : -600}px) rotateY(${isCenter ? 0 : offset * 38}deg)`,
+                        zIndex: 1000 - Math.abs(offset),
+                        opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.65 : 0.25),
+                        pointerEvents: isCenter ? 'auto' : 'none',
+                        transformStyle: 'preserve-3d'
+                      }}
                     >
-                      {/* Close button */}
-                      <button
-                        onClick={() => setSelectedHistoryItem(null)}
-                        className="absolute top-4 right-4 z-50 bg-black/70 hover:bg-black text-white p-3 rounded-full"
-                      >
-                        <X className="w-6 h-6" />
-                      </button>
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                        <motion.div 
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
+                          style={{ transformStyle: 'preserve-3d' }} 
+                          animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
+                          transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
+                          onDoubleClick={() => { if (isCenter) setIsFlipped(!isFlipped) }}
+                        >
+                          
+                          {/* --- FRONT OF CARD --- */}
+                          <div 
+                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
+                            style={{ backfaceVisibility: 'hidden' }}
+                          >
+                            {isVideoUrl(img.url) ? (
+                                <video 
+                                  src={img.url} 
+                                  autoPlay loop muted playsInline controls={isCenter}
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
+                                />
+                            ) : (
+                                <img 
+                                  src={img.url} 
+                                  alt="History Entry" 
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                />
+                            )}
+                            
+                            {isCenter && (
+                              <>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setSelectedHistoryItem(null); 
+                                  }} 
+                                  className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800 z-10"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
 
-                      {/* Delete button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteHistory(selectedHistoryItem.id);
-                        }}
-                        className="absolute top-4 left-4 z-50 bg-black/70 hover:bg-red-900 text-red-400 p-3 rounded-full"
-                      >
-                        <Trash2 className="w-6 h-6" />
-                      </button>
+                                <button 
+                                  onClick={(e) => handleDeleteHistory(img.id, e)} 
+                                  className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20 z-10"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
 
-                      {isVideoUrl(selectedHistoryItem.url) ? (
-                        <video
-                          src={selectedHistoryItem.url}
-                          controls
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className="max-h-[90vh] w-auto max-w-full rounded-3xl"
-                        />
-                      ) : (
-                        <img
-                          src={selectedHistoryItem.url}
-                          alt={selectedHistoryItem.prompt}
-                          className="max-h-[90vh] w-auto max-w-full object-contain rounded-3xl"
-                        />
-                      )}
+                                <motion.div 
+                                  key={img.id}
+                                  initial={{ opacity: 1 }}
+                                  animate={{ opacity: 0 }}
+                                  transition={{ delay: 2.5, duration: 0.8 }}
+                                  className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
+                                >
+                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
+                                    <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
+                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
+                                      Double tap to flip
+                                    </span>
+                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 hidden sm:inline">
+                                      Space to flip
+                                    </span>
+                                  </div>
+                                  
+                                  {img.modelInfo && (
+                                    <div className="bg-zinc-950/80 border border-zinc-800 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
+                                      <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
+                                        Model: {img.modelInfo}
+                                      </span>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              </>
+                            )}
+                          </div>
 
-                      {/* Info panel at bottom */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6 pt-12 text-sm pointer-events-none">
-                        <p className="text-zinc-300 line-clamp-3 pointer-events-auto">{selectedHistoryItem.prompt}</p>
-                        {selectedHistoryItem.modelInfo && (
-                          <p className="text-[10px] text-zinc-500 mt-2 pointer-events-auto">{selectedHistoryItem.modelInfo}</p>
-                        )}
+                          {/* --- BACK OF CARD --- */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                          >
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedHistoryItem(null); 
+                              }} 
+                              className="absolute top-4 right-4 p-2.5 text-zinc-500 hover:text-zinc-100 transition-colors bg-zinc-900 rounded-full"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            
+                            <button 
+                              onClick={(e) => handleDeleteHistory(img.id, e)} 
+                              className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-full transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            
+                            <History className="w-8 h-8 text-zinc-700 mb-6 shrink-0" />
+                            
+                            <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-2 shrink-0">
+                              Modification Log
+                            </h3>
+
+                            {img.modelInfo && (
+                                <p className="text-zinc-400 font-mono text-[9px] uppercase tracking-widest mb-6">
+                                  {img.modelInfo}
+                                </p>
+                            )}
+                            
+                            <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
+                              <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
+                                {img.prompt}
+                              </p>
+                            </div>
+                            
+                            <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                              
+                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+                              <button
+                                onClick={(e) => handleDownload(img.url, img.prompt, e)}
+                                className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+                              >
+                                <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+                                Download
+                              </button>
+                              
+                              {/* Actions for Images Only */}
+                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                <>
+                                  {/* USE IMAGE IN VIDEO BUTTON */}
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      handleAnimateFromHistory(img.url);
+                                    }} 
+                                    className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Film className="w-4 h-4" />
+                                    Use Image in Video
+                                  </button>
+
+                                  <button 
+                                    onClick={() => { 
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPrompt(cleanPrompt); 
+                                      setSelectedHistoryItem(null); 
+                                      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                    Use This Prompt
+                                  </button>
+
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPromptToSave(cleanPrompt);
+                                      setShowSavePrompt(true);
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                    Save Prompt
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            
+                            <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
+                              <span className="sm:hidden">Double tap to view media</span>
+                              <span className="hidden sm:inline">Space to view media</span>
+                            </p>
+                          </div>
+                        </motion.div>
                       </div>
                     </div>
-                  </div>
-                );
-              } catch (err) {
-                console.error("Modal render error", err);
-                return <div className="fixed inset-0 z-[100] flex items-center justify-center text-red-400 bg-black/90">Modal error — check console</div>;
-              }
-            })()}
+                  );
+                })}
+              </div>
+            </div>
           </>
         )}
       </AnimatePresence>
