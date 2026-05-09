@@ -2560,7 +2560,7 @@ export default function App() {
         </section>
       )}
 
-{/* === PREMIUM FLIP MODAL - DOUBLE TAP + AUTO HIDE HINT === */}
+{/* === PREMIUM FLIP MODAL - DOUBLE TAP BOTH SIDES + AUTO HIDE HINT === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
@@ -2600,20 +2600,13 @@ export default function App() {
             animate={{ rotateY: isFlipped ? 180 : 0 }}
             transition={{ duration: 0.75, type: 'spring', stiffness: 280, damping: 26 }}
           >
-            {/* FRONT - MEDIA */}
+            {/* FRONT SIDE */}
             <div
               className="relative backface-hidden rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-black"
               style={{ backfaceVisibility: 'hidden' }}
               onClick={(e) => {
                 e.stopPropagation();
-                // Double tap logic
-                const now = Date.now();
-                if (window.lastTap && now - window.lastTap < 300) {
-                  setIsFlipped(!isFlipped);
-                  window.lastTap = 0;
-                } else {
-                  window.lastTap = now;
-                }
+                handleDoubleTap();
               }}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
@@ -2622,7 +2615,7 @@ export default function App() {
                 <img src={selectedHistoryItem.url} alt={selectedHistoryItem.prompt} className="max-h-[82vh] w-auto max-w-full object-contain" />
               )}
 
-              {/* Top Controls */}
+              {/* Top Controls - X Left, Trash Right */}
               <div className="absolute top-4 left-4 z-50">
                 <button onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }} className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white">
                   <X className="w-5 h-5" />
@@ -2634,11 +2627,11 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Subtle Auto-Hide Hint */}
+              {/* Subtle Auto-Hide Hint - Only on Front */}
               <motion.div
-                initial={{ opacity: 0.7 }}
+                initial={{ opacity: 0.75 }}
                 animate={{ opacity: 0 }}
-                transition={{ delay: 5, duration: 1.2 }}
+                transition={{ delay: 5, duration: 1.5 }}
                 className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/30 text-white/50 text-[10px] px-5 py-1.5 rounded-full pointer-events-none tracking-widest backdrop-blur-md"
               >
                 double tap to flip
@@ -2649,6 +2642,10 @@ export default function App() {
             <div
               className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-2xl"
               style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDoubleTap();
+              }}
             >
               <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
                 <div className="flex justify-center mb-8">
@@ -2698,6 +2695,7 @@ export default function App() {
   )}
 </AnimatePresence>
 
+      
       {/* Settings Modal */}
       <AnimatePresence>
         {showSettings && (
