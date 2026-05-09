@@ -2544,9 +2544,7 @@ export default function App() {
         </section>
       )}
 
-✅ Here's a clean, reliable single-card flip modal based on your working project.
-Replace your entire modal section with this:
-jsx{/* === SINGLE CARD FLIP MODAL (Reliable & Clean) === */}
+{/* === SINGLE CARD FLIP MODAL (Reliable & Clean) === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
