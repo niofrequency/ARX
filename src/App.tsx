@@ -2560,7 +2560,7 @@ export default function App() {
         </section>
       )}
 
-{/* === RELIABLE PREMIUM FLIP MODAL - MOBILE FIXED === */}
+{/* === PREMIUM FLIP MODAL - Updated Controls & Subtle Hint === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
@@ -2610,7 +2610,7 @@ export default function App() {
               setIsFlipped(!isFlipped);
             }}
           >
-            {/* FRONT */}
+            {/* FRONT - MEDIA */}
             <div
               className="relative backface-hidden rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-black"
               style={{ backfaceVisibility: 'hidden' }}
@@ -2629,35 +2629,40 @@ export default function App() {
                 />
               )}
 
-              {/* Top Controls */}
-              <div className="absolute top-4 right-4 flex gap-3 z-50">
+              {/* Top Controls - X Left, Trash Right */}
+              <div className="absolute top-4 left-4 z-50">
                 <button
                   onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="p-3 bg-black/80 hover:bg-black rounded-2xl text-white"
+                  className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-all"
                 >
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+
+              <div className="absolute top-4 right-4 z-50">
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
-                  className="p-3 bg-black/80 hover:bg-red-950 rounded-2xl text-red-400"
+                  className="p-3 bg-black/70 hover:bg-red-950 rounded-2xl text-red-400 transition-all"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Mobile-friendly hint */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-xl px-6 py-3 rounded-2xl text-xs tracking-widest text-white/90 border border-white/10 pointer-events-none">
-                TAP IMAGE TO FLIP →
+              {/* Very Subtle Tap Hint */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 text-white/60 text-[10px] px-5 py-2 rounded-full pointer-events-none tracking-widest backdrop-blur-md">
+                tap to flip
               </div>
             </div>
 
-            {/* BACK */}
+            {/* BACK - INFO */}
             <div
               className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-2xl"
               style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
             >
               <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
-                <History className="w-12 h-12 text-zinc-700 mx-auto mb-8" />
+                <div className="flex justify-center mb-8">
+                  <History className="w-12 h-12 text-zinc-700" />
+                </div>
 
                 {selectedHistoryItem.modelInfo && (
                   <p className="text-center text-emerald-400 text-xs font-mono tracking-[2px] mb-6">
@@ -2678,24 +2683,35 @@ export default function App() {
                   <Download className="w-5 h-5" /> DOWNLOAD
                 </button>
 
-                {!isVideoUrl(selectedHistoryItem.url) && !selectedHistoryItem.prompt?.startsWith('Multi-Angle') && !selectedHistoryItem.prompt?.startsWith('Upscaled') && (
+                {!isVideoUrl(selectedHistoryItem.url) && 
+                 !selectedHistoryItem.prompt?.startsWith('Multi-Angle') && 
+                 !selectedHistoryItem.prompt?.startsWith('Upscaled') && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }} className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }} 
+                      className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm"
+                    >
                       Use in Video
                     </button>
-                    <button onClick={() => { 
-                      const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                      setPrompt(clean); 
-                      setSelectedHistoryItem(null);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }} className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">
+                    <button 
+                      onClick={() => { 
+                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                        setPrompt(clean); 
+                        setSelectedHistoryItem(null);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }} 
+                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                    >
                       Load Prompt
                     </button>
-                    <button onClick={() => { 
-                      const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                      setPromptToSave(clean); 
-                      setShowSavePrompt(true);
-                    }} className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm">
+                    <button 
+                      onClick={() => { 
+                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                        setPromptToSave(clean); 
+                        setShowSavePrompt(true);
+                      }} 
+                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                    >
                       Save Prompt
                     </button>
                   </div>
