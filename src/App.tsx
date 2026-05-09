@@ -335,7 +335,10 @@ export default function App() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
+  
+  // New touch and swipe tracking refs
   const touchStartX = useRef<number | null>(null);
+  const isSwiping = useRef<boolean>(false);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -678,19 +681,32 @@ export default function App() {
     setIsFlipped(false);
   };
 
+  // --- UPDATED TOUCH HANDLERS TO PREVENT GHOST CLICKS ---
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    isSwiping.current = false;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
+    
     if (Math.abs(diff) > 50) {
+      isSwiping.current = true;
       if (diff > 0) handleNextHistory();
       else handlePrevHistory();
     }
     touchStartX.current = null;
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isSwiping.current) {
+      isSwiping.current = false;
+      return;
+    }
+    setIsFlipped(!isFlipped);
   };
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
@@ -1869,73 +1885,73 @@ export default function App() {
                     </div>
                   </div>
                   
-{/* --- PROMPT CONFIGURATION UI --- */}
-<div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    
-    {/* Body Type */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Body Type
-      </label>
-      <select
-        value={promptBodyType}
-        onChange={(e) => setPromptBodyType(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {BODY_TYPES.map(bt => (
-          <option key={bt} value={bt}>{bt}</option>
-        ))}
-      </select>
-    </div>
+                  {/* --- PROMPT CONFIGURATION UI --- */}
+                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      
+                      {/* Body Type */}
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                          Body Type
+                        </label>
+                        <select
+                          value={promptBodyType}
+                          onChange={(e) => setPromptBodyType(e.target.value)}
+                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                        >
+                          {BODY_TYPES.map(bt => (
+                            <option key={bt} value={bt}>{bt}</option>
+                          ))}
+                        </select>
+                      </div>
 
-    {/* Angle */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Camera Angle
-      </label>
-      <select
-        value={promptAngle}
-        onChange={(e) => setPromptAngle(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {CAMERA_ANGLES.map(a => (
-          <option key={a} value={a}>{a}</option>
-        ))}
-      </select>
-    </div>
+                      {/* Angle */}
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                          Camera Angle
+                        </label>
+                        <select
+                          value={promptAngle}
+                          onChange={(e) => setPromptAngle(e.target.value)}
+                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                        >
+                          {CAMERA_ANGLES.map(a => (
+                            <option key={a} value={a}>{a}</option>
+                          ))}
+                        </select>
+                      </div>
 
-    {/* Shot Type */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Shot Type
-      </label>
-      <select
-        value={promptShotType}
-        onChange={(e) => setPromptShotType(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {SHOT_TYPES.map(st => (
-          <option key={st} value={st}>{st}</option>
-        ))}
-      </select>
-    </div>
-  </div>
-</div>
+                      {/* Shot Type */}
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                          Shot Type
+                        </label>
+                        <select
+                          value={promptShotType}
+                          onChange={(e) => setPromptShotType(e.target.value)}
+                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                        >
+                          {SHOT_TYPES.map(st => (
+                            <option key={st} value={st}>{st}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
 
-{/* Prompt Textarea */}
-<div className="relative">
-  <textarea
-    value={memoizedPrompt}
-    onChange={handlePromptChange}
-    placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
-    className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
-  />
-  
-  <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-    Positive Prompt
-  </div>
-</div>
+                  {/* Prompt Textarea */}
+                  <div className="relative">
+                    <textarea
+                      value={memoizedPrompt}
+                      onChange={handlePromptChange}
+                      placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
+                      className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
+                    />
+                    
+                    <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                      Positive Prompt
+                    </div>
+                  </div>
 
                   {/* --- IP ADAPTER SECTION --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
@@ -2544,7 +2560,7 @@ export default function App() {
         </section>
       )}
 
-{/* === FIXED SINGLE CARD FLIP MODAL === */}
+{/* === CONSISTENT SHRINK-WRAPPED FLIP MODAL === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
@@ -2565,39 +2581,39 @@ export default function App() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Entrance Animation Wrapper - Perspective placed here */}
+        {/* Wrapper: w-fit ensures the card perfectly hugs the image width without black bars */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-[94vw] md:max-w-3xl flex justify-center"
+          className="relative w-fit max-w-[94vw] md:max-w-5xl max-h-[94vh] flex justify-center mx-auto"
           style={{ perspective: '1400px' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Main Flip Container */}
           <motion.div
-            className="relative w-full shadow-2xl"
+            className="relative shadow-2xl rounded-3xl"
             style={{ transformStyle: 'preserve-3d' }}
             animate={{ rotateY: isFlipped ? 180 : 0 }}
             transition={{ duration: 0.65, type: 'spring', stiffness: 300, damping: 28 }}
           >
-            {/* FRONT - Relative positioning allows the media to set the container height */}
+            {/* FRONT - Image dictates the dimensions of the card */}
             <div
-              className="relative w-full cursor-pointer bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden"
+              className="relative cursor-pointer bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden"
               style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-              onClick={() => setIsFlipped(!isFlipped)}
+              onClick={handleCardClick}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
                 <video
                   src={selectedHistoryItem.url}
                   autoPlay loop muted playsInline controls
-                  className="w-full max-h-[85vh] object-contain bg-black block"
+                  className="w-auto h-auto max-w-[94vw] md:max-w-5xl max-h-[85vh] object-contain block"
                 />
               ) : (
                 <img
                   src={selectedHistoryItem.url}
                   alt={selectedHistoryItem.prompt}
-                  className="w-full max-h-[85vh] object-contain bg-black block"
+                  className="w-auto h-auto max-w-[94vw] md:max-w-5xl max-h-[85vh] object-contain block"
                 />
               )}
 
@@ -2609,31 +2625,32 @@ export default function App() {
               {/* Top Controls */}
               <button
                 onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                className="absolute top-5 right-5 z-30 p-3 bg-black/70 hover:bg-black rounded-2xl text-white"
+                className="absolute top-5 right-5 z-30 p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
-                className="absolute top-5 left-5 z-30 p-3 bg-black/70 hover:bg-red-900 rounded-2xl text-red-400"
+                className="absolute top-5 left-5 z-30 p-3 bg-black/70 hover:bg-red-900 rounded-2xl text-red-400 transition-colors"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
             </div>
 
-            {/* BACK - Absolute positioning perfectly covers the Front card */}
+            {/* BACK - Absolute inset-0 locks it to the Front's dimensions */}
             <div
-              className="absolute inset-0 w-full h-full bg-zinc-950 flex flex-col rounded-3xl overflow-hidden border border-zinc-700"
+              className="absolute inset-0 w-full h-full bg-zinc-950 flex flex-col rounded-3xl overflow-hidden border border-zinc-700 cursor-pointer"
               style={{
                 backfaceVisibility: 'hidden',
                 WebkitBackfaceVisibility: 'hidden',
                 transform: 'rotateY(180deg)'
               }}
+              onClick={handleCardClick}
             >
               <div className="flex-1 p-6 sm:p-8 overflow-y-auto">
                 <button
                   onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="absolute top-5 right-5 p-3 text-zinc-400 hover:text-white z-30"
+                  className="absolute top-5 right-5 p-3 text-zinc-400 hover:text-white z-30 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -2651,11 +2668,14 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Action Buttons */}
-              <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
+              {/* Action Buttons - Stop Propagation here so clicking a button doesn't flip the card */}
+              <div 
+                className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3 cursor-default"
+                onClick={(e) => e.stopPropagation()} 
+              >
                 <button
                   onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
-                  className="w-full py-4 bg-white text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-[0.97]"
+                  className="w-full py-4 bg-white text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-[0.97] transition-transform"
                 >
                   <Download className="w-5 h-5" />
                   Download
@@ -2670,7 +2690,7 @@ export default function App() {
                           e.stopPropagation();
                           handleAnimateFromHistory(selectedHistoryItem.url);
                         }}
-                        className="w-full py-4 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center gap-2"
+                        className="w-full py-4 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-500/20 transition-colors"
                       >
                         <Film className="w-4 h-4" />
                         Use Image in Video
@@ -2678,23 +2698,25 @@ export default function App() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                             setPrompt(clean);
                             setSelectedHistoryItem(null);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
-                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium"
+                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium transition-colors"
                         >
                           Use Prompt
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                             setPromptToSave(clean);
                             setShowSavePrompt(true);
                           }}
-                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium"
+                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium transition-colors"
                         >
                           Save Prompt
                         </button>
@@ -2709,7 +2731,6 @@ export default function App() {
     </>
   )}
 </AnimatePresence>
-
 
       {/* Settings Modal */}
       <AnimatePresence>
