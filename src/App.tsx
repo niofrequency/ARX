@@ -2565,40 +2565,39 @@ export default function App() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* Entrance Animation Wrapper - Perspective placed here */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-[94vw] md:max-w-3xl max-h-[94vh] bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-[94vw] md:max-w-3xl flex justify-center"
+          style={{ perspective: '1400px' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Main Flip Container */}
           <motion.div
-            className="relative w-full h-full"
-            style={{ 
-              perspective: '1400px',
-              transformStyle: 'preserve-3d'   // ← This was missing!
-            }}
+            className="relative w-full shadow-2xl"
+            style={{ transformStyle: 'preserve-3d' }}
             animate={{ rotateY: isFlipped ? 180 : 0 }}
             transition={{ duration: 0.65, type: 'spring', stiffness: 300, damping: 28 }}
           >
-            {/* FRONT - MEDIA */}
+            {/* FRONT - Relative positioning allows the media to set the container height */}
             <div
-              className="absolute inset-0 cursor-pointer backface-hidden"
-              style={{ backfaceVisibility: 'hidden' }}
+              className="relative w-full cursor-pointer bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden"
+              style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
               onClick={() => setIsFlipped(!isFlipped)}
             >
               {isVideoUrl(selectedHistoryItem.url) ? (
                 <video
                   src={selectedHistoryItem.url}
                   autoPlay loop muted playsInline controls
-                  className="w-full h-full object-contain bg-black rounded-3xl"
+                  className="w-full max-h-[85vh] object-contain bg-black block"
                 />
               ) : (
                 <img
                   src={selectedHistoryItem.url}
                   alt={selectedHistoryItem.prompt}
-                  className="w-full h-full object-contain bg-black rounded-3xl"
+                  className="w-full max-h-[85vh] object-contain bg-black block"
                 />
               )}
 
@@ -2622,12 +2621,13 @@ export default function App() {
               </button>
             </div>
 
-            {/* BACK - INFO */}
+            {/* BACK - Absolute positioning perfectly covers the Front card */}
             <div
-              className="absolute inset-0 backface-hidden bg-zinc-950 flex flex-col rounded-3xl"
-              style={{ 
-                backfaceVisibility: 'hidden', 
-                transform: 'rotateY(180deg)' 
+              className="absolute inset-0 w-full h-full bg-zinc-950 flex flex-col rounded-3xl overflow-hidden border border-zinc-700"
+              style={{
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+                transform: 'rotateY(180deg)'
               }}
             >
               <div className="flex-1 p-6 sm:p-8 overflow-y-auto">
