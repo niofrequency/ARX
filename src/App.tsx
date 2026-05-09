@@ -4,7 +4,7 @@
  */
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase } from './lib/firebase';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
   Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
@@ -1465,6 +1465,12 @@ export default function App() {
   const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
   const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
 
+  // Add these two lines before the return statement
+  const memoizedPrompt = useMemo(() => prompt, [prompt]);
+  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPrompt(e.target.value);
+  }, []);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
       
@@ -1765,10 +1771,10 @@ export default function App() {
 
                   <div className="relative">
                     <textarea 
-                      value={prompt} 
-                      onChange={(e) => setPrompt(e.target.value)} 
+                      value={memoizedPrompt} 
+                      onChange={handlePromptChange}
                       placeholder="Describe the motion and scene details..." 
-                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
+                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
                     />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       Positive Prompt
@@ -1901,8 +1907,8 @@ export default function App() {
 {/* Prompt Textarea */}
 <div className="relative">
   <textarea
-    value={prompt}
-    onChange={(e) => setPrompt(e.target.value)}
+    value={memoizedPrompt}
+    onChange={handlePromptChange}
     placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
     className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
   />
@@ -1933,7 +1939,7 @@ export default function App() {
                                     setFaceRefFile(f);
                                     setFaceRefPreview(url);
                                 }}
-                             />
+                              />
                          </div>
                          {faceRefFile ? (
                              <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
@@ -2201,10 +2207,10 @@ export default function App() {
                   
                   <div className="relative">
                     <textarea 
-                      value={prompt} 
-                      onChange={(e) => setPrompt(e.target.value)} 
+                      value={memoizedPrompt} 
+                      onChange={handlePromptChange}
                       placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')...." 
-                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed" 
+                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
                     />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
                       <button 
@@ -2555,32 +2561,29 @@ export default function App() {
                 </>
               )}
 
-              {/* 3D Carousel Mapper */}
-              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
+              {/* 3D Carousel Mapper - OPTIMIZED */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
                   let offset = idx - currentIndex;
                   const len = history.length;
                   
-                  // Wrap-around logic so images slide infinitely and never "unmount" suddenly
                   if (offset > len / 2) offset -= len;
                   else if (offset < -len / 2) offset += len;
                   
                   const isCenter = offset === 0;
-                  const isVisible = Math.abs(offset) <= 1;
+                  const isVisible = Math.abs(offset) <= 2;   // ← Reduced visible range
 
                   return (
                     <div
-                      key={`carousel-${img.id}-${idx}`}
-                      className={`absolute transition-all duration-500 ease-out flex items-center justify-center pointer-events-none`}
+                      key={`carousel-${img.id}`}
+                      className={`absolute transition-all duration-700 ease-out flex items-center justify-center ${!isVisible ? 'hidden' : ''}`}
                       style={{
-                        transform: `translateX(${offset * (typeof window !== 'undefined' && window.innerWidth < 768 ? 85 : 65)}vw) translateZ(${isCenter ? 0 : -500}px) rotateY(${isCenter ? 0 : (offset > 0 ? -45 : 45)}deg)`,
+                        transform: `translateX(${offset * 72}vw) translateZ(${isCenter ? 0 : -600}px) rotateY(${isCenter ? 0 : offset * 38}deg)`,
                         zIndex: 1000 - Math.abs(offset),
-                        // Keep mounted but opacity 0.4 if further than 1 slot away
-                        opacity: isCenter ? 1 : (isVisible ? 0.4 : 0),
+                        opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.65 : 0.25),
                         pointerEvents: isCenter ? 'auto' : 'none',
-                        transformStyle: 'preserve-3d',
-                        visibility: Math.abs(offset) > 2 ? 'hidden' : 'visible'
+                        transformStyle: 'preserve-3d'
                       }}
                     >
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
@@ -2701,7 +2704,7 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
- {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+{/* SINGLE CLEAN DOWNLOAD BUTTON */}
 <button
   onClick={(e) => handleDownload(img.url, img.prompt, e)}
   className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
