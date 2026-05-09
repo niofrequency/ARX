@@ -2560,173 +2560,173 @@ export default function App() {
         </section>
       )}
 
-{/* === CONSISTENT SHRINK-WRAPPED FLIP MODAL === */}
+{/* === WORKING SINGLE CARD FLIP MODAL (from your old reliable code) === */}
 <AnimatePresence>
   {selectedHistoryItem && (
     <>
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={() => {
-          setSelectedHistoryItem(null);
-          setIsFlipped(false);
-        }}
-        className="fixed inset-0 bg-zinc-950/95 backdrop-blur-sm z-[80]"
+        onClick={() => { setSelectedHistoryItem(null); setIsFlipped(false); }}
+        className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[80]"
       />
 
       <div
-        className="fixed inset-0 z-[90] flex items-center justify-center p-4 touch-none"
+        className="fixed inset-0 z-[90] flex items-center justify-center p-4 md:p-10 overflow-hidden touch-none"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onClick={() => { setSelectedHistoryItem(null); setIsFlipped(false); }}
       >
-        {/* Wrapper: w-fit ensures the card perfectly hugs the image width without black bars */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-fit max-w-[94vw] md:max-w-5xl max-h-[94vh] flex justify-center mx-auto"
-          style={{ perspective: '1400px' }}
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Main Flip Container */}
-          <motion.div
-            className="relative shadow-2xl rounded-3xl"
-            style={{ transformStyle: 'preserve-3d' }}
-            animate={{ rotateY: isFlipped ? 180 : 0 }}
-            transition={{ duration: 0.65, type: 'spring', stiffness: 300, damping: 28 }}
+        {/* Navigation Arrows */}
+        {history.length > 1 && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); handlePrevHistory(); }}
+              className="hidden sm:flex fixed left-6 md:left-12 top-1/2 -translate-y-1/2 z-[100] w-14 h-14 rounded-full bg-white/10 border border-white/20 items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleNextHistory(); }}
+              className="hidden sm:flex fixed right-6 md:right-12 top-1/2 -translate-y-1/2 z-[100] w-14 h-14 rounded-full bg-white/10 border border-white/20 items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          </>
+        )}
+
+        <div className="relative w-full h-full max-w-5xl flex items-center justify-center" style={{ perspective: '2000px' }}>
+          <div
+            className="relative w-fit max-w-[92vw] max-h-[88vh] flex flex-col"
+            style={{ perspective: '2000px', touchAction: 'none' }}
           >
-            {/* FRONT - Image dictates the dimensions of the card */}
-            <div
-              className="relative cursor-pointer bg-zinc-950 border border-zinc-700 rounded-3xl overflow-hidden"
-              style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-              onClick={handleCardClick}
-            >
-              {isVideoUrl(selectedHistoryItem.url) ? (
-                <video
-                  src={selectedHistoryItem.url}
-                  autoPlay loop muted playsInline controls
-                  className="w-auto h-auto max-w-[94vw] md:max-w-5xl max-h-[85vh] object-contain block"
-                />
-              ) : (
-                <img
-                  src={selectedHistoryItem.url}
-                  alt={selectedHistoryItem.prompt}
-                  className="w-auto h-auto max-w-[94vw] md:max-w-5xl max-h-[85vh] object-contain block"
-                />
-              )}
-
-              {/* Visual Feedback */}
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 text-white/90 text-xs px-6 py-3 rounded-2xl flex items-center gap-2 pointer-events-none">
-                TAP TO SEE DETAILS →
-              </div>
-
-              {/* Top Controls */}
-              <button
-                onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                className="absolute top-5 right-5 z-30 p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
-                className="absolute top-5 left-5 z-30 p-3 bg-black/70 hover:bg-red-900 rounded-2xl text-red-400 transition-colors"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* BACK - Absolute inset-0 locks it to the Front's dimensions */}
-            <div
-              className="absolute inset-0 w-full h-full bg-zinc-950 flex flex-col rounded-3xl overflow-hidden border border-zinc-700 cursor-pointer"
-              style={{
-                backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)'
+            <motion.div
+              className="relative shadow-2xl rounded-3xl cursor-pointer overflow-hidden"
+              style={{ transformStyle: 'preserve-3d' }}
+              animate={{ rotateY: isFlipped ? 180 : 0 }}
+              transition={{ duration: 0.65, type: 'spring', stiffness: 280, damping: 26 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsFlipped(!isFlipped);
               }}
-              onClick={handleCardClick}
             >
-              <div className="flex-1 p-6 sm:p-8 overflow-y-auto">
+              {/* FRONT - MEDIA */}
+              <div
+                className="relative backface-hidden rounded-3xl overflow-hidden bg-black"
+                style={{ backfaceVisibility: 'hidden' }}
+              >
+                {isVideoUrl(selectedHistoryItem.url) ? (
+                  <video
+                    src={selectedHistoryItem.url}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    controls
+                    className="max-h-[82vh] w-auto max-w-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={selectedHistoryItem.url}
+                    alt={selectedHistoryItem.prompt}
+                    className="max-h-[82vh] w-auto max-w-full object-contain"
+                  />
+                )}
+
+                {/* Top Controls */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="absolute top-5 right-5 p-3 text-zinc-400 hover:text-white z-30 transition-colors"
+                  className="absolute top-4 right-4 z-50 p-3 bg-black/70 hover:bg-black rounded-2xl text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
-
-                <History className="w-10 h-10 text-zinc-600 mx-auto mb-6" />
-
-                {selectedHistoryItem.modelInfo && (
-                  <p className="text-center text-[10px] text-zinc-500 mb-6 font-mono">
-                    {selectedHistoryItem.modelInfo}
-                  </p>
-                )}
-
-                <p className="text-zinc-100 text-[15px] leading-relaxed text-center px-4">
-                  {selectedHistoryItem.prompt}
-                </p>
-              </div>
-
-              {/* Action Buttons - Stop Propagation here so clicking a button doesn't flip the card */}
-              <div 
-                className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3 cursor-default"
-                onClick={(e) => e.stopPropagation()} 
-              >
                 <button
-                  onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
-                  className="w-full py-4 bg-white text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-[0.97] transition-transform"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
+                  className="absolute top-4 left-4 z-50 p-3 bg-black/70 hover:bg-red-900 rounded-2xl text-red-400"
                 >
-                  <Download className="w-5 h-5" />
-                  Download
+                  <Trash2 className="w-5 h-5" />
                 </button>
 
-                {!isVideoUrl(selectedHistoryItem.url) &&
-                  !selectedHistoryItem.prompt.startsWith('Multi-Angle') &&
-                  !selectedHistoryItem.prompt.startsWith('Upscaled') && (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAnimateFromHistory(selectedHistoryItem.url);
-                        }}
-                        className="w-full py-4 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-500/20 transition-colors"
-                      >
-                        <Film className="w-4 h-4" />
-                        Use Image in Video
-                      </button>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                            setPrompt(clean);
-                            setSelectedHistoryItem(null);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium transition-colors"
-                        >
-                          Use Prompt
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                            setPromptToSave(clean);
-                            setShowSavePrompt(true);
-                          }}
-                          className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium transition-colors"
-                        >
-                          Save Prompt
-                        </button>
-                      </div>
-                    </>
-                  )}
+                {/* Tap Hint */}
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 px-6 py-3 rounded-2xl text-xs text-white/90 pointer-events-none">
+                  TAP TO FLIP →
+                </div>
               </div>
-            </div>
-          </motion.div>
-        </motion.div>
+
+              {/* BACK - INFO */}
+              <div
+                className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 flex flex-col overflow-hidden"
+                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+              >
+                <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
+                  <History className="w-10 h-10 text-zinc-600 mx-auto mb-6" />
+                  
+                  {selectedHistoryItem.modelInfo && (
+                    <p className="text-center text-[10px] text-zinc-500 mb-6 font-mono tracking-widest">
+                      {selectedHistoryItem.modelInfo}
+                    </p>
+                  )}
+
+                  <p className="text-zinc-100 text-[15px] leading-relaxed text-center">
+                    {selectedHistoryItem.prompt}
+                  </p>
+                </div>
+
+                <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
+                  <button
+                    onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
+                    className="w-full py-4 bg-white text-black rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-95"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download
+                  </button>
+
+                  {!isVideoUrl(selectedHistoryItem.url) &&
+                    !selectedHistoryItem.prompt.startsWith('Multi-Angle') &&
+                    !selectedHistoryItem.prompt.startsWith('Upscaled') && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAnimateFromHistory(selectedHistoryItem.url);
+                          }}
+                          className="w-full py-4 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center gap-2"
+                        >
+                          <Film className="w-4 h-4" />
+                          Use Image in Video
+                        </button>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => {
+                              const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                              setPrompt(clean);
+                              setSelectedHistoryItem(null);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium"
+                          >
+                            Use Prompt
+                          </button>
+                          <button
+                            onClick={() => {
+                              const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                              setPromptToSave(clean);
+                              setShowSavePrompt(true);
+                            }}
+                            className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium"
+                          >
+                            Save Prompt
+                          </button>
+                        </div>
+                      </>
+                    )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
       </div>
     </>
   )}
