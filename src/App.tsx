@@ -795,25 +795,29 @@ export default function App() {
 
     const lowerPrompt = activePrompt.toLowerCase();
 
-    const autoLoras: any[] = [];
+    const finalAutoLoras: any[] = [];
     const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
     for (const keyword of sortedKeywords) {
       const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
       if (regex.test(lowerPrompt)) {
         const config = AUTO_LORA_MAP[keyword];
-        if (!autoLoras.some(l => l.high === config.high)) {
-          autoLoras.push(config);
+        if (!finalAutoLoras.some(l => l.path === config.high)) {
+          finalAutoLoras.push({
+            path: config.high,
+            model_weight: config.high_weight || 0.85,
+            clip_weight: config.low_weight || 0.85
+          });
         }
       }
     }
 
-    const finalAutoLoras = autoLoras.slice(0, 2);
+    const finalLoras = finalAutoLoras.slice(0, 2); // Max 2 for stability
     
     console.log("📤 Sending to RunPod Video:", {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      loraCount: finalAutoLoras.length,
-      loras: finalAutoLoras.map(l => l.high)
+      loraCount: finalLoras.length,
+      loras: finalLoras.map(l => l.path)
     });
 
     const payload = {
@@ -827,7 +831,7 @@ export default function App() {
         height: videoHeight,
         length: videoLength,
         steps: videoSteps,
-        lora_pairs: finalAutoLoras
+        lora_pairs: finalLoras
       }
     };
 
@@ -858,7 +862,7 @@ export default function App() {
         id: data.id,
         pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
         historyPrompt: activePrompt,
-        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2'
+        modelInfo: finalLoras.length > 0 ? `Wan 2.2 + ${finalLoras.length} LoRAs` : 'Wan 2.2'
       };
     } catch (err: any) {
       console.error("Video trigger failed:", err);
