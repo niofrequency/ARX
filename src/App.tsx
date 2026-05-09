@@ -521,7 +521,7 @@ export default function App() {
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
+      document.body.style.touchAction = 'none';      // Prevent zoom & background scroll
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -695,11 +695,34 @@ export default function App() {
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    const isDeletingCurrent = selectedHistoryItem?.id === id;
+    
+    // Update UI immediately
     setHistory(prev => prev.filter(item => item.id !== id));
+    
+    // Delete from IndexedDB
     await deleteHistoryItemDB(id);
-    if (selectedHistoryItem?.id === id) {
-      setSelectedHistoryItem(null);
-      setIsFlipped(false);
+
+    if (isDeletingCurrent) {
+      const remainingHistory = history.filter(h => h.id !== id);
+      
+      if (remainingHistory.length === 0) {
+        // Last image deleted → close modal
+        setSelectedHistoryItem(null);
+        setIsFlipped(false);
+      } else {
+        // Automatically move to next image (or previous if it was the last one)
+        const oldIndex = history.findIndex(h => h.id === id);
+        let newIndex = oldIndex;
+        
+        if (oldIndex === history.length - 1) {
+          newIndex = oldIndex - 1; // Was last → go to previous
+        }
+        
+        setSelectedHistoryItem(remainingHistory[Math.min(newIndex, remainingHistory.length - 1)]);
+        setIsFlipped(false);
+      }
     }
   };
 
