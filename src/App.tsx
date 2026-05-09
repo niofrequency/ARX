@@ -2608,123 +2608,170 @@ export default function App() {
                 </>
               )}
 
-            {/* 3D Carousel Mapper - FIXED FLIP */}
-<div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
-  {history.map((img, idx) => {
-    const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
-    let offset = idx - currentIndex;
-    const len = history.length;
-    
-    if (offset > len / 2) offset -= len;
-    else if (offset < -len / 2) offset += len;
-    
-    const isCenter = offset === 0;
-    const isVisible = Math.abs(offset) <= 2;
+              {/* 3D Carousel Mapper - FIXED FLIP */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '2000px' }}>
+                {history.map((img, idx) => {
+                  const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
+                  let offset = idx - currentIndex;
+                  const len = history.length;
+                  
+                  if (offset > len / 2) offset -= len;
+                  else if (offset < -len / 2) offset += len;
+                  
+                  const isCenter = offset === 0;
+                  const isVisible = Math.abs(offset) <= 2;
 
-    return (
-      <div
-        key={`carousel-${img.id}`}
-        className={`absolute transition-all duration-700 ease-out flex items-center justify-center ${!isVisible ? 'hidden' : ''}`}
-        style={{
-          transform: `translateX(${offset * 72}vw) translateZ(${isCenter ? 0 : -600}px) rotateY(${isCenter ? 0 : offset * 38}deg)`,
-          zIndex: 1000 - Math.abs(offset),
-          opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.7 : 0.3),
-          pointerEvents: isCenter ? 'auto' : 'none',
-        }}
-      >
-        <div 
-          className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh]"
-          style={{ perspective: '2000px', transformStyle: 'preserve-3d' }}
-        >
-          <motion.div 
-            className="relative w-full h-full shadow-2xl rounded-3xl cursor-pointer select-none"
-            style={{ transformStyle: 'preserve-3d' }}
-            animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }}
-            transition={{ duration: 0.7, type: 'spring', stiffness: 260, damping: 24 }}
-            onDoubleClick={() => isCenter && setIsFlipped(p => !p)}
-            onClick={() => isCenter && setIsFlipped(p => !p)} // fallback tap
-          >
-            
-            {/* FRONT SIDE */}
-            <div 
-              className="absolute inset-0 w-full h-full rounded-3xl overflow-hidden bg-zinc-950 flex items-center justify-center"
-              style={{ backfaceVisibility: 'hidden' }}
-            >
-              {isVideoUrl(img.url) ? (
-                <video 
-                  src={img.url} 
-                  autoPlay 
-                  loop 
-                  muted 
-                  playsInline 
-                  controls={isCenter}
-                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain bg-black rounded-3xl"
-                />
-              ) : (
-                <img 
-                  src={img.url} 
-                  alt="History" 
-                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain rounded-3xl"
-                />
-              )}
+                  return (
+                    <div
+                      key={`carousel-${img.id}`}
+                      className={`absolute transition-all duration-700 ease-out flex items-center justify-center ${!isVisible ? 'hidden' : ''}`}
+                      style={{
+                        transform: `translateX(${offset * 72}vw) translateZ(${isCenter ? 0 : -600}px) rotateY(${isCenter ? 0 : offset * 38}deg)`,
+                        zIndex: 1000 - Math.abs(offset),
+                        opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.7 : 0.3),
+                        pointerEvents: isCenter ? 'auto' : 'none',
+                      }}
+                    >
+                      <div 
+                        className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh]"
+                        style={{ perspective: '2000px', transformStyle: 'preserve-3d' }}
+                      >
+                        <motion.div 
+                          className="relative w-full h-full shadow-2xl rounded-3xl cursor-pointer select-none"
+                          style={{ transformStyle: 'preserve-3d' }}
+                          animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }}
+                          transition={{ duration: 0.7, type: 'spring', stiffness: 260, damping: 24 }}
+                          onDoubleClick={() => isCenter && setIsFlipped(p => !p)}
+                          onClick={() => isCenter && setIsFlipped(p => !p)} // fallback tap
+                        >
+                          
+                          {/* FRONT SIDE */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-3xl overflow-hidden bg-zinc-950 flex items-center justify-center"
+                            style={{ backfaceVisibility: 'hidden' }}
+                          >
+                            {isVideoUrl(img.url) ? (
+                              <video 
+                                src={img.url} 
+                                autoPlay 
+                                loop 
+                                muted 
+                                playsInline 
+                                controls={isCenter}
+                                className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain bg-black rounded-3xl"
+                              />
+                            ) : (
+                              <img 
+                                src={img.url} 
+                                alt="History" 
+                                className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain rounded-3xl"
+                              />
+                            )}
+                            {isCenter && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-3xl pointer-events-none">
+                                <div className="bg-black/70 px-5 py-2 rounded-full text-xs uppercase tracking-widest text-white/90">
+                                  Double-tap to flip
+                                </div>
+                              </div>
+                            )}
+                          </div>
 
-              {isCenter && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-3xl pointer-events-none">
-                  <div className="bg-black/70 px-5 py-2 rounded-full text-xs uppercase tracking-widest text-white/90">
-                    Double-tap to flip
-                  </div>
-                </div>
-              )}
-            </div>
+                          {/* BACK SIDE */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-3xl overflow-hidden bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center"
+                            style={{ 
+                              backfaceVisibility: 'hidden', 
+                              transform: 'rotateY(180deg)',
+                              transformStyle: 'preserve-3d'
+                            }}
+                          >
+                            {/* Back content - merged with existing back card functional elements */}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); }} 
+                              className="absolute top-4 right-4 p-3 bg-zinc-900/90 rounded-full text-zinc-400 hover:text-white z-10"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                            <button 
+                              onClick={(e) => handleDeleteHistory(img.id, e)} 
+                              className="absolute top-4 left-4 p-3 text-red-400 hover:text-red-300 bg-zinc-900/90 rounded-full z-10 transition-colors"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                            
+                            <History className="w-10 h-10 text-zinc-600 mb-6 shrink-0" />
+                            <h3 className="text-zinc-400 font-mono text-xs uppercase tracking-widest mb-3 shrink-0">DETAILS</h3>
+                            
+                            {img.modelInfo && <p className="text-zinc-500 text-xs mb-6 shrink-0">{img.modelInfo}</p>}
+                            
+                            <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
+                              <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
+                                {img.prompt}
+                              </p>
+                            </div>
+                            
+                            <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                              
+                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+                              <button
+                                onClick={(e) => handleDownload(img.url, img.prompt, e)}
+                                className="w-full py-4 bg-zinc-100 hover:bg-white text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+                              >
+                                <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+                                Download
+                              </button>
+                              
+                              {/* Actions for Images Only */}
+                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                <>
+                                  {/* USE IMAGE IN VIDEO BUTTON */}
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      handleAnimateFromHistory(img.url);
+                                    }} 
+                                    className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Film className="w-4 h-4" />
+                                    Use Image in Video
+                                  </button>
 
-            {/* BACK SIDE */}
-            <div 
-              className="absolute inset-0 w-full h-full rounded-3xl overflow-hidden bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center"
-              style={{ 
-                backfaceVisibility: 'hidden', 
-                transform: 'rotateY(180deg)',
-                transformStyle: 'preserve-3d'
-              }}
-            >
-              {/* Back content - your existing back card */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); }} 
-                className="absolute top-4 right-4 p-3 bg-zinc-900/90 rounded-full text-zinc-400 hover:text-white z-10"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPrompt(cleanPrompt); 
+                                      setSelectedHistoryItem(null); 
+                                      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                    Use This Prompt
+                                  </button>
 
-              <button 
-                onClick={(e) => handleDeleteHistory(img.id, e)} 
-                className="absolute top-4 left-4 p-3 text-red-400 hover:text-red-300 bg-zinc-900/90 rounded-full z-10"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-
-              <History className="w-10 h-10 text-zinc-600 mb-6" />
-              <h3 className="text-zinc-400 font-mono text-xs uppercase tracking-widest mb-3">DETAILS</h3>
-              
-              {img.modelInfo && <p className="text-zinc-500 text-xs mb-6">{img.modelInfo}</p>}
-
-              <div className="max-w-md text-sm leading-relaxed text-zinc-200 px-4">
-                {img.prompt}
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPromptToSave(cleanPrompt);
+                                      setShowSavePrompt(true);
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                    Save Prompt
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-
-              <div className="mt-8 w-full max-w-xs space-y-3">
-                <button
-                  onClick={(e) => handleDownload(img.url, img.prompt, e)}
-                  className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-2xl font-medium flex items-center justify-center gap-3 active:scale-95"
-                >
-                  <Download className="w-5 h-5" /> Download
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  })}
-</div>
             </div>
           </>
         )}
