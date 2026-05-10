@@ -9,7 +9,7 @@ export const generateRandomIdea = async (
   angle: string,
   shotType: string
 ): Promise<string> => {
-  const key = apiKey || import.meta.env.VITE_GROK_API_KEY;
+  const key = apiKey || import.meta.env.GROK_API_KEY;
 
   if (!key) {
     throw new Error("Grok API key is missing. Please add it in the settings.");
