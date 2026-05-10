@@ -4,10 +4,10 @@
  */
 export const generateRandomIdea = async (
   apiKey: string,
-  basePrompt: string,
-  bodyType: string,
-  angle: string,
-  shotType: string
+  basePrompt: string = '',
+  bodyType: string = 'Random',
+  angle: string = 'Random',
+  shotType: string = 'Random'
 ): Promise<string> => {
   const key = apiKey || import.meta.env.VITE_GROK_API_KEY;
 
@@ -15,40 +15,40 @@ export const generateRandomIdea = async (
     throw new Error("Grok API key is missing. Please add it in the settings.");
   }
 
-  const systemInstruction = `You are an expert AI image prompt architect. 
-Your job is to expand basic parameters into a highly detailed, cinematic, comma-separated prompt suitable for Wan 2.2 / Flux / SDXL style models.
+  const systemInstruction = `You are an expert AI image prompt architect.
+Your job is to turn basic parameters into a highly detailed, cinematic, comma-separated prompt optimized for Flux / SDXL / Wan 2.2 style models.
 Return ONLY the raw prompt. No explanations, no quotes, no markdown.`;
 
-  const userMessage = `Create a detailed image prompt using these parameters:
+  const userMessage = `Create a detailed, high-quality image prompt using these parameters:
 
-Base concept: ${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'beautiful woman in seductive pose'}
-Body Type: ${bodyType !== 'Random' ? bodyType : 'curvy athletic feminine'}
+Base concept: ${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'beautiful seductive woman'}
+Body Type: ${bodyType !== 'Random' ? bodyType : 'curvy athletic feminine body'}
 Camera Angle: ${angle !== 'Random' ? angle : 'dynamic cinematic angle'}
 Shot Type: ${shotType !== 'Random' ? shotType : 'full body dramatic shot'}
 
 Requirements:
-- Highly detailed, realistic, cinematic lighting
-- Natural motion and expression
+- Extremely detailed, photorealistic, cinematic lighting
+- Beautiful anatomy, realistic skin texture, natural expression
 - Best quality, masterpiece, ultra-detailed, 8k
-- Focus on anatomy, skin texture, and atmosphere`;
+- Rich atmosphere and depth`;
 
   try {
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`
+        "Authorization": `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "grok-4-1-fast--non-reasoning",           // ← Updated model
+        model: "grok-4-1-fast",                    // ← Fixed model name
         messages: [
           { role: "system", content: systemInstruction },
           { role: "user", content: userMessage }
         ],
-        temperature: 0.9,
-        max_tokens: 400,              // ← Increased for better prompts
-        top_p: 0.95
-      })
+        temperature: 0.85,
+        max_tokens: 500,
+        top_p: 0.95,
+      }),
     });
 
     if (!response.ok) {
@@ -61,15 +61,18 @@ Requirements:
     let generated = data.choices?.[0]?.message?.content?.trim();
 
     if (!generated) {
-      throw new Error("Empty response from Grok");
+      throw new Error("Empty response from Grok API");
     }
 
-    // Clean any accidental formatting
-    generated = generated.replace(/^["']|["']$/g, '').trim();
-    return generated;
+    // Clean up any accidental formatting
+    generated = generated
+      .replace(/^["']|["']$/g, '')
+      .replace(/\n/g, ' ')
+      .trim();
 
+    return generated;
   } catch (error: any) {
     console.error("Grok Architect Error:", error);
-    throw new Error(error.message || "Failed to connect to Grok. Check your API key and internet.");
+    throw new Error(error.message || "Failed to generate prompt. Check your API key.");
   }
 };
