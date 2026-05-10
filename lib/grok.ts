@@ -9,7 +9,7 @@ export const generateRandomIdea = async (
   angle: string,
   shotType: string
 ): Promise<string> => {
-  const key = apiKey || import.meta.env.GROK_API_KEY;
+  const key = apiKey || import.meta.env.VITE_GROK_API_KEY;
 
   if (!key) {
     throw new Error("Grok API key is missing. Please add it in the settings.");
@@ -40,7 +40,7 @@ Requirements:
         "Authorization": `Bearer ${key}`
       },
       body: JSON.stringify({
-        model: "grok-beta",           // ← Updated model
+        model: "grok-4-1-fast--non-reasoning",           // ← Updated model
         messages: [
           { role: "system", content: systemInstruction },
           { role: "user", content: userMessage }
