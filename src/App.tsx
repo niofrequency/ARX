@@ -218,54 +218,14 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "cum in mouth": { 
-    high: "cum-in-mouth.safetensors", 
-    low: "cum-in-mouth.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "creampie coming out": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.95, 
-    low_weight: 0.9 
-  },
-  "vagina": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "pussy": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "fingering": { 
-    high: "fingering.safetensors", 
-    low: "fingering.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "twerk": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  },
-  "twerking": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  }
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "creampie coming out": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.95, low_weight: 0.9 },
+  "vagina": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 }
 };
 
 export default function App() {
@@ -339,7 +299,7 @@ export default function App() {
 
   // --- Output Size Control State ---
   const [targetAspect, setTargetAspect] = useState<'9:16' | '16:9' | '2:3' | '3:2' | '1:1' | '4:5' | '5:4' | 'Custom'>('9:16');
-  const [customWidth, setCustomWidth] = useState(832);   // default good for portrait
+  const [customWidth, setCustomWidth] = useState(832);
   const [customHeight, setCustomHeight] = useState(1216);
   
   // New touch and swipe tracking refs
@@ -352,16 +312,13 @@ export default function App() {
   // Smart Defaults When IP-Adapter Face is Used
   useEffect(() => {
     if (faceRefFile && mode === 'runpod') {
-      // For these rapid Qwen models, we use moderate steps instead of 35
-      setSteps(12);           // compromise: 10-16 is sweet spot
+      setSteps(12);           
       setCfg(2.8);
-      setDenoise(0.85);       // slightly lower to avoid overcooking
+      setDenoise(0.85);       
       setIpAdapterStrength(0.95);
-      
-      setSampler("dpmpp_2m_sde");   // better for face detail
+      setSampler("dpmpp_2m_sde");   
       setScheduler("karras");
 
-      // Add face quality reinforcement
       if (!prompt.toLowerCase().includes("detailed face")) {
         setPrompt(p => 
           (p ? p + ", " : "") + "highly detailed face, sharp eyes, realistic skin texture, same face as reference"
@@ -445,9 +402,7 @@ export default function App() {
           setWavespeedBalance(`$${json.data.balance.toFixed(2)}`);
         }
       }
-    } catch (e) {
-      console.error("Failed to fetch Wavespeed balance", e);
-    }
+    } catch (e) {}
   };
 
   const fetchRunPodBalance = async (keyToUse: string) => {
@@ -469,9 +424,7 @@ export default function App() {
           setRunpodBalance(`$${json.data.myself.balance.toFixed(2)}`);
         }
       }
-    } catch (e) {
-      console.error("Failed to fetch RunPod balance", e);
-    }
+    } catch (e) {}
   };
 
   const syncCloudHistory = async (keyToUse: string) => {
@@ -517,7 +470,6 @@ export default function App() {
         return sorted;
       });
     } catch (e) {
-      console.warn("Cloud sync failed gracefully:", e);
     } finally {
       setIsSyncing(false);
     }
@@ -559,11 +511,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
-  // Lock body scroll when modal is open
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';      // Prevent zoom & background scroll
+      document.body.style.touchAction = 'none';
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -680,7 +631,6 @@ export default function App() {
       setIsFlipped(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
-      console.error("Could not extract file from history", e);
       setError("Failed to extract that image to the video engine. (CORS or network error)");
     }
   };
@@ -720,7 +670,6 @@ export default function App() {
     setIsFlipped(false);
   };
 
-   // --- TOUCH & SWIPE HANDLERS ---
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     isSwiping.current = false;
@@ -739,7 +688,6 @@ export default function App() {
     touchStartX.current = null;
   };
 
-  // Double Tap Handler (works on BOTH front and back)
   const handleDoubleTap = () => {
     const now = Date.now();
     if ((window as any).lastTap && now - (window as any).lastTap < 280) {
@@ -839,7 +787,7 @@ export default function App() {
     const baseW = customWidth;
     const baseH = customHeight;
     switch (targetAspect) {
-      case '9:16': return { width: 576, height: 1024 };   // or 832x1472 etc.
+      case '9:16': return { width: 576, height: 1024 };
       case '16:9': return { width: 1024, height: 576 };
       case '2:3':  return { width: 768, height: 1152 };
       case '3:2':  return { width: 1152, height: 768 };
@@ -853,20 +801,17 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
     let safeBase64 = cleanAndPadBase64(base64Image);
 
-    // Aggressive compression for large images
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
     }
 
-    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
     const lowerPrompt = activePrompt.toLowerCase();
-
     const finalAutoLoras: any[] = [];
     const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
 
@@ -884,13 +829,7 @@ export default function App() {
       }
     }
 
-    const finalLoras = finalAutoLoras.slice(0, 2); // Max 2 for stability
-    
-    console.log("📤 Sending to RunPod Video:", {
-      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      loraCount: finalLoras.length,
-      loras: finalLoras.map(l => l.path)
-    });
+    const finalLoras = finalAutoLoras.slice(0, 2); 
 
     const payload = {
       input: {
@@ -919,10 +858,7 @@ export default function App() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("🚨 RunPod Error Response:", errorText);
-        
         if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
-          console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
           await new Promise(r => setTimeout(r, 5000));
           return triggerRunPodVideo(base64Image, retryCount + 1);
         }
@@ -937,7 +873,6 @@ export default function App() {
         modelInfo: finalLoras.length > 0 ? `Wan 2.2 + ${finalLoras.length} LoRAs` : 'Wan 2.2'
       };
     } catch (err: any) {
-      console.error("Video trigger failed:", err);
       throw err;
     }
   };
@@ -1027,7 +962,6 @@ export default function App() {
     };
     workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
     
-    // Better resizing node (preserves aspect + quality)
     workflowObj["93"] = {
       "inputs": {
         "image": ["78", 0],
@@ -1036,14 +970,11 @@ export default function App() {
         "upscale_method": "lanczos",
         "crop": "disabled"
       },
-      "class_type": "ImageScale"   // ← Better than ImageScaleToTotalPixels for fixed size
+      "class_type": "ImageScale"
     };
     
     workflowObj["88"] = { 
-       "inputs": { 
-         "pixels": ["93", 0], 
-         "vae": ["5", 2] 
-       }, 
+       "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, 
        "class_type": "VAEEncode" 
     };
 
@@ -1820,22 +1751,24 @@ export default function App() {
 
               {mode === 'video' && (
                 <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
-                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
-                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
+                  <div className="flex flex-col mb-6">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">
                       Wan 2.2 Video Generator
                     </label>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-rose-400 border border-transparent hover:bg-rose-500/10 rounded-lg text-[10px] font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors disabled:opacity-50"
                       >
                         <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 mt-3">
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-100 flex items-center gap-2 transition-colors"
                       >
                         <Bookmark className="w-3.5 h-3.5" />
                         Presets
@@ -1936,11 +1869,11 @@ export default function App() {
 
               {mode === 'runpod' && (
                 <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
-                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
-                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
+                  <div className="flex flex-col mb-6">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">
                       RunPod Endpoint
                     </label>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <button
                         onClick={() => {
                           if (faceRefFile) {
@@ -1955,7 +1888,7 @@ export default function App() {
                             setCfg(2.0);
                           }
                         }}
-                        className="text-[10px] px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg font-medium uppercase tracking-widest transition-colors flex items-center gap-1.5"
+                        className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-[10px] font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors hover:bg-emerald-500/20"
                       >
                         <UserCircle className="w-3.5 h-3.5" />
                         Optimize Face Swap
@@ -1963,21 +1896,23 @@ export default function App() {
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-rose-400 border border-transparent hover:bg-rose-500/10 rounded-lg text-[10px] font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors disabled:opacity-50"
                       >
                         <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 mt-3">
                       <button
                         onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)}
-                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-100 flex items-center gap-2 transition-colors"
                       >
                         <Settings2 className="w-3.5 h-3.5" />
                         Advanced
                       </button>
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-100 flex items-center gap-2 transition-colors"
                       >
                         <Bookmark className="w-3.5 h-3.5" />
                         Presets
@@ -2058,21 +1993,22 @@ export default function App() {
                     <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">
                       Output Resolution / Aspect Ratio
                     </label>
-                    <div className="flex flex-wrap gap-3 mb-6">
+                    
+                    <div className="grid grid-cols-6 gap-3 mb-4">
                       {[
-                        { label: '9:16', ratio: '9:16' },
-                        { label: '16:9', ratio: '16:9' },
-                        { label: '2:3', ratio: '2:3' },
-                        { label: '3:2', ratio: '3:2' },
-                        { label: '1:1', ratio: '1:1' },
-                        { label: '4:5', ratio: '4:5' },
-                        { label: '5:4', ratio: '5:4' },
-                        { label: 'Custom', ratio: 'Custom' },
-                      ].map(({ label, ratio }) => (
+                        { label: '9:16', ratio: '9:16', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '16:9', ratio: '16:9', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '2:3', ratio: '2:3', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '3:2', ratio: '3:2', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '1:1', ratio: '1:1', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '4:5', ratio: '4:5', colSpan: 'col-span-2 sm:col-span-1' },
+                        { label: '5:4', ratio: '5:4', colSpan: 'col-span-3' },
+                        { label: 'Custom', ratio: 'Custom', colSpan: 'col-span-3' },
+                      ].map(({ label, ratio, colSpan }) => (
                         <button
                           key={ratio}
                           onClick={(e) => { e.preventDefault(); setTargetAspect(ratio as any); }}
-                          className={`flex-1 min-w-[70px] py-3.5 text-xs font-semibold rounded-xl transition-all ${
+                          className={`${colSpan} py-3.5 text-xs font-semibold rounded-xl transition-all ${
                             targetAspect === ratio
                               ? 'bg-zinc-100 text-zinc-950 shadow-md'
                               : 'bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-100'
@@ -2082,15 +2018,16 @@ export default function App() {
                         </button>
                       ))}
                     </div>
-                    {/* Optional custom override */}
-                    <div className="grid grid-cols-2 gap-6 text-sm">
+
+                    {/* Custom override */}
+                    <div className="grid grid-cols-2 gap-6 text-sm mt-4">
                       <div>
                         <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Width</label>
                         <input
                           type="number"
                           value={customWidth}
                           onChange={(e) => setCustomWidth(Math.max(256, Number(e.target.value)))}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
+                          className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
                         />
                       </div>
                       <div>
@@ -2099,7 +2036,7 @@ export default function App() {
                           type="number"
                           value={customHeight}
                           onChange={(e) => setCustomHeight(Math.max(256, Number(e.target.value)))}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
+                          className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
                         />
                       </div>
                     </div>
@@ -2294,22 +2231,24 @@ export default function App() {
 
               {mode === 'editor' && (
                 <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
-                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
-                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
+                  <div className="flex flex-col mb-6">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">
                       AI Editing Engine
                     </label>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-rose-400 border border-transparent hover:bg-rose-500/10 rounded-lg text-[10px] font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors disabled:opacity-50"
                       >
                         <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 mt-3">
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-100 flex items-center gap-2 transition-colors"
                       >
                         <Bookmark className="w-3.5 h-3.5" />
                         Saved Prompts
@@ -2602,7 +2541,7 @@ export default function App() {
                               key={resultUrl}
                               src={resultUrl} 
                               autoPlay loop muted playsInline controls
-                              className="w-full h-full object-contain rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black transition-transform duration-700 group-hover/result:scale-[1.01]" 
+                              className="w-full h-full object-cover rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black transition-transform duration-700 group-hover/result:scale-[1.01]" 
                               onError={(e) => {
                                 if (resultUrl.startsWith('data:')) {
                                   try {
@@ -2617,7 +2556,7 @@ export default function App() {
                             <img 
                               src={resultUrl} 
                               alt="Result" 
-                              className="w-full h-full object-contain rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black/20 transition-transform duration-700 group-hover/result:scale-[1.01]" 
+                              className="w-full h-full object-cover rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black/20 transition-transform duration-700 group-hover/result:scale-[1.01]" 
                             />
                         )}
                         
