@@ -120,25 +120,26 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onProcess(f); }}
-      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] ${
+      className={`relative group cursor-pointer border rounded-[2rem] p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[160px] ${
         isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
       }`}
     >
       <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept="image/*" />
       {preview ? (
-        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
-          <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
-          <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
-            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
-            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-2xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
+          <img src={preview} alt="Preview" className="max-h-[160px] w-full object-cover rounded-2xl" />
+          <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-3">
+            <span className="text-zinc-100 text-[11px] sm:text-xs font-semibold uppercase tracking-widest bg-zinc-900/90 px-6 py-2.5 rounded-full border border-zinc-700 shadow-xl">Replace Asset</span>
+            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[11px] font-semibold uppercase tracking-widest bg-zinc-900/90 border border-zinc-700 px-6 py-2.5 rounded-full hover:bg-red-500/20 transition-colors shadow-xl">Clear</button>
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center text-center pointer-events-none">
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-3 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100'}`}>
-            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+        <div className="flex flex-col items-center text-center pointer-events-none p-4">
+          <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${isDragging ? 'bg-zinc-100 text-zinc-900 scale-110 shadow-xl' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:scale-110 group-hover:border-zinc-600 group-hover:text-zinc-100 shadow-lg'}`}>
+            <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <p className="text-[10px] sm:text-xs font-medium text-zinc-100 mb-1 tracking-wide">{label}</p>
+          <p className="text-[11px] sm:text-sm font-medium text-zinc-300 mb-1 tracking-wide uppercase font-mono">{label}</p>
+          <p className="text-[10px] text-zinc-600 mt-2 font-mono">Drag & Drop or Click</p>
         </div>
       )}
     </div>
@@ -1590,7 +1591,7 @@ export default function App() {
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
       
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 sm:px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <TechApexIcon className="text-zinc-100 w-6 h-6 shrink-0" />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
@@ -1598,7 +1599,7 @@ export default function App() {
         <div className="flex items-center gap-4">
           
           {displayBalance && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
+            <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
               <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest hidden sm:inline">
                 {balanceLabel}: {displayBalance}
@@ -1610,7 +1611,7 @@ export default function App() {
           )}
 
           {queue.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-full">
+            <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-full">
               <Layers className="w-3.5 h-3.5 text-zinc-100 animate-pulse" />
               <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest hidden sm:inline">{queue.length} Active Queue</span>
               <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest sm:hidden">{queue.length} Active</span>
@@ -1625,67 +1626,67 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Main Layout */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 lg:py-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+      {/* Main Layout - Using max-w-[1536px] for super-wide feeling */}
+      <main className="flex-1 max-w-[1536px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16">
         
         {/* Left Column (Inputs) */}
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
-          {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+          {/* Master Mode Switcher - Flex Wrap to avoid squishing */}
+          <div className="flex flex-wrap bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800/50 shadow-inner gap-2">
             <button
               onClick={() => setMode('editor')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+              className={`flex-1 min-w-[90px] py-3.5 px-3 rounded-xl text-[10px] sm:text-xs font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
                 mode === 'editor' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Sparkles className="w-4 h-4 shrink-0" />
               Editor
             </button>
             <button
               onClick={() => setMode('runpod')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+              className={`flex-1 min-w-[90px] py-3.5 px-3 rounded-xl text-[10px] sm:text-xs font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
                 mode === 'runpod' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Server className="w-4 h-4 shrink-0" />
               RunPod
             </button>
             <button
               onClick={() => setMode('video')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+              className={`flex-1 min-w-[90px] py-3.5 px-3 rounded-xl text-[10px] sm:text-xs font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
                 mode === 'video' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Film className="w-4 h-4 shrink-0" />
               Video
             </button>
             <button
               onClick={() => setMode('angles')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+              className={`flex-1 min-w-[90px] py-3.5 px-3 rounded-xl text-[10px] sm:text-xs font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
                 mode === 'angles' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Box className="w-4 h-4 shrink-0" />
               Angles
             </button>
             <button
               onClick={() => setMode('upscaler')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
+              className={`flex-1 min-w-[90px] py-3.5 px-3 rounded-xl text-[10px] sm:text-xs font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
                 mode === 'upscaler' 
                   ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Maximize className="w-4 h-4 shrink-0" />
               Upscale
             </button>
           </div>
@@ -1698,7 +1699,7 @@ export default function App() {
               </h2>
             </div>
             
-            <div className="h-[200px]">
+            <div className="min-h-[240px]">
               <UploadZone 
                 label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
@@ -1720,18 +1721,18 @@ export default function App() {
             <div className="space-y-6">
               
               {mode === 'upscaler' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">
+                <div className="space-y-4 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
+                  <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-6">
                     Target Output Resolution
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-4">
                     {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
                       <button
                         key={res}
                         onClick={() => setTargetResolution(res)}
-                        className={`py-4 rounded-xl text-xs font-medium uppercase tracking-widest transition-all ${
+                        className={`py-4 rounded-xl text-xs font-semibold uppercase tracking-widest transition-all ${
                           targetResolution === res 
-                            ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' 
+                            ? 'bg-zinc-100 text-zinc-900 shadow-xl scale-[1.02]' 
                             : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100'
                         }`}
                       >
@@ -1743,21 +1744,21 @@ export default function App() {
               )}
 
               {mode === 'angles' && (
-                <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 border border-zinc-800/50 rounded-2xl">
+                <div className="space-y-8 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
                   {/* Horizontal Angle */}
                   <div>
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4 flex items-center justify-between">
                       <span>Horizontal Rotation (Azimuth)</span>
                       <span className="text-zinc-100">{horizontalAngle}°</span>
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="flex flex-wrap gap-3">
                       {horizontalOptions.map((opt) => (
                         <button
                           key={`h-${opt.v}`}
                           onClick={() => setHorizontalAngle(opt.v)}
-                          className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                          className={`flex-1 min-w-[70px] py-3.5 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition-all border ${
                             horizontalAngle === opt.v 
-                              ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                              ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-md' 
                               : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
                           }`}
                         >
@@ -1767,21 +1768,21 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t border-zinc-800/50">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-4 border-t border-zinc-800/50">
                     {/* Vertical Angle */}
                     <div>
-                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                      <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4 flex items-center justify-between">
                         <span>Vertical Tilt</span>
                         <span className="text-zinc-100">{verticalAngle}°</span>
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-3">
                         {verticalOptions.map((opt) => (
                           <button
                             key={`v-${opt.v}`}
                             onClick={() => setVerticalAngle(opt.v)}
-                            className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                            className={`py-3.5 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition-all border ${
                               verticalAngle === opt.v 
-                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-md' 
                                 : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
                             }`}
                           >
@@ -1793,18 +1794,18 @@ export default function App() {
 
                     {/* Distance */}
                     <div>
-                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                      <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4 flex items-center justify-between">
                         <span>Distance</span>
                         <span className="text-zinc-100">Level {distance}</span>
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-3 gap-3">
                         {distanceOptions.map((opt) => (
                           <button
                             key={`d-${opt.v}`}
                             onClick={() => setDistance(opt.v)}
-                            className={`py-2 px-1 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                            className={`py-3.5 px-1 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition-all border ${
                               distance === opt.v 
-                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-md' 
                                 : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
                             }`}
                           >
@@ -1818,65 +1819,65 @@ export default function App() {
               )}
 
               {mode === 'video' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
+                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
                       Wan 2.2 Video Generator
                     </label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
                       >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
                       >
-                        <Bookmark className="w-3 h-3" />
+                        <Bookmark className="w-3.5 h-3.5" />
                         Presets
                       </button>
                     </div>
                   </div>
 
                   {/* --- PROMPT CONFIGURATION UI --- */}
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="pt-4 pb-6 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <UserCircle className="w-3.5 h-3.5" /> Body Type
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <UserCircle className="w-4 h-4" /> Body Type
                         </label>
                         <select 
                           value={promptBodyType} 
                           onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Angle
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <Camera className="w-4 h-4" /> Angle
                         </label>
                         <select 
                           value={promptAngle} 
                           onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Shot Type
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <Camera className="w-4 h-4" /> Shot Type
                         </label>
                         <select 
                           value={promptShotType} 
                           onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
                         </select>
@@ -1889,9 +1890,9 @@ export default function App() {
                       value={memoizedPrompt} 
                       onChange={handlePromptChange}
                       placeholder="Describe the motion and scene details..." 
-                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
+                      className="w-full h-32 p-6 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-[15px] leading-relaxed resize-y" 
                     />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                    <div className="absolute bottom-5 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       Positive Prompt
                     </div>
                   </div>
@@ -1901,17 +1902,17 @@ export default function App() {
                       value={negativePrompt} 
                       onChange={(e) => setNegativePrompt(e.target.value)} 
                       placeholder="Negative prompt..." 
-                      className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
+                      className="w-full h-24 p-5 bg-red-950/20 border border-red-900/30 rounded-2xl focus:ring-1 focus:ring-red-500/50 outline-none text-sm leading-relaxed text-zinc-300" 
                     />
-                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
+                    <div className="absolute bottom-4 right-4 text-[10px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
                       Negative
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 border-t border-zinc-800/50">
                     <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                        Steps <span>{videoSteps}</span>
+                      <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex justify-between">
+                        Steps <span className="text-zinc-100">{videoSteps}</span>
                       </label>
                       <input 
                         type="range" min="1" max="50" step="1" 
@@ -1920,8 +1921,8 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                        CFG <span>{videoCfg.toFixed(1)}</span>
+                      <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex justify-between">
+                        CFG <span className="text-zinc-100">{videoCfg.toFixed(1)}</span>
                       </label>
                       <input 
                         type="range" min="1" max="10" step="0.5" 
@@ -1934,12 +1935,12 @@ export default function App() {
               )}
 
               {mode === 'runpod' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
+                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
                       RunPod Endpoint
                     </label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
                           if (faceRefFile) {
@@ -1950,54 +1951,53 @@ export default function App() {
                             setSampler("dpmpp_2m_sde");
                             setScheduler("karras");
                           } else {
-                            // No face ref → just light boost
                             setSteps(8);
                             setCfg(2.0);
                           }
                         }}
-                        className="text-[9px] px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-medium uppercase tracking-widest transition-colors flex items-center gap-1.5"
+                        className="text-[10px] px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg font-medium uppercase tracking-widest transition-colors flex items-center gap-1.5"
                       >
-                        <UserCircle className="w-3 h-3" />
+                        <UserCircle className="w-3.5 h-3.5" />
                         Optimize Face Swap
                       </button>
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
                       >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
                       <button
                         onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
                       >
-                        <Settings2 className="w-3 h-3" />
+                        <Settings2 className="w-3.5 h-3.5" />
                         Advanced
                       </button>
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] px-3.5 py-2 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
                       >
-                        <Bookmark className="w-3 h-3" />
+                        <Bookmark className="w-3.5 h-3.5" />
                         Presets
                       </button>
                     </div>
                   </div>
                   
                   {/* --- PROMPT CONFIGURATION UI --- */}
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="pt-4 pb-6 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                       
                       {/* Body Type */}
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">
                           Body Type
                         </label>
                         <select
                           value={promptBodyType}
                           onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
                         >
                           {BODY_TYPES.map(bt => (
                             <option key={bt} value={bt}>{bt}</option>
@@ -2007,13 +2007,13 @@ export default function App() {
 
                       {/* Angle */}
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">
                           Camera Angle
                         </label>
                         <select
                           value={promptAngle}
                           onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
                         >
                           {CAMERA_ANGLES.map(a => (
                             <option key={a} value={a}>{a}</option>
@@ -2023,13 +2023,13 @@ export default function App() {
 
                       {/* Shot Type */}
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">
                           Shot Type
                         </label>
                         <select
                           value={promptShotType}
                           onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
                         >
                           {SHOT_TYPES.map(st => (
                             <option key={st} value={st}>{st}</option>
@@ -2045,20 +2045,20 @@ export default function App() {
                       value={memoizedPrompt}
                       onChange={handlePromptChange}
                       placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
-                      className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
+                      className="w-full h-32 p-6 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-[15px] leading-relaxed resize-y min-h-[120px]"
                     />
                     
-                    <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                    <div className="absolute bottom-5 right-6 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       Positive Prompt
                     </div>
                   </div>
 
                   {/* === OUTPUT SIZE CONTROL === */}
-                  <div className="pt-6 border-t border-zinc-800/50 mt-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">
+                  <div className="pt-8 border-t border-zinc-800/50 mt-4">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">
                       Output Resolution / Aspect Ratio
                     </label>
-                    <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-2 mb-4">
+                    <div className="flex flex-wrap gap-3 mb-6">
                       {[
                         { label: '9:16', ratio: '9:16' },
                         { label: '16:9', ratio: '16:9' },
@@ -2072,9 +2072,9 @@ export default function App() {
                         <button
                           key={ratio}
                           onClick={(e) => { e.preventDefault(); setTargetAspect(ratio as any); }}
-                          className={`py-2.5 text-xs font-medium rounded-xl transition-all ${
+                          className={`flex-1 min-w-[70px] py-3.5 text-xs font-semibold rounded-xl transition-all ${
                             targetAspect === ratio
-                              ? 'bg-zinc-100 text-zinc-950 shadow'
+                              ? 'bg-zinc-100 text-zinc-950 shadow-md'
                               : 'bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-100'
                           }`}
                         >
@@ -2083,33 +2083,33 @@ export default function App() {
                       ))}
                     </div>
                     {/* Optional custom override */}
-                    <div className="flex gap-3 text-xs">
-                      <div className="flex-1">
-                        <label className="block text-zinc-500 mb-1">Width</label>
+                    <div className="grid grid-cols-2 gap-6 text-sm">
+                      <div>
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Width</label>
                         <input
                           type="number"
                           value={customWidth}
                           onChange={(e) => setCustomWidth(Math.max(256, Number(e.target.value)))}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center text-zinc-300 outline-none focus:border-zinc-500"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
                         />
                       </div>
-                      <div className="flex-1">
-                        <label className="block text-zinc-500 mb-1">Height</label>
+                      <div>
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Height</label>
                         <input
                           type="number"
                           value={customHeight}
                           onChange={(e) => setCustomHeight(Math.max(256, Number(e.target.value)))}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center text-zinc-300 outline-none focus:border-zinc-500"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-center text-zinc-300 outline-none focus:border-zinc-500 transition-colors"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* --- IP ADAPTER SECTION --- */}
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="h-32">
+                  <div className="pt-8 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-4">Face Consistency (IP-Adapter)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                         <div className="min-h-[160px]">
                              <UploadZone
                                 label="Upload Face Reference"
                                 file={faceRefFile}
@@ -2129,22 +2129,22 @@ export default function App() {
                               />
                          </div>
                          {faceRefFile ? (
-                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
-                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
-                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
+                             <div className="flex flex-col justify-center space-y-6 p-6 bg-zinc-900 border border-zinc-800 rounded-[2rem]">
+                                 <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                     Influence Strength <span className="text-zinc-100">{ipAdapterStrength.toFixed(2)}</span>
                                  </label>
                                  <input
                                      type="range" min="0.5" max="1.3" step="0.05"
                                      value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
                                      className="w-full accent-zinc-100"
                                  />
-                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                 <p className="text-[11px] text-zinc-500 leading-relaxed font-mono">
                                      Higher strength forces stricter facial mapping but may distort stylization.
                                  </p>
                              </div>
                          ) : (
-                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
-                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
+                             <div className="flex items-center justify-center p-6 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-[2rem]">
+                               <p className="text-[11px] font-mono text-zinc-600 uppercase tracking-widest text-center leading-relaxed">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
                              </div>
                          )}
                      </div>
@@ -2158,15 +2158,15 @@ export default function App() {
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                        <div className="space-y-6 pt-6 border-t border-zinc-800/50">
 
-                          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-[2rem]">
                             <div>
-                              <label className="block text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-3">Base Neural Architecture</label>
+                              <label className="block text-[11px] font-mono text-zinc-100 uppercase tracking-widest mb-4">Base Neural Architecture</label>
                               <select
                                 value={runpodModel}
                                 onChange={(e) => setRunpodModel(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 font-mono uppercase tracking-widest"
+                                className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 font-mono uppercase tracking-widest"
                               >
                                 {RUNPOD_MODELS.map(m => (
                                   <option key={m.id} value={m.id}>{m.name}</option>
@@ -2174,45 +2174,45 @@ export default function App() {
                               </select>
                             </div>
                             
-                            <div className="mt-4 pt-4 border-t border-zinc-800/50">
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+                            <div className="mt-6 pt-6 border-t border-zinc-800/50">
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center justify-between">
                                 <span>Active Style Injections (LoRAs)</span>
                               </label>
                               
-                              <div className="space-y-2 mb-3">
+                              <div className="space-y-3 mb-4">
                                 {activeLoras.map(lora => (
-                                  <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                                    <span className="text-[9px] font-mono text-zinc-300 w-24 truncate">{lora.name}</span>
+                                  <div key={lora.id} className="flex items-center gap-4 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                                    <span className="text-[10px] font-mono text-zinc-300 w-28 truncate">{lora.name}</span>
                                     <input 
                                       type="range" min="0" max="2" step="0.1" 
                                       value={lora.strength} 
                                       onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
-                                      className="flex-1 accent-zinc-500 h-1" 
+                                      className="flex-1 accent-zinc-500 h-1.5" 
                                     />
-                                    <span className="text-[9px] font-mono text-zinc-500 w-6 text-right">{lora.strength.toFixed(1)}</span>
-                                    <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
-                                      <X className="w-3 h-3" />
+                                    <span className="text-[10px] font-mono text-zinc-500 w-8 text-right">{lora.strength.toFixed(1)}</span>
+                                    <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1.5 transition-colors">
+                                      <X className="w-4 h-4" />
                                     </button>
                                   </div>
                                 ))}
                                 {activeLoras.length === 0 && (
-                                  <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
+                                  <div className="text-[11px] font-mono text-zinc-600 italic text-center py-4 bg-zinc-950/50 rounded-xl border border-zinc-800/50">No LoRAs active</div>
                                 )}
                               </div>
 
-                              <div className="flex gap-2">
+                              <div className="flex gap-3">
                                 <select 
                                   onChange={addLora}
                                   value="none"
-                                  className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
+                                  className="flex-1 p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-[11px] font-mono uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
                                 >
                                   <option value="none">Add LoRA to Chain...</option>
                                   {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
                                     <option key={opt.id} value={opt.id}>{opt.name}</option>
                                   ))}
                                 </select>
-                                <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
-                                  <Plus className="w-4 h-4" />
+                                <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
+                                  <Plus className="w-5 h-5" />
                                 </div>
                               </div>
                             </div>
@@ -2223,40 +2223,40 @@ export default function App() {
                               value={negativePrompt} 
                               onChange={(e) => setNegativePrompt(e.target.value)} 
                               placeholder="Negative prompt..." 
-                              className="w-full h-20 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
+                              className="w-full h-24 p-5 bg-red-950/20 border border-red-900/30 rounded-2xl focus:ring-1 focus:ring-red-500/50 outline-none text-sm leading-relaxed text-zinc-300" 
                             />
-                            <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
+                            <div className="absolute bottom-4 right-4 text-[10px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
                               Negative Prompt
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Sampler</label>
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">Sampler</label>
                               <select 
                                 value={sampler} 
                                 onChange={(e) => setSampler(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
+                                className="w-full p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300"
                               >
                                 {COMFY_SAMPLERS.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Scheduler</label>
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">Scheduler</label>
                               <select 
                                 value={scheduler} 
                                 onChange={(e) => setScheduler(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
+                                className="w-full p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300"
                               >
                                 {COMFY_SCHEDULERS.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
                             <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                Steps <span>{steps}</span>
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex justify-between">
+                                Steps <span className="text-zinc-100">{steps}</span>
                               </label>
                               <input 
                                 type="range" min="4" max="40" step="1" 
@@ -2265,8 +2265,8 @@ export default function App() {
                               />
                             </div>
                             <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                CFG <span>{cfg.toFixed(1)}</span>
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex justify-between">
+                                CFG <span className="text-zinc-100">{cfg.toFixed(1)}</span>
                               </label>
                               <input 
                                 type="range" min="1" max="8" step="0.1" 
@@ -2275,8 +2275,8 @@ export default function App() {
                               />
                             </div>
                             <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                Denoise <span>{denoise.toFixed(2)}</span>
+                              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-4 flex justify-between">
+                                Denoise <span className="text-zinc-100">{denoise.toFixed(2)}</span>
                               </label>
                               <input 
                                 type="range" min="0.6" max="1.1" step="0.01" 
@@ -2293,65 +2293,65 @@ export default function App() {
               )}
 
               {mode === 'editor' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 lg:p-7 border border-zinc-800/50 rounded-3xl">
+                  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-4">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
                       AI Editing Engine
                     </label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
+                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
                       >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
+                        <Dices className={`w-3.5 h-3.5 ${isRandomizing ? 'animate-spin' : ''}`} />
                         Architect Prompt
                       </button>
                       <button
                         onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
+                        className="text-[10px] px-3 py-1.5 flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg uppercase tracking-widest font-mono transition-colors"
                       >
-                        <Bookmark className="w-3 h-3" />
+                        <Bookmark className="w-3.5 h-3.5" />
                         Saved Prompts
                       </button>
                     </div>
                   </div>
                   
                   {/* --- PROMPT CONFIGURATION UI --- */}
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="pt-4 pb-6 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <UserCircle className="w-3.5 h-3.5" /> Body Type
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <UserCircle className="w-4 h-4" /> Body Type
                         </label>
                         <select 
                           value={promptBodyType} 
                           onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Angle
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <Camera className="w-4 h-4" /> Angle
                         </label>
                         <select 
                           value={promptAngle} 
                           onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Shot Type
+                        <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                          <Camera className="w-4 h-4" /> Shot Type
                         </label>
                         <select 
                           value={promptShotType} 
                           onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+                          className="w-full p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
                         >
                           {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
                         </select>
@@ -2359,12 +2359,12 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="flex flex-col sm:flex-row gap-4 mb-6">
                     <button
                       onClick={() => setEditorModel('wan-2.6')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
+                      className={`flex-1 py-4 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.6' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-md scale-[1.02]' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -2372,9 +2372,9 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setEditorModel('wan-2.7')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
+                      className={`flex-1 py-4 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all ${
                         editorModel === 'wan-2.7' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-md scale-[1.02]' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -2382,9 +2382,9 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setEditorModel('qwen-2.0')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
+                      className={`flex-1 py-4 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition-all ${
                         editorModel === 'qwen-2.0' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-md scale-[1.02]' 
                           : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
                       }`}
                     >
@@ -2397,17 +2397,17 @@ export default function App() {
                       value={memoizedPrompt} 
                       onChange={handlePromptChange}
                       placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')...." 
-                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
+                      className="w-full h-36 p-6 bg-zinc-900/30 border border-zinc-800 rounded-3xl focus:ring-1 focus:ring-zinc-500 outline-none text-[15px] leading-relaxed resize-y" 
                     />
-                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                    <div className="absolute bottom-5 right-5 flex items-center gap-3">
                       <button 
                         onClick={enhancePrompt}
-                        className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
+                        className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-100 transition-colors shadow-sm"
                         title="Magic Prompt Enhancer"
                       >
-                        <Wand2 className="w-3.5 h-3.5" />
+                        <Wand2 className="w-4 h-4" />
                       </button>
-                      <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+                      <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                         {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
                       </div>
                     </div>
@@ -2418,7 +2418,7 @@ export default function App() {
               <button 
                 onClick={generateEdit}
                 disabled={isSubmitting} 
-                className="w-full py-5 rounded-2xl font-medium uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-zinc-100 text-zinc-950 hover:bg-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-5 rounded-2xl font-semibold uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all bg-zinc-100 text-zinc-950 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -2444,11 +2444,11 @@ export default function App() {
                 {queue.length > 0 && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                    className="mt-8 space-y-3"
+                    className="mt-8 space-y-4"
                   >
-                    <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-5">
                       <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                      <h3 className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400 font-mono">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400 font-mono">
                         Active Queue
                       </h3>
                     </div>
@@ -2456,24 +2456,24 @@ export default function App() {
                       <motion.div 
                         key={task.id} 
                         initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-                        className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-inner"
+                        className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-5 shadow-inner"
                       >
-                        <div className="flex justify-between items-center mb-3">
-                           <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
+                        <div className="flex justify-between items-center mb-4">
+                           <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest font-mono">
                              {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod Serverless' : task.mode === 'video' ? 'Video' : task.mode}
                            </span>
-                           <span className="text-[10px] font-medium text-zinc-100">
+                           <span className="text-[11px] font-semibold text-zinc-100 font-mono">
                              {Math.round(task.progress)}%
                            </span>
                         </div>
-                        <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                        <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
                            <div className="h-full bg-zinc-300 transition-all duration-300" style={{ width: `${task.progress}%` }} />
                         </div>
                         <div className="flex justify-between items-center gap-4">
-                          <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest truncate flex-1">
+                          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest truncate flex-1">
                             {task.prompt}
                           </p>
-                          <p className="text-[9px] font-mono text-zinc-300 uppercase tracking-widest truncate">
+                          <p className="text-[10px] font-mono text-zinc-300 uppercase tracking-widest truncate">
                             {task.message}
                           </p>
                         </div>
@@ -2487,16 +2487,16 @@ export default function App() {
           </section>
           
           {error && (
-            <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-4 text-red-400 text-[11px] font-mono uppercase">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>{error}</p>
+            <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-3xl flex items-start gap-4 text-red-400 text-xs font-mono uppercase tracking-widest">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <p className="leading-relaxed">{error}</p>
             </div>
           )}
         </div>
 
         {/* Right Column (Results) */}
         <div className="lg:col-span-7" id="result-section" ref={resultRef}>
-          <div className="lg:sticky lg:top-28">
+          <div className="lg:sticky lg:top-32">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
@@ -2505,43 +2505,43 @@ export default function App() {
                 </h2>
               </div>
               {resultUrl && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <button 
                     onClick={() => {
                       const cleanPrompt = (prompt || 'Generated Prompt').replace(/^\[RunPod ComfyUI\]\s*/i, '');
                       setPromptToSave(cleanPrompt);
                       setShowSavePrompt(true);
                     }}
-                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 transition-all bg-zinc-900 px-4 py-2 rounded-full border border-zinc-800 shadow-sm"
+                    className="text-[10px] font-bold uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 transition-all bg-zinc-900 px-5 py-2.5 rounded-full border border-zinc-800 shadow-md"
                   >
-                    <BookmarkPlus className="w-3.5 h-3.5" />
+                    <BookmarkPlus className="w-4 h-4" />
                     Save Prompt
                   </button>
                   <button 
                     onClick={(e) => handleDownload(resultUrl, prompt || 'angle_render', e)} 
-                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-950 flex items-center gap-2 hover:bg-zinc-200 transition-all bg-zinc-100 px-4 py-2 rounded-full border border-zinc-200 shadow-sm"
+                    className="text-[10px] font-bold uppercase tracking-widest text-zinc-950 flex items-center gap-2 hover:bg-zinc-200 transition-all bg-zinc-100 px-5 py-2.5 rounded-full border border-zinc-200 shadow-md"
                   >
-                    <Download className="w-3.5 h-3.5" /> 
+                    <Download className="w-4 h-4" /> 
                     Export
                   </button>
                 </div>
               )}
             </div>
             
-            <div className="relative aspect-square sm:aspect-[4/3] bg-zinc-900/30 rounded-[2.5rem] overflow-hidden border border-zinc-800 shadow-xl flex items-center justify-center">
+            <div className="relative w-full aspect-[4/5] sm:aspect-[4/3] xl:aspect-video lg:min-h-[700px] lg:max-h-[calc(100vh-10rem)] bg-zinc-900/30 rounded-[2.5rem] lg:rounded-[3rem] overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center">
               <AnimatePresence mode="wait">
                 {resultUrl ? (
                   <motion.div 
                     key="result" 
                     initial={{ opacity: 0, scale: 1.05 }} 
                     animate={{ opacity: 1, scale: 1 }} 
-                    className="w-full h-full p-2 sm:p-4"
+                    className="w-full h-full p-2 sm:p-5"
                   >
                     {mode === 'upscaler' && previewUrl && !selectedHistoryItem && !isVideoUrl(resultUrl) ? (
                       /* --- INTERACTIVE BEFORE/AFTER SLIDER FOR UPSCALER --- */
                       <div 
                         ref={sliderContainerRef}
-                        className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden group/result"
+                        className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] lg:rounded-[2.5rem] overflow-hidden group/result shadow-xl"
                         onMouseMove={handleSliderMove}
                         onTouchMove={handleSliderMove}
                       >
@@ -2557,17 +2557,17 @@ export default function App() {
                           style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
                         />
                         <div 
-                          className="absolute top-0 bottom-0 w-0.5 bg-zinc-300 pointer-events-none transition-all duration-75 shadow-md"
+                          className="absolute top-0 bottom-0 w-0.5 bg-zinc-300 pointer-events-none transition-all duration-75 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
                           style={{ left: `${sliderPosition}%` }}
                         >
-                          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-zinc-100 border-2 border-zinc-200 rounded-full flex items-center justify-center shadow-xl">
-                            <SlidersHorizontal className="w-4 h-4 text-zinc-950" />
+                          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-zinc-100 border-[3px] border-zinc-200 rounded-full flex items-center justify-center shadow-2xl">
+                            <SlidersHorizontal className="w-5 h-5 text-zinc-950" />
                           </div>
                         </div>
-                        <div className="absolute top-4 left-4 bg-zinc-950/80 backdrop-blur-md px-4 py-2 rounded-full border border-zinc-800 text-[9px] font-medium uppercase tracking-widest text-zinc-100 pointer-events-none">
+                        <div className="absolute top-5 left-5 bg-zinc-950/80 backdrop-blur-md px-5 py-2.5 rounded-full border border-zinc-800 text-[10px] font-bold uppercase tracking-widest text-zinc-100 pointer-events-none shadow-lg">
                           Enhanced ({targetResolution})
                         </div>
-                        <div className="absolute top-4 right-4 bg-zinc-950/80 backdrop-blur-md px-4 py-2 rounded-full border border-zinc-800 text-[9px] font-medium uppercase tracking-widest text-zinc-400 pointer-events-none">
+                        <div className="absolute top-5 right-5 bg-zinc-950/80 backdrop-blur-md px-5 py-2.5 rounded-full border border-zinc-800 text-[10px] font-bold uppercase tracking-widest text-zinc-400 pointer-events-none shadow-lg">
                           Original
                         </div>
                       </div>
@@ -2602,18 +2602,14 @@ export default function App() {
                               key={resultUrl}
                               src={resultUrl} 
                               autoPlay loop muted playsInline controls
-                              className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                              className="w-full h-full object-contain rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black transition-transform duration-700 group-hover/result:scale-[1.01]" 
                               onError={(e) => {
-                                console.error("Video playback error:", e);
-                                // Fallback: try creating blob URL
                                 if (resultUrl.startsWith('data:')) {
                                   try {
                                     const blob = base64ToBlob(resultUrl, 'video/mp4');
                                     const blobUrl = URL.createObjectURL(blob);
                                     e.currentTarget.src = blobUrl;
-                                  } catch(err) {
-                                    console.error("Fallback blob creation failed", err);
-                                  }
+                                  } catch(err) {}
                                 }
                               }}
                             />
@@ -2621,13 +2617,13 @@ export default function App() {
                             <img 
                               src={resultUrl} 
                               alt="Result" 
-                              className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                              className="w-full h-full object-contain rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl bg-black/20 transition-transform duration-700 group-hover/result:scale-[1.01]" 
                             />
                         )}
                         
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/result:opacity-100 transition-opacity duration-300 pointer-events-none">
-                          <div className="bg-zinc-950/80 px-5 py-2.5 rounded-full border border-zinc-800 shadow-xl backdrop-blur-sm pointer-events-auto">
-                            <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest">
+                          <div className="bg-zinc-950/80 px-6 py-3 rounded-full border border-zinc-800 shadow-2xl backdrop-blur-md pointer-events-auto hover:bg-black transition-colors">
+                            <span className="text-[11px] font-bold text-zinc-100 uppercase tracking-[0.2em]">
                               Click to Expand Data
                             </span>
                           </div>
@@ -2636,15 +2632,18 @@ export default function App() {
                     )}
                   </motion.div>
                 ) : queue.length > 0 ? (
-                  <div className="flex flex-col items-center text-center p-12">
-                    <Layers className="w-12 h-12 text-zinc-700 animate-pulse mb-4" />
-                    <p className="text-sm font-medium mb-2 uppercase tracking-widest text-zinc-300">Processing Tasks</p>
-                    <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                      Your results will appear here shortly.
+                  <div className="flex flex-col items-center justify-center text-center p-12 h-full">
+                    <Layers className="w-16 h-16 text-zinc-700 animate-pulse mb-6 drop-shadow-xl" />
+                    <p className="text-base font-semibold mb-3 uppercase tracking-widest text-zinc-300">Processing Tasks</p>
+                    <p className="text-[11px] font-mono text-zinc-500 uppercase tracking-widest leading-relaxed max-w-xs">
+                      The neural engine is generating your results. This may take a few moments depending on queue load.
                     </p>
                   </div>
                 ) : (
-                  <ImageIcon className="w-20 h-20 text-zinc-800" />
+                  <div className="flex flex-col items-center justify-center h-full opacity-20">
+                    <ImageIcon className="w-24 h-24 text-zinc-600 mb-4" />
+                    <p className="text-xs font-mono uppercase tracking-widest text-zinc-500">Output Window</p>
+                  </div>
                 )}
               </AnimatePresence>
             </div>
@@ -2654,8 +2653,8 @@ export default function App() {
 
       {/* History Grid */}
       {history.length > 0 && (
-        <section className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-16 border-t border-zinc-800/50 pb-12">
-          <div className="flex items-center justify-between mb-8">
+        <section className="max-w-[1536px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-16 border-t border-zinc-800/50 pb-12">
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
             <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 font-mono">
               03 // Generation Log
             </h2>
@@ -2663,20 +2662,20 @@ export default function App() {
               <button 
                 onClick={() => syncCloudHistory(wavespeedKey)}
                 disabled={isSyncing || !wavespeedKey}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-full transition-colors text-[9px] font-medium uppercase tracking-widest text-zinc-300 disabled:opacity-50 border border-zinc-800"
+                className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-full transition-colors text-[10px] font-bold uppercase tracking-widest text-zinc-300 disabled:opacity-50 border border-zinc-800 shadow-sm"
               >
-                <CloudDownload className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce text-zinc-100' : ''}`} />
+                <CloudDownload className={`w-4 h-4 ${isSyncing ? 'animate-bounce text-zinc-100' : ''}`} />
                 {isSyncing ? 'Syncing...' : 'Fetch Cloud Sync'}
               </button>
-              <History className="w-4 h-4 text-zinc-500 hidden sm:block" />
+              <History className="w-5 h-5 text-zinc-500 hidden sm:block" />
             </div>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
             {history.map((item) => (
               <div 
                 key={item.id} 
-                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
+                className="relative group rounded-3xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square shadow-md"
               >
                 {isVideoUrl(item.url) ? (
                    <video 
@@ -2702,9 +2701,9 @@ export default function App() {
                 
                 <button 
                   onClick={(e) => handleDeleteHistory(item.id, e)} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+                  className="absolute top-3 left-3 p-2.5 bg-zinc-950/80 backdrop-blur-sm rounded-xl text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20 shadow-lg"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ))}
@@ -2721,7 +2720,7 @@ export default function App() {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={() => { setSelectedHistoryItem(null); setIsFlipped(false); }}
-        className="fixed inset-0 bg-zinc-950/95 backdrop-blur-xl z-[80]"
+        className="fixed inset-0 bg-zinc-950/95 backdrop-blur-2xl z-[80]"
       />
 
       <div
@@ -2733,34 +2732,34 @@ export default function App() {
           <>
             <button
               onClick={(e) => { e.stopPropagation(); handlePrevHistory(); }}
-              className="hidden sm:flex fixed left-4 sm:left-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
+              className="hidden sm:flex fixed left-4 sm:left-8 top-1/2 -translate-y-1/2 z-50 w-14 h-14 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800 shadow-2xl transition-transform active:scale-95"
             >
-              <ChevronLeft className="w-7 h-7" />
+              <ChevronLeft className="w-8 h-8" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleNextHistory(); }}
-              className="hidden sm:flex fixed right-4 sm:right-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
+              className="hidden sm:flex fixed right-4 sm:right-8 top-1/2 -translate-y-1/2 z-50 w-14 h-14 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800 shadow-2xl transition-transform active:scale-95"
             >
-              <ChevronRight className="w-7 h-7" />
+              <ChevronRight className="w-8 h-8" />
             </button>
           </>
         )}
 
-        <div className="relative w-full max-w-4xl" style={{ perspective: '1600px' }}>
+        <div className="relative w-full max-w-[1200px]" style={{ perspective: '2000px' }}>
           <motion.div
             className="relative mx-auto cursor-pointer"
             style={{ 
               transformStyle: 'preserve-3d',
               width: 'fit-content',
               maxWidth: '94vw',
-              maxHeight: '88vh'
+              maxHeight: '90vh'
             }}
             animate={{ rotateY: isFlipped ? 180 : 0 }}
-            transition={{ duration: 0.75, type: 'spring', stiffness: 280, damping: 26 }}
+            transition={{ duration: 0.8, type: 'spring', stiffness: 250, damping: 26 }}
           >
             {/* FRONT */}
             <div
-              className="relative backface-hidden rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-black"
+              className="relative backface-hidden rounded-[2.5rem] sm:rounded-[3rem] overflow-hidden shadow-2xl border border-zinc-800 bg-black"
               style={{ backfaceVisibility: 'hidden' }}
               onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
             >
@@ -2768,82 +2767,82 @@ export default function App() {
                 <video
                   src={selectedHistoryItem.url}
                   autoPlay loop muted playsInline controls
-                  className="max-h-[82vh] w-auto max-w-full object-contain"
+                  className="max-h-[85vh] w-auto max-w-full object-contain"
                 />
               ) : (
                 <img
                   src={selectedHistoryItem.url}
                   alt={selectedHistoryItem.prompt}
-                  className="max-h-[82vh] w-auto max-w-full object-contain"
+                  className="max-h-[85vh] w-auto max-w-full object-contain"
                 />
               )}
 
               {/* Top Controls */}
-              <div className="absolute top-4 left-4 z-50">
+              <div className="absolute top-5 left-5 z-50">
                 <button
                   onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-all"
+                  className="p-4 bg-black/70 backdrop-blur-md hover:bg-black rounded-2xl text-white transition-all shadow-xl"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
-              <div className="absolute top-4 right-4 z-50">
+              <div className="absolute top-5 right-5 z-50">
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
-                  className="p-3 bg-black/70 hover:bg-red-950 rounded-2xl text-red-400 transition-all"
+                  className="p-4 bg-black/70 backdrop-blur-md hover:bg-red-950 rounded-2xl text-red-400 transition-all shadow-xl"
                 >
-                  <Trash2 className="w-5 h-5" />
+                  <Trash2 className="w-6 h-6" />
                 </button>
               </div>
 
               {/* Subtle Auto-Hide Hint */}
               <motion.div
-                initial={{ opacity: 0.75 }}
+                initial={{ opacity: 0.8 }}
                 animate={{ opacity: 0 }}
-                transition={{ delay: 5, duration: 1.2 }}
-                className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/30 text-white/50 text-[10px] px-5 py-1.5 rounded-full pointer-events-none tracking-widest backdrop-blur-md"
+                transition={{ delay: 5, duration: 1.5 }}
+                className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/40 text-white/70 text-[11px] font-bold px-6 py-2.5 rounded-full pointer-events-none tracking-widest backdrop-blur-xl shadow-lg border border-white/10"
               >
-                double tap to flip
+                DOUBLE TAP TO FLIP
               </motion.div>
             </div>
 
             {/* BACK */}
             <div
-              className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-2xl"
+              className="absolute inset-0 backface-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
               style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
               onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
             >
-              <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
-                <div className="flex justify-center mb-8">
-                  <History className="w-12 h-12 text-zinc-700" />
+              <div className="flex-1 p-8 sm:p-12 overflow-y-auto">
+                <div className="flex justify-center mb-10">
+                  <History className="w-14 h-14 text-zinc-700 drop-shadow-md" />
                 </div>
 
                 {selectedHistoryItem.modelInfo && (
-                  <p className="text-center text-emerald-400 text-xs font-mono tracking-[2px] mb-6">
+                  <p className="text-center text-emerald-400 text-sm font-bold font-mono tracking-[0.2em] mb-8 bg-emerald-500/10 py-3 px-6 rounded-full inline-block mx-auto border border-emerald-500/20">
                     {selectedHistoryItem.modelInfo}
                   </p>
                 )}
 
-                <p className="text-zinc-100 text-[15px] sm:text-[17px] leading-relaxed text-center px-4">
+                <p className="text-zinc-100 text-base sm:text-lg lg:text-xl leading-relaxed text-center px-4 font-medium max-w-3xl mx-auto">
                   {selectedHistoryItem.prompt}
                 </p>
               </div>
 
-              <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
+              <div className="p-6 sm:p-8 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-xl space-y-4">
                 <button
                   onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
-                  className="w-full py-4 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-3 active:scale-95"
+                  className="w-full py-5 bg-white text-black rounded-2xl font-bold tracking-[0.15em] text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-transform shadow-xl hover:bg-zinc-200"
                 >
-                  <Download className="w-5 h-5" /> DOWNLOAD
+                  <Download className="w-5 h-5" /> DOWNLOAD ASSET
                 </button>
 
                 {!isVideoUrl(selectedHistoryItem.url) &&
                  !selectedHistoryItem.prompt?.startsWith('Multi-Angle') &&
                  !selectedHistoryItem.prompt?.startsWith('Upscaled') && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }}
-                      className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm"
+                      className="py-4.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-xs font-bold uppercase tracking-widest transition-colors"
                     >
                       Use in Video
                     </button>
@@ -2854,7 +2853,7 @@ export default function App() {
                         setSelectedHistoryItem(null);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                      className="py-4.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-xs font-bold uppercase tracking-widest text-zinc-300 transition-colors"
                     >
                       Load Prompt
                     </button>
@@ -2864,7 +2863,7 @@ export default function App() {
                         setPromptToSave(clean);
                         setShowSavePrompt(true);
                       }}
-                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
+                      className="py-4.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-xs font-bold uppercase tracking-widest text-zinc-300 transition-colors"
                     >
                       Save Prompt
                     </button>
@@ -2889,25 +2888,29 @@ export default function App() {
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={handleSaveSettings} 
-              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[60]" 
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[60]" 
             />
             <motion.div 
               initial={{ x: '100%' }} 
               animate={{ x: 0 }} 
               exit={{ x: '100%' }} 
-              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-zinc-950 border-l border-zinc-800 z-[70] p-10 flex flex-col shadow-2xl overflow-y-auto"
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 bottom-0 w-full max-w-lg bg-zinc-950 border-l border-zinc-800 z-[70] p-8 sm:p-12 flex flex-col shadow-2xl overflow-y-auto"
             >
-              <div className="flex justify-between items-center mb-16">
-                <h2 className="text-2xl font-medium tracking-tight text-zinc-100">Config</h2>
-                <button onClick={handleSaveSettings} className="p-2 bg-zinc-900 text-zinc-400 hover:text-zinc-100 rounded-md transition-colors">
+              <div className="flex justify-between items-center mb-12">
+                <h2 className="text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-3">
+                  <Settings className="w-6 h-6 text-zinc-500" />
+                  Configuration
+                </h2>
+                <button onClick={handleSaveSettings} className="p-3 bg-zinc-900 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-xl transition-colors shadow-sm">
                   <X className="w-5 h-5"/>
                 </button>
               </div>
               
-              <div className="flex-1 space-y-8">
-                <div className="space-y-4">
+              <div className="flex-1 space-y-10">
+                <div className="space-y-5">
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       Wavespeed API Key
                     </label>
                     <input 
@@ -2915,14 +2918,14 @@ export default function App() {
                       value={wavespeedKey} 
                       onChange={(e) => setWavespeedKey(e.target.value)} 
                       placeholder="Enter Wavespeed API Key"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                <div className="space-y-5 pt-6 border-t border-zinc-800/50">
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       RunPod API Key
                     </label>
                     <input 
@@ -2930,11 +2933,11 @@ export default function App() {
                       value={runpodKey} 
                       onChange={(e) => setRunpodKey(e.target.value)} 
                       placeholder="Enter RunPod API Key"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       RunPod Standard Endpoint ID
                     </label>
                     <input 
@@ -2942,11 +2945,11 @@ export default function App() {
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       RunPod IP-Adapter Endpoint ID
                     </label>
                     <input 
@@ -2954,11 +2957,11 @@ export default function App() {
                       value={ipAdapterEndpointId} 
                       onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
                       placeholder="e.g. 9yusxkbksgwtyk"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       RunPod Video Endpoint ID
                     </label>
                     <input 
@@ -2966,14 +2969,14 @@ export default function App() {
                       value={videoEndpointId} 
                       onChange={(e) => setVideoEndpointId(e.target.value)} 
                       placeholder="e.g. 7h6lpbp8ebiw6q"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                <div className="space-y-5 pt-6 border-t border-zinc-800/50">
                   <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                    <label className="block text-[11px] font-mono font-bold uppercase tracking-widest text-zinc-400 mb-3">
                       Grok API Key (xAI)
                     </label>
                     <input 
@@ -2981,18 +2984,18 @@ export default function App() {
                       value={grokKey} 
                       onChange={(e) => setGrokKey(e.target.value)} 
                       placeholder="Enter Grok API Key"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                      className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner" 
                     />
                   </div>
                 </div>
                 
-                <div className="pt-8 border-t border-zinc-800/50">
+                <div className="pt-10 border-t border-zinc-800/50">
                   <button 
                     onClick={async () => { 
                       await clearHistoryDB(); 
                       setHistory([]); 
                     }} 
-                    className="w-full py-4 bg-red-500/10 text-red-400 rounded-xl font-medium uppercase tracking-widest text-[10px] border border-red-500/20 transition-all hover:bg-red-500/20"
+                    className="w-full py-5 bg-red-500/10 text-red-400 rounded-2xl font-bold uppercase tracking-widest text-xs border border-red-500/20 transition-all hover:bg-red-500/20 shadow-sm"
                   >
                     Wipe Local Log
                   </button>
@@ -3000,7 +3003,7 @@ export default function App() {
               </div>
               <button 
                 onClick={handleSaveSettings} 
-                className="mt-8 py-5 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.2em] text-xs transition-all hover:bg-white"
+                className="mt-10 w-full py-5 bg-zinc-100 text-zinc-950 rounded-2xl font-bold uppercase tracking-[0.2em] text-xs transition-all hover:bg-white shadow-xl hover:scale-[1.02]"
               >
                 Commit Config
               </button>
@@ -3018,35 +3021,35 @@ export default function App() {
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setShowSavePrompt(false)} 
-              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[110]" 
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[110]" 
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
               animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }} 
               exit={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
-              className="fixed top-1/2 left-1/2 w-full max-w-sm bg-zinc-950 border border-zinc-800 p-6 rounded-3xl z-[120] shadow-2xl"
+              className="fixed top-1/2 left-1/2 w-full max-w-md bg-zinc-950 border border-zinc-800 p-8 rounded-[2rem] z-[120] shadow-[0_0_40px_rgba(0,0,0,0.5)]"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-medium uppercase tracking-widest text-zinc-100">Save Prompt</h3>
-                <button onClick={() => setShowSavePrompt(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors">
-                  <X className="w-4 h-4" />
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-base font-bold uppercase tracking-widest text-zinc-100">Save Prompt</h3>
+                <button onClick={() => setShowSavePrompt(false)} className="p-2 bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-100 transition-colors">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="mb-6">
-                <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Prompt Name</label>
+              <div className="mb-8">
+                <label className="block text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-widest mb-3">Prompt Name</label>
                 <input 
                   type="text" 
                   value={newPromptName} 
                   onChange={(e) => setNewPromptName(e.target.value)} 
                   placeholder="e.g. Cyberpunk Style"
-                  className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm"
+                  className="w-full p-4.5 bg-zinc-900 border border-zinc-800 rounded-2xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm shadow-inner"
                   autoFocus
                 />
               </div>
               <button 
                 onClick={handleSavePromptData} 
                 disabled={!newPromptName.trim()}
-                className="w-full py-4 bg-zinc-100 text-zinc-950 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4.5 bg-zinc-100 text-zinc-950 rounded-2xl font-bold uppercase tracking-[0.15em] text-xs hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
                 Save to Library
               </button>
@@ -3064,57 +3067,59 @@ export default function App() {
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setShowLoadPrompt(false)} 
-              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[110]" 
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[110]" 
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
               animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }} 
               exit={{ opacity: 0, scale: 0.95, y: '-50%', x: '-50%' }} 
-              className="fixed top-1/2 left-1/2 w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl z-[120] shadow-2xl flex flex-col max-h-[80vh]"
+              className="fixed top-1/2 left-1/2 w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-[2rem] z-[120] shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col max-h-[85vh]"
             >
-              <div className="flex justify-between items-center p-6 border-b border-zinc-800/50">
-                <h3 className="text-sm font-medium uppercase tracking-widest text-zinc-100 flex items-center gap-2">
-                  <Bookmark className="w-4 h-4" />
+              <div className="flex justify-between items-center p-8 border-b border-zinc-800/50">
+                <h3 className="text-base font-bold uppercase tracking-widest text-zinc-100 flex items-center gap-3">
+                  <Bookmark className="w-5 h-5 text-zinc-400" />
                   Prompt Library
                 </h3>
-                <button onClick={() => setShowLoadPrompt(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors">
-                  <X className="w-4 h-4" />
+                <button onClick={() => setShowLoadPrompt(false)} className="p-2 bg-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-100 transition-colors">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {savedPrompts.length === 0 ? (
-                  <div className="text-center py-10">
-                    <Bookmark className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
-                    <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">No saved prompts yet</p>
+                  <div className="text-center py-16">
+                    <Bookmark className="w-10 h-10 text-zinc-800 mx-auto mb-4" />
+                    <p className="text-[11px] font-mono font-medium text-zinc-500 uppercase tracking-widest">No saved prompts yet</p>
                   </div>
                 ) : (
-                  savedPrompts.map(sp => (
-                    <div key={sp.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col group transition-colors hover:border-zinc-700">
-                      <div className="flex justify-between items-start mb-2 gap-4">
-                        <h4 className="text-xs font-medium text-zinc-100 uppercase tracking-wider truncate">{sp.name}</h4>
-                        <button 
-                          onClick={(e) => handleDeleteSavedPrompt(sp.id, e)}
-                          className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {savedPrompts.map(sp => (
+                      <div key={sp.id} className="bg-zinc-900/50 border border-zinc-800 rounded-[1.5rem] p-5 flex flex-col group transition-all hover:border-zinc-600 hover:bg-zinc-900 shadow-sm">
+                        <div className="flex justify-between items-start mb-3 gap-4">
+                          <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider truncate">{sp.name}</h4>
+                          <button 
+                            onClick={(e) => handleDeleteSavedPrompt(sp.id, e)}
+                            className="text-zinc-600 hover:text-red-400 transition-colors p-1.5 bg-zinc-950 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-[11px] font-mono text-zinc-400 line-clamp-3 mb-5 leading-relaxed flex-1">
+                          {sp.prompt}
+                        </p>
+                        <button
+                          onClick={() => {
+                            setPrompt(sp.prompt);
+                            setShowLoadPrompt(false);
+                          }}
+                          className="w-full py-3.5 bg-zinc-800 text-zinc-300 rounded-xl font-bold uppercase tracking-[0.1em] text-[10px] hover:bg-zinc-100 hover:text-zinc-950 transition-all flex items-center justify-center gap-2"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Load into Editor
                         </button>
                       </div>
-                      <p className="text-[10px] font-mono text-zinc-400 line-clamp-2 mb-4 leading-relaxed">
-                        {sp.prompt}
-                      </p>
-                      <button
-                        onClick={() => {
-                          setPrompt(sp.prompt);
-                          setShowLoadPrompt(false);
-                        }}
-                        className="w-full py-3 bg-zinc-800 text-zinc-300 rounded-xl font-medium uppercase tracking-[0.1em] text-[9px] hover:bg-zinc-700 hover:text-zinc-100 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Load into Editor
-                      </button>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
             </motion.div>
