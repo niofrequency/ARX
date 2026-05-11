@@ -296,9 +296,9 @@ export default function App() {
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
-  const [steps, setSteps] = useState<number>(6);
-  const [cfg, setCfg] = useState<number>(1.5);
-  const [denoise, setDenoise] = useState<number>(1.0); 
+  const [steps, setSteps] = useState<number>(30);
+  const [cfg, setCfg] = useState<number>(3.5);
+  const [denoise, setDenoise] = useState<number>(0.95); 
 
   const [videoWidth, setVideoWidth] = useState<number>(480);
   const [videoHeight, setVideoHeight] = useState<number>(832);
@@ -309,7 +309,7 @@ export default function App() {
 
   const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
   const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
-  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
+  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.9);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -342,6 +342,23 @@ export default function App() {
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
+
+  // Smart Defaults When IP-Adapter is Used
+  useEffect(() => {
+    if (faceRefFile && mode === 'runpod') {
+      setSteps(35);
+      setCfg(3.8);
+      setDenoise(0.92);
+      setIpAdapterStrength(0.95);
+      
+      setPrompt(p => {
+        if (!p.toLowerCase().includes("detailed face")) {
+          return p ? p + ", highly detailed face, sharp eyes, realistic skin texture, same face as reference" : "highly detailed face, sharp eyes, realistic skin texture";
+        }
+        return p;
+      });
+    }
+  }, [faceRefFile, mode]);
 
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
@@ -710,10 +727,6 @@ export default function App() {
       window.lastTap = now;
     }
   };
-
-  // Remove or keep handleCardClick only if you want single click somewhere else
-  // For now, you can remove it if not used elsewhere:
-  // const handleCardClick = ... (you can delete this)
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -1506,7 +1519,6 @@ export default function App() {
   const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
   const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
 
-  // Add these two lines before the return statement
   const memoizedPrompt = useMemo(() => prompt, [prompt]);
   const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPrompt(e.target.value);
@@ -1867,6 +1879,20 @@ export default function App() {
                     </label>
                     <div className="flex items-center gap-3">
                       <button
+                        onClick={() => {
+                          setSteps(35);
+                          setCfg(4.0);
+                          setDenoise(0.9);
+                          setIpAdapterStrength(0.95);
+                          setSampler("dpmpp_2m_sde");
+                          setScheduler("karras");
+                        }}
+                        className="text-[9px] px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-medium uppercase tracking-widest transition-colors flex items-center gap-1.5"
+                      >
+                        <UserCircle className="w-3 h-3" />
+                        Optimize Face
+                      </button>
+                      <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
                         className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
@@ -1988,7 +2014,7 @@ export default function App() {
                                      Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
                                  </label>
                                  <input
-                                     type="range" min="0" max="1.5" step="0.05"
+                                     type="range" min="0.5" max="1.3" step="0.05"
                                      value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
                                      className="w-full accent-zinc-100"
                                  />
@@ -2113,7 +2139,7 @@ export default function App() {
                                 Steps <span>{steps}</span>
                               </label>
                               <input 
-                                type="range" min="1" max="50" step="1" 
+                                type="range" min="8" max="60" step="1" 
                                 value={steps} onChange={(e) => setSteps(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
@@ -2123,7 +2149,7 @@ export default function App() {
                                 CFG <span>{cfg.toFixed(1)}</span>
                               </label>
                               <input 
-                                type="range" min="1" max="15" step="0.5" 
+                                type="range" min="1" max="12" step="0.1" 
                                 value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
@@ -2133,7 +2159,7 @@ export default function App() {
                                 Denoise <span>{denoise.toFixed(2)}</span>
                               </label>
                               <input 
-                                type="range" min="0" max="1" step="0.05" 
+                                type="range" min="0.6" max="1" step="0.01" 
                                 value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
