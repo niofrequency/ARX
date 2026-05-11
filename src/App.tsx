@@ -335,6 +335,11 @@ export default function App() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- Output Size Control State ---
+  const [targetAspect, setTargetAspect] = useState<'9:16' | '16:9' | '2:3' | '3:2' | '1:1' | '4:5' | '5:4' | 'Custom'>('9:16');
+  const [customWidth, setCustomWidth] = useState(832);   // default good for portrait
+  const [customHeight, setCustomHeight] = useState(1216);
   
   // New touch and swipe tracking refs
   const touchStartX = useRef<number | null>(null);
@@ -397,6 +402,14 @@ export default function App() {
       catch (e) { console.error("Failed to parse saved prompts", e); }
     }
 
+    // Load Size State
+    const savedAspect = localStorage.getItem('arx_target_aspect') as any;
+    if (savedAspect) setTargetAspect(savedAspect);
+    const savedCw = localStorage.getItem('arx_custom_w');
+    if (savedCw) setCustomWidth(Number(savedCw));
+    const savedCh = localStorage.getItem('arx_custom_h');
+    if (savedCh) setCustomHeight(Number(savedCh));
+
     getHistoryDB().then(localData => {
       setHistory(localData);
       if (savedWsKey) {
@@ -413,6 +426,10 @@ export default function App() {
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
+  
+  useEffect(() => { localStorage.setItem('arx_target_aspect', targetAspect); }, [targetAspect]);
+  useEffect(() => { localStorage.setItem('arx_custom_w', customWidth.toString()); }, [customWidth]);
+  useEffect(() => { localStorage.setItem('arx_custom_h', customHeight.toString()); }, [customHeight]);
 
   const fetchWavespeedBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
@@ -545,7 +562,7 @@ export default function App() {
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
+      document.body.style.touchAction = 'none';      // Prevent zoom & background scroll
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -712,7 +729,7 @@ export default function App() {
     if (touchStartX.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
-   
+    
     if (Math.abs(diff) > 50) {
       isSwiping.current = true;
       if (diff > 0) handleNextHistory();
@@ -724,11 +741,11 @@ export default function App() {
   // Double Tap Handler (works on BOTH front and back)
   const handleDoubleTap = () => {
     const now = Date.now();
-    if (window.lastTap && now - window.lastTap < 280) {
+    if ((window as any).lastTap && now - (window as any).lastTap < 280) {
       setIsFlipped(prev => !prev);
-      window.lastTap = 0;
+      (window as any).lastTap = 0;
     } else {
-      window.lastTap = now;
+      (window as any).lastTap = now;
     }
   };
 
@@ -815,6 +832,21 @@ export default function App() {
       }
     }
     return null;
+  };
+
+  const getTargetDimensions = (): { width: number; height: number } => {
+    const baseW = customWidth;
+    const baseH = customHeight;
+    switch (targetAspect) {
+      case '9:16': return { width: 576, height: 1024 };   // or 832x1472 etc.
+      case '16:9': return { width: 1024, height: 576 };
+      case '2:3':  return { width: 768, height: 1152 };
+      case '3:2':  return { width: 1152, height: 768 };
+      case '1:1':  return { width: 896, height: 896 };
+      case '4:5':  return { width: 768, height: 960 };
+      case '5:4':  return { width: 960, height: 768 };
+      default:     return { width: baseW, height: baseH };
+    }
   };
 
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
@@ -918,6 +950,7 @@ export default function App() {
     }
     
     const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
+    const { width: targetW, height: targetH } = getTargetDimensions();
 
     const workflowObj: any = {
       "5": { 
@@ -984,10 +1017,35 @@ export default function App() {
     }
 
     workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
-    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
+    workflowObj["60"] = { 
+       "inputs": { 
+         "filename_prefix": `ARX_${targetAspect.replace(':', 'x')}`, 
+         "images": ["8", 0] 
+       }, 
+       "class_type": "SaveImage" 
+    };
     workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
-    workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
-    workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
+    
+    // Better resizing node (preserves aspect + quality)
+    workflowObj["93"] = {
+      "inputs": {
+        "image": ["78", 0],
+        "width": targetW,
+        "height": targetH,
+        "upscale_method": "lanczos",
+        "crop": "disabled"
+      },
+      "class_type": "ImageScale"   // ← Better than ImageScaleToTotalPixels for fixed size
+    };
+    
+    workflowObj["88"] = { 
+       "inputs": { 
+         "pixels": ["93", 0], 
+         "vae": ["5", 2] 
+       }, 
+       "class_type": "VAEEncode" 
+    };
+
     workflowObj["110"] = { "inputs": { "prompt": negativePrompt, "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
     workflowObj["111"] = { "inputs": { "prompt": prompt || "change to red", "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
     workflowObj["3"] = {
@@ -1992,6 +2050,58 @@ export default function App() {
                     
                     <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       Positive Prompt
+                    </div>
+                  </div>
+
+                  {/* === OUTPUT SIZE CONTROL === */}
+                  <div className="pt-6 border-t border-zinc-800/50 mt-4">
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">
+                      Output Resolution / Aspect Ratio
+                    </label>
+                    <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-2 mb-4">
+                      {[
+                        { label: '9:16', ratio: '9:16' },
+                        { label: '16:9', ratio: '16:9' },
+                        { label: '2:3', ratio: '2:3' },
+                        { label: '3:2', ratio: '3:2' },
+                        { label: '1:1', ratio: '1:1' },
+                        { label: '4:5', ratio: '4:5' },
+                        { label: '5:4', ratio: '5:4' },
+                        { label: 'Custom', ratio: 'Custom' },
+                      ].map(({ label, ratio }) => (
+                        <button
+                          key={ratio}
+                          onClick={(e) => { e.preventDefault(); setTargetAspect(ratio as any); }}
+                          className={`py-2.5 text-xs font-medium rounded-xl transition-all ${
+                            targetAspect === ratio
+                              ? 'bg-zinc-100 text-zinc-950 shadow'
+                              : 'bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-100'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Optional custom override */}
+                    <div className="flex gap-3 text-xs">
+                      <div className="flex-1">
+                        <label className="block text-zinc-500 mb-1">Width</label>
+                        <input
+                          type="number"
+                          value={customWidth}
+                          onChange={(e) => setCustomWidth(Math.max(256, Number(e.target.value)))}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center text-zinc-300 outline-none focus:border-zinc-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-zinc-500 mb-1">Height</label>
+                        <input
+                          type="number"
+                          value={customHeight}
+                          onChange={(e) => setCustomHeight(Math.max(256, Number(e.target.value)))}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center text-zinc-300 outline-none focus:border-zinc-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
