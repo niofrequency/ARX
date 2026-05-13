@@ -277,7 +277,7 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
-  const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
+  const [videoEndpointId, setVideoEndpointId] = useState<string>('4k4i9q6i33lda0');
   const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
@@ -349,7 +349,7 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
+    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '4k4i9q6i33lda0';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
@@ -2741,7 +2741,7 @@ export default function App() {
                       type="text" 
                       value={videoEndpointId} 
                       onChange={(e) => setVideoEndpointId(e.target.value)} 
-                      placeholder="e.g. 7h6lpbp8ebiw6q"
+                      placeholder="e.g. 4k4i9q6i33lda0"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
