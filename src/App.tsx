@@ -149,6 +149,51 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
   );
 };
 
+// --- Utilities ---
+const isVideoUrl = (url?: string | null) => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  return cleanUrl.startsWith('data:video') || 
+         cleanUrl.endsWith('.mp4') || 
+         cleanUrl.endsWith('.webm') || 
+         cleanUrl.endsWith('.mov') || 
+         url.includes('video/mp4');
+};
+
+const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Blob => {
+  const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const byteCharacters = atob(base64String);
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+};
+
+const cleanAndPadBase64 = (base64Str: string) => {
+  let cleanStr = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+  while (cleanStr.length % 4 !== 0) {
+    cleanStr += '=';
+  }
+  return cleanStr;
+};
+
+const getVideoDuration = (file: File): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => resolve(video.duration);
+    video.onerror = () => reject(new Error('Invalid video'));
+    video.src = URL.createObjectURL(file);
+  });
+};
+
 // --- Types ---
 type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
@@ -184,41 +229,6 @@ const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 
 const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
 const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
 const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
-
-// --- Utilities ---
-const isVideoUrl = (url?: string | null) => {
-  if (!url) return false;
-  const cleanUrl = url.split('?')[0].toLowerCase();
-  return cleanUrl.startsWith('data:video') || 
-         cleanUrl.endsWith('.mp4') || 
-         cleanUrl.endsWith('.webm') || 
-         cleanUrl.endsWith('.mov') || 
-         url.includes('video/mp4');
-};
-
-const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Blob => {
-  const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-  const byteCharacters = atob(base64String);
-  const byteArrays = [];
-  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      byteArrays.push(byteArray);
-  }
-  return new Blob(byteArrays, { type: contentType });
-};
-
-const cleanAndPadBase64 = (base64Str: string) => {
-  let cleanStr = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
-  while (cleanStr.length % 4 !== 0) {
-    cleanStr += '=';
-  }
-  return cleanStr;
-};
 
 const AUTO_LORA_MAP: Record<string, any> = {
   "creampie": { 
@@ -302,17 +312,18 @@ export default function App() {
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
-  // Video Settings
-  const [videoWidth, setVideoWidth] = useState<number>(480);
-  const [videoHeight, setVideoHeight] = useState<number>(832);
-  const [videoFps, setVideoFps] = useState<number>(16);
-  const [videoSteps, setVideoSteps] = useState<number>(10);
-  const [videoCfg, setVideoCfg] = useState<number>(2.0);
+  // Video Settings - OPTIMIZED FOR STABILITY
+  const [videoWidth, setVideoWidth] = useState<number>(512);
+  const [videoHeight, setVideoHeight] = useState<number>(768);
+  const [videoFps, setVideoFps] = useState<number>(12);
+  const [videoSteps, setVideoSteps] = useState<number>(8);
+  const [videoCfg, setVideoCfg] = useState<number>(1.5);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
   
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
   const [videoRefPreview, setVideoRefPreview] = useState<string | null>(null);
   const [videoRefUrl, setVideoRefUrl] = useState<string | null>(null);
+  const [videoRefUploadProgress, setVideoRefUploadProgress] = useState<number | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -581,19 +592,46 @@ export default function App() {
       setError('Please upload a valid video file (.mp4, .mov, etc.)');
       return;
     }
+
+    try {
+      const duration = await getVideoDuration(file);
+      if (duration > 6.5) {
+        setError("Reference video is too long (>6.5 seconds). Please trim it for stability.");
+        return;
+      }
+    } catch (e) {
+      console.warn("Could not check video duration");
+    }
     
     // Create local preview
     const previewUrl = URL.createObjectURL(file);
     setVideoRefFile(file);
     setVideoRefPreview(previewUrl);
+    setVideoRefUploadProgress(0);
     
     try {
       setError(null);
+
+      // Simulated progress update while waiting for Firebase
+      const progressInterval = setInterval(() => {
+        setVideoRefUploadProgress(prev => {
+          if (prev === null) return 0;
+          if (prev >= 90) return 90;
+          return prev + 10;
+        });
+      }, 500);
+
       // Upload to Firebase and get permanent URL
       const firebaseUrl = await uploadToFirebase(file, `ref_videos/${Date.now()}_${file.name}`);
+      
+      clearInterval(progressInterval);
+      setVideoRefUploadProgress(100);
+      setTimeout(() => setVideoRefUploadProgress(null), 1000);
+
       setVideoRefUrl(firebaseUrl);
       console.log("✅ Reference video uploaded to Firebase:", firebaseUrl);
     } catch (err) {
+      setVideoRefUploadProgress(null);
       console.error(err);
       setError("Failed to upload reference video to Firebase. Please try a smaller file.");
     }
@@ -824,18 +862,29 @@ export default function App() {
     return null;
   };
 
-  const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
+  const triggerRunPodVideo = async (base64Image: string) => {
     const safeImage = cleanAndPadBase64(base64Image);
 
-    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
+    // Safety checks
+    if (videoRefFile) {
+      try {
+        const duration = await getVideoDuration(videoRefFile);
+        if (duration > 6.5) {
+          setError("Reference video is too long (>6.5 seconds). Please trim it for stability.");
+          throw new Error("Video too long");
+        }
+      } catch (e) {
+        console.warn("Could not check video duration");
+      }
+    }
+
     const isVid2Vid = !!(videoRefUrl || videoRefFile);
-    // Dynamically assign endpoint based on reference video presence
-    const activeVideoEndpointId = isVid2Vid ? '4k4i9q6i33lda0' : '7h6lpbp8ebiw6q';
+    const activeVideoEndpointId = isVid2Vid ? '4k4i9q6i33lda0' : '7h6lpbp8ebiw6q'; // Use your video endpoint
 
     const payload: any = {
       input: {
@@ -851,56 +900,41 @@ export default function App() {
       }
     };
 
-    // Use Firebase URL if available (Best method to bypass 10MB RunPod limit)
     if (videoRefUrl) {
       payload.input.video_url = videoRefUrl;
-      console.log("Using Firebase URL for reference video:", videoRefUrl);
-    } 
-    // Fallback to Base64 only if no URL (Risk of 10MB limit crash for long videos)
-    else if (videoRefFile) {
+    } else if (videoRefFile) {
       const videoBase64 = await fileToBase64(videoRefFile);
       payload.input.video_base64 = cleanAndPadBase64(videoBase64);
-      console.log("Using Base64 for reference video");
     }
 
-    console.log(`📤 Sending to RunPod Video WanAnimate API (${activeVideoEndpointId}):`, {
-      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      includesReferenceVideo: isVid2Vid
+    console.log(`📤 Sending to WanAnimate (${activeVideoEndpointId})`, {
+      prompt: activePrompt.substring(0, 100),
+      video: isVid2Vid ? "Yes" : "No",
+      resolution: `${videoWidth}x${videoHeight}`,
+      fps: videoFps
     });
 
-    try {
-      const response = await fetch(`https://api.runpod.ai/v2/${activeVideoEndpointId}/run`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${runpodKey}`
-        },
-        body: JSON.stringify(payload)
-      });
+    const response = await fetch(`https://api.runpod.ai/v2/${activeVideoEndpointId}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${runpodKey}`
+      },
+      body: JSON.stringify(payload)
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("🚨 RunPod Error Response:", errorText);
-        
-        if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
-          console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
-          await new Promise(r => setTimeout(r, 5000));
-          return triggerRunPodVideo(base64Image, retryCount + 1);
-        }
-        throw new Error(`RunPod rejected request: ${errorText.substring(0, 200)}`);
-      }
-
-      const data = await response.json();
-      return {
-        id: data.id,
-        pollUrl: `https://api.runpod.ai/v2/${activeVideoEndpointId}/status/${data.id}`,
-        historyPrompt: activePrompt,
-        modelInfo: isVid2Vid ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video'
-      };
-    } catch (err: any) {
-      console.error("Video trigger failed:", err);
-      throw err;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`RunPod Error: ${errorText.substring(0, 150)}`);
     }
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      pollUrl: `https://api.runpod.ai/v2/${activeVideoEndpointId}/status/${data.id}`,
+      historyPrompt: activePrompt,
+      modelInfo: isVid2Vid ? 'WanAnimate (Video Ref)' : 'WanAnimate (Image Only)'
+    };
   };
 
   const triggerRunPod = async (base64Image: string) => {
@@ -1187,13 +1221,13 @@ export default function App() {
   };
 
   const generateEdit = async () => {
-    if (mode === 'runpod' || mode === 'video') {
-      if (mode === 'runpod' && (!runpodKey || !runpodEndpointId)) {
+    if (mode === 'runpod') {
+      if (!runpodKey || !runpodEndpointId) {
         setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
       }
-    } else {
+    } else if (mode !== 'video') {
       if (!wavespeedKey) {
         setError('Please enter your Wavespeed API Key in settings.');
         setShowSettings(true); 
@@ -1784,6 +1818,18 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="relative">
+                    <textarea 
+                      value={negativePrompt} 
+                      onChange={(e) => setNegativePrompt(e.target.value)} 
+                      placeholder="Negative prompt..." 
+                      className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
+                    />
+                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
+                      Negative
+                    </div>
+                  </div>
+
                   {/* --- NEW ASPECT RATIO SELECTOR --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                     <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-3">
@@ -1791,9 +1837,9 @@ export default function App() {
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => { setVideoWidth(480); setVideoHeight(832); }}
+                        onClick={() => { setVideoWidth(512); setVideoHeight(768); }}
                         className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 480 
+                          videoWidth === 512 && videoHeight === 768
                             ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
                             : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
                         }`}
@@ -1801,9 +1847,9 @@ export default function App() {
                         Portrait
                       </button>
                       <button
-                        onClick={() => { setVideoWidth(832); setVideoHeight(480); }}
+                        onClick={() => { setVideoWidth(768); setVideoHeight(512); }}
                         className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 832 
+                          videoWidth === 768 && videoHeight === 512
                             ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
                             : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
                         }`}
@@ -1813,7 +1859,7 @@ export default function App() {
                       <button
                         onClick={() => { setVideoWidth(512); setVideoHeight(512); }}
                         className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 512 
+                          videoWidth === 512 && videoHeight === 512
                             ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
                             : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
                         }`}
@@ -1827,23 +1873,44 @@ export default function App() {
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Reference Video (Motion Transfer)</label>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="h-32">
-                             <UploadZone
-                                label="Upload Ref Video"
-                                file={videoRefFile}
-                                preview={videoRefPreview}
-                                icon={Film}
-                                accept="video/*"
-                                onClear={() => { 
-                                  if (videoRefPreview?.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
-                                  setVideoRefFile(null); 
-                                  setVideoRefPreview(null);
-                                  setVideoRefUrl(null);
-                                }}
-                                onProcess={handleRefVideoProcess}
-                              />
+                        <div className="flex flex-col gap-2">
+                           <div className="h-32">
+                               <UploadZone
+                                  label="Upload Ref Video"
+                                  file={videoRefFile}
+                                  preview={videoRefPreview}
+                                  icon={Film}
+                                  accept="video/*"
+                                  onClear={() => { 
+                                    if (videoRefPreview?.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
+                                    setVideoRefFile(null); 
+                                    setVideoRefPreview(null);
+                                    setVideoRefUrl(null);
+                                    setVideoRefUploadProgress(null);
+                                  }}
+                                  onProcess={handleRefVideoProcess}
+                                />
+                           </div>
+                           
+                           {/* Upload Progress Bar */}
+                           {videoRefUploadProgress !== null && (
+                             <div className="w-full bg-zinc-900 border border-zinc-800 rounded-full h-2 mt-1 overflow-hidden">
+                               <div 
+                                 className="bg-indigo-500 h-full transition-all duration-300" 
+                                 style={{ width: `${videoRefUploadProgress}%` }} 
+                               />
+                             </div>
+                           )}
+
+                           {/* Duration Warning */}
+                           {videoRefFile && (
+                             <div className="mt-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[10px] text-amber-400 leading-relaxed">
+                               ⚠️ Best results with videos <strong>under 6.5 seconds</strong>. Longer clips may cause crashes.
+                             </div>
+                           )}
                          </div>
-                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+
+                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl h-32">
                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
                                  Output FPS <span>{videoFps}</span>
                              </label>
