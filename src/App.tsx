@@ -315,9 +315,9 @@ export default function App() {
   // Video Settings - OPTIMIZED FOR STABILITY
   const [videoWidth, setVideoWidth] = useState<number>(512);
   const [videoHeight, setVideoHeight] = useState<number>(768);
-  const [videoFps, setVideoFps] = useState<number>(12);
-  const [videoSteps, setVideoSteps] = useState<number>(8);
-  const [videoCfg, setVideoCfg] = useState<number>(1.5);
+  const [videoFps, setVideoFps] = useState<number>(16);
+  const [videoSteps, setVideoSteps] = useState<number>(15);
+  const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
   
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
