@@ -277,7 +277,6 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
-  const [videoEndpointId, setVideoEndpointId] = useState<string>('4k4i9q6i33lda0');
   const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
@@ -312,6 +311,7 @@ export default function App() {
   
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
   const [videoRefPreview, setVideoRefPreview] = useState<string | null>(null);
+  const [videoRefUrl, setVideoRefUrl] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -349,7 +349,6 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '4k4i9q6i33lda0';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
@@ -367,7 +366,6 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
-    setVideoEndpointId(savedVidEndpoint);
     setGrokKey(savedGrok);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -577,6 +575,29 @@ export default function App() {
     setError(null);
   };
 
+  const handleRefVideoProcess = async (file: File) => {
+    if (!file.type.startsWith('video/')) {
+      setError('Please upload a valid video file (.mp4, .mov, etc.)');
+      return;
+    }
+    
+    // Create local preview
+    const previewUrl = URL.createObjectURL(file);
+    setVideoRefFile(file);
+    setVideoRefPreview(previewUrl);
+    
+    try {
+      setError(null);
+      // Upload to Firebase and get permanent URL
+      const firebaseUrl = await uploadToFirebase(file, `ref_videos/${Date.now()}_${file.name}`);
+      setVideoRefUrl(firebaseUrl);
+      console.log("✅ Reference video uploaded to Firebase:", firebaseUrl);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to upload reference video to Firebase. Please try a smaller file.");
+    }
+  };
+
   const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -658,7 +679,6 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
-    localStorage.setItem('arx_video_endpoint', videoEndpointId);
     localStorage.setItem('arx_grok_key', grokKey);
     setShowSettings(false);
     if (wavespeedKey) {
@@ -804,19 +824,7 @@ export default function App() {
   };
 
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
-    let safeBase64 = cleanAndPadBase64(base64Image);
-
-    // Aggressive compression for large images
-    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile && !selectedFile.type.startsWith('video/')) {
-      const compressed = await optimizeImageForUpload(selectedFile, 768);
-      safeBase64 = cleanAndPadBase64(compressed);
-    }
-    
-    let safeVideoBase64 = null;
-    if (videoRefFile) {
-      const rawVideoBase64 = await fileToBase64(videoRefFile);
-      safeVideoBase64 = cleanAndPadBase64(rawVideoBase64);
-    }
+    const safeImage = cleanAndPadBase64(base64Image);
 
     // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
@@ -824,31 +832,43 @@ export default function App() {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
+    const isVid2Vid = !!(videoRefUrl || videoRefFile);
+    // Dynamically assign endpoint based on reference video presence
+    const activeVideoEndpointId = isVid2Vid ? '4k4i9q6i33lda0' : '7h6lpbp8ebiw6q';
+
     const payload: any = {
       input: {
         prompt: activePrompt,
         negative_prompt: negativePrompt || "blurry, low quality, distorted",
-        image_base64: safeBase64,
+        image_base64: safeImage,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
-        cfg: videoCfg,
         width: videoWidth,
         height: videoHeight,
         fps: videoFps,
         steps: videoSteps,
+        cfg: videoCfg,
       }
     };
-    
-    if (safeVideoBase64) {
-      payload.input.video_base64 = safeVideoBase64;
+
+    // Use Firebase URL if available (Best method to bypass 10MB RunPod limit)
+    if (videoRefUrl) {
+      payload.input.video_url = videoRefUrl;
+      console.log("Using Firebase URL for reference video:", videoRefUrl);
+    } 
+    // Fallback to Base64 only if no URL (Risk of 10MB limit crash for long videos)
+    else if (videoRefFile) {
+      const videoBase64 = await fileToBase64(videoRefFile);
+      payload.input.video_base64 = cleanAndPadBase64(videoBase64);
+      console.log("Using Base64 for reference video");
     }
 
-    console.log("📤 Sending to RunPod Video WanAnimate API:", {
+    console.log(`📤 Sending to RunPod Video WanAnimate API (${activeVideoEndpointId}):`, {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      includesReferenceVideo: !!safeVideoBase64
+      includesReferenceVideo: isVid2Vid
     });
 
     try {
-      const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
+      const response = await fetch(`https://api.runpod.ai/v2/${activeVideoEndpointId}/run`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -872,9 +892,9 @@ export default function App() {
       const data = await response.json();
       return {
         id: data.id,
-        pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
+        pollUrl: `https://api.runpod.ai/v2/${activeVideoEndpointId}/status/${data.id}`,
         historyPrompt: activePrompt,
-        modelInfo: safeVideoBase64 ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video'
+        modelInfo: isVid2Vid ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video'
       };
     } catch (err: any) {
       console.error("Video trigger failed:", err);
@@ -1167,11 +1187,6 @@ export default function App() {
 
   const generateEdit = async () => {
     if (mode === 'runpod' || mode === 'video') {
-      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
-        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
       if (mode === 'runpod' && (!runpodKey || !runpodEndpointId)) {
         setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
@@ -1192,6 +1207,12 @@ export default function App() {
 
     if (!selectedFile) {
       setError('Please upload a primary image to process.');
+      return;
+    }
+    
+    // Check if Firebase upload is still pending before allowing queue
+    if (mode === 'video' && videoRefFile && !videoRefUrl) {
+      setError('Please wait for the reference video to finish uploading to Firebase.');
       return;
     }
 
@@ -1803,22 +1824,18 @@ export default function App() {
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                          <div className="h-32">
                              <UploadZone
-                                label="Upload Reference Video (.mp4)"
+                                label="Upload Reference Video (Motion to Copy)"
                                 file={videoRefFile}
                                 preview={videoRefPreview}
                                 icon={Film}
-                                accept="video/mp4,video/quicktime,video/webm"
+                                accept="video/*"
                                 onClear={() => { 
                                   if (videoRefPreview && videoRefPreview.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
                                   setVideoRefFile(null); 
-                                  setVideoRefPreview(null); 
+                                  setVideoRefPreview(null);
+                                  setVideoRefUrl(null);
                                 }}
-                                onProcess={(f: File) => {
-                                    if (videoRefPreview && videoRefPreview.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
-                                    const url = URL.createObjectURL(f);
-                                    setVideoRefFile(f);
-                                    setVideoRefPreview(url);
-                                }}
+                                onProcess={handleRefVideoProcess}
                               />
                          </div>
                          <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
@@ -2369,7 +2386,7 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = videoRefFile ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video';
+                              dynamicModelInfo = videoRefUrl || videoRefFile ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
@@ -2730,18 +2747,6 @@ export default function App() {
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod Video Endpoint ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={videoEndpointId} 
-                      onChange={(e) => setVideoEndpointId(e.target.value)} 
-                      placeholder="e.g. 4k4i9q6i33lda0"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
