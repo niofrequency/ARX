@@ -302,6 +302,7 @@ export default function App() {
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
+  // Video Settings
   const [videoWidth, setVideoWidth] = useState<number>(480);
   const [videoHeight, setVideoHeight] = useState<number>(832);
   const [videoFps, setVideoFps] = useState<number>(16);
@@ -1708,7 +1709,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      Wan 2.2 Video Generator
+                      Wan 2.1 Video Generator
                     </label>
                     <div className="flex items-center gap-3">
                       <button
@@ -1783,16 +1784,79 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="relative">
-                    <textarea 
-                      value={negativePrompt} 
-                      onChange={(e) => setNegativePrompt(e.target.value)} 
-                      placeholder="Negative prompt..." 
-                      className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
-                    />
-                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
-                      Negative
+                  {/* --- NEW ASPECT RATIO SELECTOR --- */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                    <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-3">
+                      Frame Orientation
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => { setVideoWidth(480); setVideoHeight(832); }}
+                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                          videoWidth === 480 
+                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+                        }`}
+                      >
+                        Portrait
+                      </button>
+                      <button
+                        onClick={() => { setVideoWidth(832); setVideoHeight(480); }}
+                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                          videoWidth === 832 
+                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+                        }`}
+                      >
+                        Landscape
+                      </button>
+                      <button
+                        onClick={() => { setVideoWidth(512); setVideoHeight(512); }}
+                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
+                          videoWidth === 512 
+                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
+                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
+                        }`}
+                      >
+                        Square
+                      </button>
                     </div>
+                  </div>
+
+                  {/* --- WANANIMATE REFERENCE VIDEO SECTION --- */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Reference Video (Motion Transfer)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         <div className="h-32">
+                             <UploadZone
+                                label="Upload Ref Video"
+                                file={videoRefFile}
+                                preview={videoRefPreview}
+                                icon={Film}
+                                accept="video/*"
+                                onClear={() => { 
+                                  if (videoRefPreview?.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
+                                  setVideoRefFile(null); 
+                                  setVideoRefPreview(null);
+                                  setVideoRefUrl(null);
+                                }}
+                                onProcess={handleRefVideoProcess}
+                              />
+                         </div>
+                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                 Output FPS <span>{videoFps}</span>
+                             </label>
+                             <input
+                                 type="range" min="8" max="24" step="1"
+                                 value={videoFps} onChange={(e) => setVideoFps(Number(e.target.value))}
+                                 className="w-full accent-zinc-100"
+                             />
+                             <p className="text-[9px] text-zinc-500 leading-relaxed italic">
+                               Match this to your frame orientation above to prevent stretching.
+                             </p>
+                         </div>
+                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
@@ -1816,42 +1880,6 @@ export default function App() {
                         className="w-full accent-zinc-100" 
                       />
                     </div>
-                  </div>
-
-                  {/* --- WANANIMATE REFERENCE VIDEO SECTION --- */}
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Reference Video (WanAnimate Pose/Motion)</label>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="h-32">
-                             <UploadZone
-                                label="Upload Reference Video (Motion to Copy)"
-                                file={videoRefFile}
-                                preview={videoRefPreview}
-                                icon={Film}
-                                accept="video/*"
-                                onClear={() => { 
-                                  if (videoRefPreview && videoRefPreview.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
-                                  setVideoRefFile(null); 
-                                  setVideoRefPreview(null);
-                                  setVideoRefUrl(null);
-                                }}
-                                onProcess={handleRefVideoProcess}
-                              />
-                         </div>
-                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
-                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
-                                 Output FPS <span>{videoFps}</span>
-                             </label>
-                             <input
-                                 type="range" min="8" max="30" step="1"
-                                 value={videoFps} onChange={(e) => setVideoFps(Number(e.target.value))}
-                                 className="w-full accent-zinc-100"
-                             />
-                             <p className="text-[9px] text-zinc-500 leading-relaxed">
-                                 Higher FPS yields smoother motion but requires more generation time. Provide a reference video for advanced pose mapping.
-                             </p>
-                         </div>
-                     </div>
                   </div>
                 </div>
               )}
