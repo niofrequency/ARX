@@ -273,7 +273,6 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
-  const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
   const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
   const [grokKey, setGrokKey] = useState<string>('');
   
@@ -299,7 +298,6 @@ export default function App() {
   const [steps, setSteps] = useState<number>(6);
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
-  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.85);
 
   const [videoWidth, setVideoWidth] = useState<number>(480);
   const [videoHeight, setVideoHeight] = useState<number>(832);
@@ -307,9 +305,6 @@ export default function App() {
   const [videoSteps, setVideoSteps] = useState<number>(10);
   const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
-
-  const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
-  const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -343,32 +338,10 @@ export default function App() {
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
 
-  // Smart Defaults When IP-Adapter Face is Used
-  useEffect(() => {
-    if (faceRefFile && mode === 'runpod') {
-      // For these rapid Qwen models, we use moderate steps instead of 35
-      setSteps(12);           // compromise: 10-16 is sweet spot
-      setCfg(2.8);
-      setDenoise(0.85);       // slightly lower to avoid overcooking
-      setIpAdapterStrength(0.95);
-      
-      setSampler("dpmpp_2m_sde");   // better for face detail
-      setScheduler("karras");
-
-      // Add face quality reinforcement
-      if (!prompt.toLowerCase().includes("detailed face")) {
-        setPrompt(p => 
-          (p ? p + ", " : "") + "highly detailed face, sharp eyes, realistic skin texture, same face as reference"
-        );
-      }
-    }
-  }, [faceRefFile, mode, prompt]);
-
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
     const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
@@ -387,7 +360,6 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
-    setIpAdapterEndpointId(savedIpEndpoint);
     setVideoEndpointId(savedVidEndpoint);
     setGrokKey(savedGrok);
     
@@ -671,7 +643,6 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
-    localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
     localStorage.setItem('arx_video_endpoint', videoEndpointId);
     localStorage.setItem('arx_grok_key', grokKey);
     setShowSettings(false);
@@ -712,7 +683,7 @@ export default function App() {
     if (touchStartX.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
-   
+    
     if (Math.abs(diff) > 50) {
       isSwiping.current = true;
       if (diff > 0) handleNextHistory();
@@ -911,13 +882,7 @@ export default function App() {
 
   const triggerRunPod = async (base64Image: string) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
-    let faceBase64Data = null;
-    if (faceRefFile) {
-        const rawFaceBase64 = await fileToBase64(faceRefFile);
-        faceBase64Data = cleanAndPadBase64(rawFaceBase64);
-    }
-    
-    const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
+    const activeEndpointId = runpodEndpointId;
 
     const workflowObj: any = {
       "5": { 
@@ -951,38 +916,6 @@ export default function App() {
       currentId++;
     });
 
-    if (faceBase64Data) {
-        workflowObj["200"] = {
-            "inputs": { "image": "face_ref.png" },
-            "class_type": "LoadImage"
-        };
-        workflowObj["201"] = {
-            "inputs": { "ipadapter_file": "ip-adapter-plus-face_sdxl_vit-h.safetensors" },
-            "class_type": "IPAdapterModelLoader"
-        };
-        workflowObj["202"] = {
-            "inputs": { "clip_name": "clip_vision_h.safetensors" },
-            "class_type": "CLIPVisionLoader"
-        };
-        workflowObj["203"] = {
-            "inputs": {
-                "weight": ipAdapterStrength,
-                "weight_type": "linear",
-                "combine_embeds": "concat",
-                "start_at": 0.0,
-                "end_at": 1.0,
-                "embeds_scaling": "V only",
-                "model": [lastModelNodeId, lastModelOutputIndex],
-                "ipadapter": ["201", 0],
-                "clip_vision": ["202", 0],
-                "image": ["200", 0]
-            },
-            "class_type": "IPAdapterAdvanced"
-        };
-        lastModelNodeId = "203";
-        lastModelOutputIndex = 0;
-    }
-
     workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
     workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
     workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
@@ -1009,9 +942,6 @@ export default function App() {
     const imagesPayload = [
         { name: "input_image.png", image: safeBase64 }
     ];
-    if (faceBase64Data) {
-        imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
-    }
 
     const payload = {
       input: {
@@ -1040,10 +970,6 @@ export default function App() {
       ? `${modelName} Base` 
       : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
       
-    if (faceBase64Data) {
-        usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
-    }
-
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${activeEndpointId}/status/${id}`,
@@ -1244,12 +1170,7 @@ export default function App() {
         setShowSettings(true); 
         return;
       }
-      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
-        setError('Please enter your IP-Adapter Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
+      if (mode === 'runpod' && (!runpodKey || !runpodEndpointId)) {
         setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
@@ -1883,26 +1804,6 @@ export default function App() {
                     </label>
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={() => {
-                          if (faceRefFile) {
-                            setSteps(14);
-                            setCfg(3.0);
-                            setDenoise(0.82);
-                            setIpAdapterStrength(0.98);
-                            setSampler("dpmpp_2m_sde");
-                            setScheduler("karras");
-                          } else {
-                            // No face ref → just light boost
-                            setSteps(8);
-                            setCfg(2.0);
-                          }
-                        }}
-                        className="text-[9px] px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-medium uppercase tracking-widest transition-colors flex items-center gap-1.5"
-                      >
-                        <UserCircle className="w-3 h-3" />
-                        Optimize Face Swap
-                      </button>
-                      <button
                         onClick={handleRandomizePrompt}
                         disabled={isRandomizing}
                         className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
@@ -1993,51 +1894,6 @@ export default function App() {
                     <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                       Positive Prompt
                     </div>
-                  </div>
-
-                  {/* --- IP ADAPTER SECTION --- */}
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="h-32">
-                             <UploadZone
-                                label="Upload Face Reference"
-                                file={faceRefFile}
-                                preview={faceRefPreview}
-                                icon={User}
-                                onClear={() => { 
-                                  if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
-                                  setFaceRefFile(null); 
-                                  setFaceRefPreview(null); 
-                                }}
-                                onProcess={(f: File) => {
-                                    if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
-                                    const url = URL.createObjectURL(f);
-                                    setFaceRefFile(f);
-                                    setFaceRefPreview(url);
-                                }}
-                              />
-                         </div>
-                         {faceRefFile ? (
-                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
-                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
-                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
-                                 </label>
-                                 <input
-                                     type="range" min="0.5" max="1.3" step="0.05"
-                                     value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
-                                     className="w-full accent-zinc-100"
-                                 />
-                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
-                                     Higher strength forces stricter facial mapping but may distort stylization.
-                                 </p>
-                             </div>
-                         ) : (
-                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
-                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
-                             </div>
-                         )}
-                     </div>
                   </div>
 
                   <AnimatePresence>
@@ -2474,7 +2330,6 @@ export default function App() {
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
-                            if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
                           }
                           
                           setSelectedHistoryItem(match || { 
@@ -2832,18 +2687,6 @@ export default function App() {
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod IP-Adapter Endpoint ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={ipAdapterEndpointId} 
-                      onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
-                      placeholder="e.g. 9yusxkbksgwtyk"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
