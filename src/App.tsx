@@ -312,12 +312,12 @@ export default function App() {
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
-  // Video Settings - OPTIMIZED FOR STABILITY
-  const [videoWidth, setVideoWidth] = useState<number>(512);
-  const [videoHeight, setVideoHeight] = useState<number>(768);
-  const [videoFps, setVideoFps] = useState<number>(16);
-  const [videoSteps, setVideoSteps] = useState<number>(15);
-  const [videoCfg, setVideoCfg] = useState<number>(2.0);
+ // Optimized for wlsdml1114 WanAnimate Hub
+  const [videoWidth, setVideoWidth] = useState<number>(480);   // Portrait
+  const [videoHeight, setVideoHeight] = useState<number>(832); // Portrait
+  const [videoFps, setVideoFps] = useState<number>(16);        // Native Wan Speed
+  const [videoSteps, setVideoSteps] = useState<number>(20);       // High Quality
+  const [videoCfg, setVideoCfg] = useState<number>(2.0);       // Balanced Guidance
   const [videoSeed, setVideoSeed] = useState<number>(-1);
   
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
