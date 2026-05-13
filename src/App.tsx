@@ -111,7 +111,7 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
+const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload, accept = "image/*" }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   return (
@@ -124,10 +124,14 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
         isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
       }`}
     >
-      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept="image/*" />
+      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept={accept} />
       {preview ? (
-        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
-          <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
+        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group bg-zinc-950">
+          {file?.type.startsWith('video/') ? (
+            <video src={preview} className="max-h-[120px] w-full object-cover rounded-xl" autoPlay loop muted playsInline />
+          ) : (
+            <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
+          )}
           <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
             <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
             <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
@@ -301,10 +305,13 @@ export default function App() {
 
   const [videoWidth, setVideoWidth] = useState<number>(480);
   const [videoHeight, setVideoHeight] = useState<number>(832);
-  const [videoLength, setVideoLength] = useState<number>(81);
+  const [videoFps, setVideoFps] = useState<number>(16);
   const [videoSteps, setVideoSteps] = useState<number>(10);
   const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
+  
+  const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
+  const [videoRefPreview, setVideoRefPreview] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -609,6 +616,14 @@ export default function App() {
   };
 
   const fileToBase64 = async (file: File): Promise<string> => {
+    if (file.type.startsWith('video/')) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      });
+    }
     if (file.size < 500 * 1024) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -792,9 +807,15 @@ export default function App() {
     let safeBase64 = cleanAndPadBase64(base64Image);
 
     // Aggressive compression for large images
-    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
+    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile && !selectedFile.type.startsWith('video/')) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
+    }
+    
+    let safeVideoBase64 = null;
+    if (videoRefFile) {
+      const rawVideoBase64 = await fileToBase64(videoRefFile);
+      safeVideoBase64 = cleanAndPadBase64(rawVideoBase64);
     }
 
     // Generalized default prompt with good Wan 2.2 enhancers
@@ -803,47 +824,28 @@ export default function App() {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
-    const lowerPrompt = activePrompt.toLowerCase();
-
-    const finalAutoLoras: any[] = [];
-    const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
-
-    for (const keyword of sortedKeywords) {
-      const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      if (regex.test(lowerPrompt)) {
-        const config = AUTO_LORA_MAP[keyword];
-        if (!finalAutoLoras.some(l => l.path === config.high)) {
-          finalAutoLoras.push({
-            path: config.high,
-            model_weight: config.high_weight || 0.85,
-            clip_weight: config.low_weight || 0.85
-          });
-        }
-      }
-    }
-
-    const finalLoras = finalAutoLoras.slice(0, 2); // Max 2 for stability
-    
-    console.log("📤 Sending to RunPod Video:", {
-      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      loraCount: finalLoras.length,
-      loras: finalLoras.map(l => l.path)
-    });
-
-    const payload = {
+    const payload: any = {
       input: {
         prompt: activePrompt,
-        negative_prompt: negativePrompt || "blurry, low quality, deformed, ugly, static, frozen, jitter, artifacts",
+        negative_prompt: negativePrompt || "blurry, low quality, distorted",
         image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
         cfg: videoCfg,
         width: videoWidth,
         height: videoHeight,
-        length: videoLength,
+        fps: videoFps,
         steps: videoSteps,
-        lora_pairs: finalLoras
       }
     };
+    
+    if (safeVideoBase64) {
+      payload.input.video_base64 = safeVideoBase64;
+    }
+
+    console.log("📤 Sending to RunPod Video WanAnimate API:", {
+      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
+      includesReferenceVideo: !!safeVideoBase64
+    });
 
     try {
       const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
@@ -872,7 +874,7 @@ export default function App() {
         id: data.id,
         pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
         historyPrompt: activePrompt,
-        modelInfo: finalLoras.length > 0 ? `Wan 2.2 + ${finalLoras.length} LoRAs` : 'Wan 2.2'
+        modelInfo: safeVideoBase64 ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video'
       };
     } catch (err: any) {
       console.error("Video trigger failed:", err);
@@ -1566,6 +1568,7 @@ export default function App() {
                 label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
+                accept="image/*"
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
                 onProcess={(f: File) => handleFileProcess(f)} 
               />
@@ -1792,6 +1795,46 @@ export default function App() {
                         className="w-full accent-zinc-100" 
                       />
                     </div>
+                  </div>
+
+                  {/* --- WANANIMATE REFERENCE VIDEO SECTION --- */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Reference Video (WanAnimate Pose/Motion)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         <div className="h-32">
+                             <UploadZone
+                                label="Upload Reference Video (.mp4)"
+                                file={videoRefFile}
+                                preview={videoRefPreview}
+                                icon={Film}
+                                accept="video/mp4,video/quicktime,video/webm"
+                                onClear={() => { 
+                                  if (videoRefPreview && videoRefPreview.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
+                                  setVideoRefFile(null); 
+                                  setVideoRefPreview(null); 
+                                }}
+                                onProcess={(f: File) => {
+                                    if (videoRefPreview && videoRefPreview.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
+                                    const url = URL.createObjectURL(f);
+                                    setVideoRefFile(f);
+                                    setVideoRefPreview(url);
+                                }}
+                              />
+                         </div>
+                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                 Output FPS <span>{videoFps}</span>
+                             </label>
+                             <input
+                                 type="range" min="8" max="30" step="1"
+                                 value={videoFps} onChange={(e) => setVideoFps(Number(e.target.value))}
+                                 className="w-full accent-zinc-100"
+                             />
+                             <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                 Higher FPS yields smoother motion but requires more generation time. Provide a reference video for advanced pose mapping.
+                             </p>
+                         </div>
+                     </div>
                   </div>
                 </div>
               )}
@@ -2326,7 +2369,7 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = 'Wan 2.2 Video';
+                              dynamicModelInfo = videoRefFile ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
