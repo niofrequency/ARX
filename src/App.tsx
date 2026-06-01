@@ -942,8 +942,14 @@ export default function App() {
     const activeEndpointId = runpodEndpointId;
 
     const workflowObj: any = {
+      // Stage 1: Load Qwen Edit Base Model
       "5": { 
         "inputs": { "ckpt_name": runpodModel },
+        "class_type": "CheckpointLoaderSimple"
+      },
+      // Stage 2: Load BigLust Refiner Model
+      "100": {
+        "inputs": { "ckpt_name": "biglust.safetensors" },
         "class_type": "CheckpointLoaderSimple"
       }
     };
@@ -952,7 +958,7 @@ export default function App() {
     let lastModelOutputIndex = 0;
     let lastClipNodeId = "5";
     let lastClipOutputIndex = 1;
-    let currentId = 100;
+    let currentId = 1000;
 
     activeLoras.forEach(lora => {
       const nodeId = currentId.toString();
@@ -973,13 +979,14 @@ export default function App() {
       currentId++;
     });
 
-    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
-    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
+    // --- Stage 1 (Qwen) Image and Text Encoders ---
     workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
-    workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
     workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
+    workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
     workflowObj["110"] = { "inputs": { "prompt": negativePrompt, "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
     workflowObj["111"] = { "inputs": { "prompt": prompt || "change to red", "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
+    
+    // --- Stage 1 KSampler (Editor) ---
     workflowObj["3"] = {
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000), 
@@ -987,7 +994,7 @@ export default function App() {
         "cfg": cfg,
         "sampler_name": sampler,
         "scheduler": scheduler,
-        "denoise": denoise,
+        "denoise": 1.0, // Full denoise for initial edit
         "model": [lastModelNodeId, lastModelOutputIndex],
         "positive": ["111", 0],
         "negative": ["110", 0],
@@ -995,6 +1002,41 @@ export default function App() {
       },
       "class_type": "KSampler"
     };
+
+    // Decode Stage 1 output back to pixels
+    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
+
+    // --- STAGE 2 (BigLust Refiner) ---
+    
+    // Encode pixels from Stage 1 into SDXL format using BigLust's VAE
+    workflowObj["200"] = { "inputs": { "pixels": ["8", 0], "vae": ["100", 2] }, "class_type": "VAEEncode" };
+    
+    // Standard CLIP encoders for BigLust (SDXL)
+    workflowObj["202"] = { "inputs": { "text": "masterpiece, best quality, ultra detailed, highly realistic, " + (prompt || ""), "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
+    workflowObj["203"] = { "inputs": { "text": negativePrompt || "blurry, worst quality", "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
+
+    // Refiner KSampler
+    workflowObj["201"] = {
+      "inputs": {
+        "seed": Math.floor(Math.random() * 1000000), 
+        "steps": Math.max(20, steps), // Refiners perform best with ample steps
+        "cfg": cfg,
+        "sampler_name": sampler, 
+        "scheduler": scheduler, 
+        "denoise": 0.35, // Low denoise strictly transfers style & details
+        "model": ["100", 0],
+        "positive": ["202", 0],
+        "negative": ["203", 0],
+        "latent_image": ["200", 0]
+      },
+      "class_type": "KSampler"
+    };
+
+    // Final Stage 2 Decode
+    workflowObj["300"] = { "inputs": { "samples": ["201", 0], "vae": ["100", 2] }, "class_type": "VAEDecode" };
+    
+    // Output Save Node
+    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit_Refined", "images": ["300", 0] }, "class_type": "SaveImage" };
 
     const imagesPayload = [
         { name: "input_image.png", image: safeBase64 }
@@ -1024,8 +1066,8 @@ export default function App() {
     
     const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
     let usedModelInfo = activeLoras.length === 0 
-      ? `${modelName} Base` 
-      : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+      ? `${modelName} + biglust` 
+      : `${modelName} + biglust + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
       
     return {
       id,
