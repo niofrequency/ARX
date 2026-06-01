@@ -1011,8 +1011,8 @@ export default function App() {
     // Encode pixels from Stage 1 into SDXL format using BigLust's VAE
     workflowObj["200"] = { "inputs": { "pixels": ["8", 0], "vae": ["100", 2] }, "class_type": "VAEEncode" };
     
-    // Standard CLIP encoders for BigLust (SDXL)
-    workflowObj["202"] = { "inputs": { "text": "masterpiece, best quality, ultra detailed, highly realistic, " + (prompt || ""), "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
+    // Standard CLIP encoders for BigLust (SDXL) - Explicitly forcing "biglust style"
+    workflowObj["202"] = { "inputs": { "text": "masterpiece, best quality, ultra detailed, highly realistic, biglust style, " + (prompt || ""), "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
     workflowObj["203"] = { "inputs": { "text": negativePrompt || "blurry, worst quality", "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
 
     // Refiner KSampler
@@ -1020,10 +1020,10 @@ export default function App() {
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000), 
         "steps": Math.max(20, steps), // Refiners perform best with ample steps
-        "cfg": cfg,
+        "cfg": Math.min(cfg, 2.5), // Cap CFG so it doesn't over-process and ruin structure
         "sampler_name": sampler, 
         "scheduler": scheduler, 
-        "denoise": 0.35, // Low denoise strictly transfers style & details
+        "denoise": 0.15, // Choked denoise strictly locks structural geometry in place
         "model": ["100", 0],
         "positive": ["202", 0],
         "negative": ["203", 0],
