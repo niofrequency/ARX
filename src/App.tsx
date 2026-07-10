@@ -2260,66 +2260,75 @@ export default function App() {
                   </div>
                   
                   {editorModel === 'qwen-lora' && (
-                     <div className="mt-4 mb-6 pt-4 border-t border-zinc-800/50">
-                       <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
-                         <span>Active Style Injections (LoRAs)</span>
-                       </label>
-                       
-                       <div className="space-y-2 mb-3">
-                         {activeLoras.map(lora => (
-                           <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                             <span className="text-[9px] font-mono text-zinc-300 w-24 truncate">{lora.name}</span>
-                             <input 
-                               type="range" min="0" max="2" step="0.1" 
-                               value={lora.strength} 
-                               onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
-                               className="flex-1 accent-zinc-500 h-1" 
-                             />
-                             <span className="text-[9px] font-mono text-zinc-500 w-6 text-right">{lora.strength.toFixed(1)}</span>
-                             <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
-                               <X className="w-3 h-3" />
-                             </button>
-                           </div>
-                         ))}
-                         {activeLoras.length === 0 && (
-                           <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
-                         )}
-                       </div>
+                    <div className="mt-4 mb-6 pt-4 border-t border-zinc-800/50">
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+                        <span>Active Style Injections (LoRAs)</span>
+                      </label>
+                      
+                      <div className="space-y-2 mb-3">
+                        {activeLoras.map(lora => (
+                          <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
+                            <span className="text-[9px] font-mono text-zinc-300 w-24 truncate" title={lora.name}>
+                              {lora.name}
+                            </span>
+                            
+                            {/* --- STRENGTH / SCALE SLIDER --- */}
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max="2" 
+                              step="0.05" 
+                              value={lora.strength} 
+                              onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
+                              className="flex-1 accent-zinc-500 h-1 cursor-pointer" 
+                            />
+                            <span className="text-[9px] font-mono text-zinc-500 w-8 text-right">
+                              {lora.strength.toFixed(2)}
+                            </span>
+                            
+                            <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {activeLoras.length === 0 && (
+                          <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
+                        )}
+                      </div>
 
-                       <div className="flex flex-col gap-2">
-                         <div className="flex gap-2">
-                           <select 
-                             onChange={addLora}
-                             value="none"
-                             className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
-                           >
-                             <option value="none">Add LoRA to Chain...</option>
-                             {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
-                               <option key={opt.id} value={opt.id}>{opt.name}</option>
-                             ))}
-                           </select>
-                           <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
-                             <Plus className="w-4 h-4" />
-                           </div>
-                         </div>
-                         <div className="flex gap-2 mt-1">
-                           <input 
-                             type="text" 
-                             placeholder="Paste .safetensors URL here..." 
-                             value={customLoraUrl}
-                             onChange={(e) => setCustomLoraUrl(e.target.value)}
-                             className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner"
-                           />
-                           <button 
-                             onClick={addCustomLora}
-                             disabled={!customLoraUrl.trim()}
-                             className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                           >
-                             <Plus className="w-4 h-4" />
-                           </button>
-                         </div>
-                       </div>
-                     </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <select 
+                            onChange={addLora}
+                            value="none"
+                            className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner cursor-pointer"
+                          >
+                            <option value="none">Add LoRA to Chain...</option>
+                            {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
+                              <option key={opt.id} value={opt.id}>{opt.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        {/* Custom URL Paste Field */}
+                        <div className="flex gap-2 mt-1">
+                          <input 
+                            type="text" 
+                            placeholder="Paste .safetensors URL here..." 
+                            value={customLoraUrl}
+                            onChange={(e) => setCustomLoraUrl(e.target.value)}
+                            className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner"
+                          />
+                          <button 
+                            onClick={addCustomLora}
+                            disabled={!customLoraUrl.trim()}
+                            className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
                   <div className="relative">
