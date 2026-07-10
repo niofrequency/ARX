@@ -336,6 +336,7 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const lastTapTime = useRef<number>(0);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -1880,73 +1881,73 @@ export default function App() {
                     </div>
                   </div>
                   
-                  {/* --- PROMPT CONFIGURATION UI --- */}
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      
-                      {/* Body Type */}
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-                          Body Type
-                        </label>
-                        <select
-                          value={promptBodyType}
-                          onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-                        >
-                          {BODY_TYPES.map(bt => (
-                            <option key={bt} value={bt}>{bt}</option>
-                          ))}
-                        </select>
-                      </div>
+{/* --- PROMPT CONFIGURATION UI --- */}
+<div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    
+    {/* Body Type */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Body Type
+      </label>
+      <select
+        value={promptBodyType}
+        onChange={(e) => setPromptBodyType(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {BODY_TYPES.map(bt => (
+          <option key={bt} value={bt}>{bt}</option>
+        ))}
+      </select>
+    </div>
 
-                      {/* Angle */}
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-                          Camera Angle
-                        </label>
-                        <select
-                          value={promptAngle}
-                          onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-                        >
-                          {CAMERA_ANGLES.map(a => (
-                            <option key={a} value={a}>{a}</option>
-                          ))}
-                        </select>
-                      </div>
+    {/* Angle */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Camera Angle
+      </label>
+      <select
+        value={promptAngle}
+        onChange={(e) => setPromptAngle(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {CAMERA_ANGLES.map(a => (
+          <option key={a} value={a}>{a}</option>
+        ))}
+      </select>
+    </div>
 
-                      {/* Shot Type */}
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-                          Shot Type
-                        </label>
-                        <select
-                          value={promptShotType}
-                          onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-                        >
-                          {SHOT_TYPES.map(st => (
-                            <option key={st} value={st}>{st}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+    {/* Shot Type */}
+    <div>
+      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+        Shot Type
+      </label>
+      <select
+        value={promptShotType}
+        onChange={(e) => setPromptShotType(e.target.value)}
+        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
+      >
+        {SHOT_TYPES.map(st => (
+          <option key={st} value={st}>{st}</option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
 
-                  {/* Prompt Textarea */}
-                  <div className="relative">
-                    <textarea
-                      value={memoizedPrompt}
-                      onChange={handlePromptChange}
-                      placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
-                      className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
-                    />
-                    
-                    <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      Positive Prompt
-                    </div>
-                  </div>
+{/* Prompt Textarea */}
+<div className="relative">
+  <textarea
+    value={memoizedPrompt}
+    onChange={handlePromptChange}
+    placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
+    className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
+  />
+  
+  <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
+    Positive Prompt
+  </div>
+</div>
 
                   {/* --- IP ADAPTER SECTION --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
@@ -2680,7 +2681,16 @@ export default function App() {
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
-                          onDoubleClick={() => { if (isCenter) setIsFlipped(!isFlipped) }}
+                          onClick={(e) => { 
+                            if (!isCenter) return;
+                            const now = Date.now();
+                            if (now - lastTapTime.current < 350) {
+                              setIsFlipped(!isFlipped);
+                              lastTapTime.current = 0;
+                            } else {
+                              lastTapTime.current = now;
+                            }
+                          }}
                         >
                           
                           {/* --- FRONT OF CARD --- */}
@@ -2730,11 +2740,8 @@ export default function App() {
                                 >
                                   <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
                                     <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
-                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
+                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100">
                                       Double tap to flip
-                                    </span>
-                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 hidden sm:inline">
-                                      Space to flip
                                     </span>
                                   </div>
                                   
