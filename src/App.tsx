@@ -293,6 +293,7 @@ export default function App() {
 
   const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
+  const [customLoraUrl, setCustomLoraUrl] = useState<string>('');
   const [sampler, setSampler] = useState<string>('euler');
   const [scheduler, setScheduler] = useState<string>('simple');
   const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
@@ -733,6 +734,18 @@ export default function App() {
       setActiveLoras([...activeLoras, { id: opt.id, name: opt.name, strength: 0.8 }]);
     }
     e.target.value = 'none';
+  };
+
+  const addCustomLora = () => {
+    if (!customLoraUrl.trim()) return;
+    const url = customLoraUrl.trim();
+    let name = url.split('/').pop() || 'Custom LoRA';
+    if (name.length > 20) name = name.substring(0, 20) + '...';
+    
+    if (!activeLoras.find(l => l.id === url)) {
+      setActiveLoras([...activeLoras, { id: url, name: name, strength: 0.8 }]);
+    }
+    setCustomLoraUrl('');
   };
 
   const updateLoraStrength = (id: string, strength: number) => {
@@ -2273,19 +2286,37 @@ export default function App() {
                          )}
                        </div>
 
-                       <div className="flex gap-2">
-                         <select 
-                           onChange={addLora}
-                           value="none"
-                           className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
-                         >
-                           <option value="none">Add LoRA to Chain...</option>
-                           {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
-                             <option key={opt.id} value={opt.id}>{opt.name}</option>
-                           ))}
-                         </select>
-                         <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
-                           <Plus className="w-4 h-4" />
+                       <div className="flex flex-col gap-2">
+                         <div className="flex gap-2">
+                           <select 
+                             onChange={addLora}
+                             value="none"
+                             className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
+                           >
+                             <option value="none">Add LoRA to Chain...</option>
+                             {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
+                               <option key={opt.id} value={opt.id}>{opt.name}</option>
+                             ))}
+                           </select>
+                           <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
+                             <Plus className="w-4 h-4" />
+                           </div>
+                         </div>
+                         <div className="flex gap-2 mt-1">
+                           <input 
+                             type="text" 
+                             placeholder="Paste .safetensors URL here..." 
+                             value={customLoraUrl}
+                             onChange={(e) => setCustomLoraUrl(e.target.value)}
+                             className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner"
+                           />
+                           <button 
+                             onClick={addCustomLora}
+                             disabled={!customLoraUrl.trim()}
+                             className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                           >
+                             <Plus className="w-4 h-4" />
+                           </button>
                          </div>
                        </div>
                      </div>
