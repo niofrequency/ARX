@@ -111,7 +111,7 @@ const TechApexIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload, accept = "image/*" }: any) => {
+const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   return (
@@ -124,14 +124,10 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
         isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
       }`}
     >
-      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept={accept} />
+      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept="image/*" />
       {preview ? (
-        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group bg-zinc-950">
-          {file?.type.startsWith('video/') ? (
-            <video src={preview} className="max-h-[120px] w-full object-cover rounded-xl" autoPlay loop muted playsInline />
-          ) : (
-            <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
-          )}
+        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
+          <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
           <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
             <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
             <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
@@ -148,6 +144,42 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
     </div>
   );
 };
+
+// --- Types ---
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
+type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora';
+type Resolution = '2k' | '4k' | '8k';
+
+interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
+interface SavedPrompt { id: string; name: string; prompt: string; }
+interface QueueTask { id: string; mode: AppMode; prompt: string; progress: number; message: string; pollUrl: string; targetResultUrl: string; modelInfo: string; }
+interface ActiveLora { id: string; name: string; strength: number; }
+
+const RUNPOD_MODELS = [
+  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
+  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
+];
+
+const LORA_OPTIONS = [
+  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hairypussy.safetensors", name: "HRYPSY" },
+  { id: "hmfemme_qwen.safetensors", name: "HMFEM" }, { id: "hairypussy2.safetensors", name: "HRYPSY2" },
+  { id: "qwen4play.safetensors", name: "QWEN4PLAY" }, { id: "FemNde.safetensors", name: "FEMNUDE" },
+  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" }, { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
+  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" }, { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
+  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" }, { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
+  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" }, { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
+  { id: "IR_BJ.safetensors", name: "IR_BJ" }, { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
+  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" }, { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
+  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
+];
+
+const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
+const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
+const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
+
+const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
+const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
+const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -183,52 +215,6 @@ const cleanAndPadBase64 = (base64Str: string) => {
   }
   return cleanStr;
 };
-
-const getVideoDuration = (file: File): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.onloadedmetadata = () => resolve(video.duration);
-    video.onerror = () => reject(new Error('Invalid video'));
-    video.src = URL.createObjectURL(file);
-  });
-};
-
-// --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
-type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0';
-type Resolution = '2k' | '4k' | '8k';
-
-interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
-interface SavedPrompt { id: string; name: string; prompt: string; }
-interface QueueTask { id: string; mode: AppMode; prompt: string; progress: number; message: string; pollUrl: string; targetResultUrl: string; modelInfo: string; }
-interface ActiveLora { id: string; name: string; strength: number; }
-
-const RUNPOD_MODELS = [
-  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
-  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
-];
-
-const LORA_OPTIONS = [
-  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hmfemme_qwen.safetensors", name: "HMFEM" },  { id: "shavedpussyv1.safetensors", name: "PSY1" }, 
-  { id: "hairypussyv5.safetensors", name: "HRYPSY5" },{ id: "hairypussyv6.safetensors", name: "HRYPSY6" },{ id: "hairypussyv7.safetensors", name: "HRYPSY7" },{ id: "hairypussyv8.safetensors", name: "HRYPSY8" },{ id: "hairypussyv9.safetensors", name: "HRYPSY9" },
-  { id: "qwen4play.safetensors", name: "QWEN4PLAY" }, { id: "FemNde.safetensors", name: "FEMNUDE" },
-  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" }, { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
-  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" }, { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
-  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" }, { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
-  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" }, { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
-  { id: "IR_BJ.safetensors", name: "IR_BJ" }, { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
-  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" }, { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
-  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
-];
-
-const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
-const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
-const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
-
-const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
-const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
-const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 const AUTO_LORA_MAP: Record<string, any> = {
   "creampie": { 
@@ -287,6 +273,8 @@ export default function App() {
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
+  const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
+  const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
   const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
@@ -312,18 +300,16 @@ export default function App() {
   const [cfg, setCfg] = useState<number>(1.5);
   const [denoise, setDenoise] = useState<number>(1.0); 
 
- // Optimized for wlsdml1114 WanAnimate Hub
-  const [videoWidth, setVideoWidth] = useState<number>(480);   // Portrait
-  const [videoHeight, setVideoHeight] = useState<number>(832); // Portrait
-  const [videoFps, setVideoFps] = useState<number>(16);        // Native Wan Speed
-  const [videoSteps, setVideoSteps] = useState<number>(20);       // High Quality
-  const [videoCfg, setVideoCfg] = useState<number>(2.0);       // Balanced Guidance
+  const [videoWidth, setVideoWidth] = useState<number>(480);
+  const [videoHeight, setVideoHeight] = useState<number>(832);
+  const [videoLength, setVideoLength] = useState<number>(81);
+  const [videoSteps, setVideoSteps] = useState<number>(10);
+  const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
-  
-  const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
-  const [videoRefPreview, setVideoRefPreview] = useState<string | null>(null);
-  const [videoRefUrl, setVideoRefUrl] = useState<string | null>(null);
-  const [videoRefUploadProgress, setVideoRefUploadProgress] = useState<number | null>(null);
+
+  const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
+  const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
+  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -349,10 +335,7 @@ export default function App() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
-  
-  // New touch and swipe tracking refs
   const touchStartX = useRef<number | null>(null);
-  const isSwiping = useRef<boolean>(false);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -361,6 +344,8 @@ export default function App() {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
     const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
     const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
+    const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
+    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
@@ -378,6 +363,8 @@ export default function App() {
     setWavespeedKey(savedWsKey);
     setRunpodKey(savedRpKey);
     setRunpodEndpointId(savedRpEndpoint);
+    setIpAdapterEndpointId(savedIpEndpoint);
+    setVideoEndpointId(savedVidEndpoint);
     setGrokKey(savedGrok);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -546,7 +533,7 @@ export default function App() {
   }, [selectedHistoryItem]);
 
   const handleRandomizePrompt = async () => {
-    if (!grokKey && !import.meta.env.VITE_GROK_API_KEY) {
+    if (!grokKey && !process.env.GROK_API_KEY) {
       setError('Please enter your Grok API Key in the settings first.');
       setShowSettings(true);
       return;
@@ -585,56 +572,6 @@ export default function App() {
     setResultUrl(null);
     setResultId(null);
     setError(null);
-  };
-
-  const handleRefVideoProcess = async (file: File) => {
-    if (!file.type.startsWith('video/')) {
-      setError('Please upload a valid video file (.mp4, .mov, etc.)');
-      return;
-    }
-
-    try {
-      const duration = await getVideoDuration(file);
-      if (duration > 6.5) {
-        setError("Reference video is too long (>6.5 seconds). Please trim it for stability.");
-        return;
-      }
-    } catch (e) {
-      console.warn("Could not check video duration");
-    }
-    
-    // Create local preview
-    const previewUrl = URL.createObjectURL(file);
-    setVideoRefFile(file);
-    setVideoRefPreview(previewUrl);
-    setVideoRefUploadProgress(0);
-    
-    try {
-      setError(null);
-
-      // Simulated progress update while waiting for Firebase
-      const progressInterval = setInterval(() => {
-        setVideoRefUploadProgress(prev => {
-          if (prev === null) return 0;
-          if (prev >= 90) return 90;
-          return prev + 10;
-        });
-      }, 500);
-
-      // Upload to Firebase and get permanent URL
-      const firebaseUrl = await uploadToFirebase(file, `ref_videos/${Date.now()}_${file.name}`);
-      
-      clearInterval(progressInterval);
-      setVideoRefUploadProgress(100);
-      setTimeout(() => setVideoRefUploadProgress(null), 1000);
-
-      setVideoRefUrl(firebaseUrl);
-      console.log("✅ Reference video uploaded to Firebase:", firebaseUrl);
-    } catch (err) {
-      setVideoRefUploadProgress(null);
-      console.error(err);
-      setError("Failed to upload reference video to Firebase. Please try a smaller file.");
-    }
   };
 
   const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
@@ -676,14 +613,6 @@ export default function App() {
   };
 
   const fileToBase64 = async (file: File): Promise<string> => {
-    if (file.type.startsWith('video/')) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-      });
-    }
     if (file.size < 500 * 1024) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -718,6 +647,8 @@ export default function App() {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
     localStorage.setItem('arx_runpod_key', runpodKey);
     localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
+    localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
+    localStorage.setItem('arx_video_endpoint', videoEndpointId);
     localStorage.setItem('arx_grok_key', grokKey);
     setShowSettings(false);
     if (wavespeedKey) {
@@ -747,34 +678,19 @@ export default function App() {
     setIsFlipped(false);
   };
 
-   // --- TOUCH & SWIPE HANDLERS ---
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
-    isSwiping.current = false;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
-    
     if (Math.abs(diff) > 50) {
-      isSwiping.current = true;
       if (diff > 0) handleNextHistory();
       else handlePrevHistory();
     }
     touchStartX.current = null;
-  };
-
-  // Double Tap Handler (works on BOTH front and back)
-  const handleDoubleTap = () => {
-    const now = Date.now();
-    if (window.lastTap && now - window.lastTap < 280) {
-      setIsFlipped(prev => !prev);
-      window.lastTap = 0;
-    } else {
-      window.lastTap = now;
-    }
   };
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
@@ -862,94 +778,107 @@ export default function App() {
     return null;
   };
 
-  const triggerRunPodVideo = async (base64Image: string) => {
-    const safeImage = cleanAndPadBase64(base64Image);
+  const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
+    let safeBase64 = cleanAndPadBase64(base64Image);
 
+    // Aggressive compression for large images
+    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
+      const compressed = await optimizeImageForUpload(selectedFile, 768);
+      safeBase64 = cleanAndPadBase64(compressed);
+    }
+
+    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
-    // Safety checks
-    if (videoRefFile) {
-      try {
-        const duration = await getVideoDuration(videoRefFile);
-        if (duration > 6.5) {
-          setError("Reference video is too long (>6.5 seconds). Please trim it for stability.");
-          throw new Error("Video too long");
+    const lowerPrompt = activePrompt.toLowerCase();
+
+    const autoLoras: any[] = [];
+    const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
+
+    for (const keyword of sortedKeywords) {
+      const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (regex.test(lowerPrompt)) {
+        const config = AUTO_LORA_MAP[keyword];
+        if (!autoLoras.some(l => l.high === config.high)) {
+          autoLoras.push(config);
         }
-      } catch (e) {
-        console.warn("Could not check video duration");
       }
     }
 
-    const isVid2Vid = !!(videoRefUrl || videoRefFile);
-    const activeVideoEndpointId = isVid2Vid ? '4k4i9q6i33lda0' : '7h6lpbp8ebiw6q'; // Use your video endpoint
+    const finalAutoLoras = autoLoras.slice(0, 2);
+    
+    console.log("📤 Sending to RunPod Video:", {
+      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
+      loraCount: finalAutoLoras.length,
+      loras: finalAutoLoras.map(l => l.high)
+    });
 
-    const payload: any = {
+    const payload = {
       input: {
         prompt: activePrompt,
-        negative_prompt: negativePrompt || "blurry, low quality, distorted",
-        image_base64: safeImage,
+        negative_prompt: negativePrompt || "blurry, low quality, deformed, ugly, static, frozen, jitter, artifacts",
+        image_base64: safeBase64,
         seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
+        cfg: videoCfg,
         width: videoWidth,
         height: videoHeight,
-        fps: videoFps,
+        length: videoLength,
         steps: videoSteps,
-        cfg: videoCfg,
+        lora_pairs: finalAutoLoras
       }
     };
 
-    if (videoRefUrl) {
-      payload.input.video_url = videoRefUrl;
-    } else if (videoRefFile) {
-      const videoBase64 = await fileToBase64(videoRefFile);
-      payload.input.video_base64 = cleanAndPadBase64(videoBase64);
+    try {
+      const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${runpodKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("🚨 RunPod Error Response:", errorText);
+        
+        if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
+          console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
+          await new Promise(r => setTimeout(r, 5000));
+          return triggerRunPodVideo(base64Image, retryCount + 1);
+        }
+        throw new Error(`RunPod rejected request: ${errorText.substring(0, 200)}`);
+      }
+
+      const data = await response.json();
+      return {
+        id: data.id,
+        pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
+        historyPrompt: activePrompt,
+        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2'
+      };
+    } catch (err: any) {
+      console.error("Video trigger failed:", err);
+      throw err;
     }
-
-    console.log(`📤 Sending to WanAnimate (${activeVideoEndpointId})`, {
-      prompt: activePrompt.substring(0, 100),
-      video: isVid2Vid ? "Yes" : "No",
-      resolution: `${videoWidth}x${videoHeight}`,
-      fps: videoFps
-    });
-
-    const response = await fetch(`https://api.runpod.ai/v2/${activeVideoEndpointId}/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${runpodKey}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`RunPod Error: ${errorText.substring(0, 150)}`);
-    }
-
-    const data = await response.json();
-    return {
-      id: data.id,
-      pollUrl: `https://api.runpod.ai/v2/${activeVideoEndpointId}/status/${data.id}`,
-      historyPrompt: activePrompt,
-      modelInfo: isVid2Vid ? 'WanAnimate (Video Ref)' : 'WanAnimate (Image Only)'
-    };
   };
 
   const triggerRunPod = async (base64Image: string) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
-    const activeEndpointId = runpodEndpointId;
+    let faceBase64Data = null;
+    if (faceRefFile) {
+        const rawFaceBase64 = await fileToBase64(faceRefFile);
+        faceBase64Data = cleanAndPadBase64(rawFaceBase64);
+    }
+    
+    const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
 
     const workflowObj: any = {
-      // Stage 1: Load Qwen Edit Base Model
       "5": { 
         "inputs": { "ckpt_name": runpodModel },
-        "class_type": "CheckpointLoaderSimple"
-      },
-      // Stage 2: Load BigLust Refiner Model
-      "100": {
-        "inputs": { "ckpt_name": "biglust.safetensors" },
         "class_type": "CheckpointLoaderSimple"
       }
     };
@@ -958,7 +887,7 @@ export default function App() {
     let lastModelOutputIndex = 0;
     let lastClipNodeId = "5";
     let lastClipOutputIndex = 1;
-    let currentId = 1000;
+    let currentId = 100;
 
     activeLoras.forEach(lora => {
       const nodeId = currentId.toString();
@@ -979,14 +908,45 @@ export default function App() {
       currentId++;
     });
 
-    // --- Stage 1 (Qwen) Image and Text Encoders ---
+    if (faceBase64Data) {
+        workflowObj["200"] = {
+            "inputs": { "image": "face_ref.png" },
+            "class_type": "LoadImage"
+        };
+        workflowObj["201"] = {
+            "inputs": { "ipadapter_file": "ip-adapter-plus-face_sdxl_vit-h.safetensors" },
+            "class_type": "IPAdapterModelLoader"
+        };
+        workflowObj["202"] = {
+            "inputs": { "clip_name": "clip_vision_h.safetensors" },
+            "class_type": "CLIPVisionLoader"
+        };
+        workflowObj["203"] = {
+            "inputs": {
+                "weight": ipAdapterStrength,
+                "weight_type": "linear",
+                "combine_embeds": "concat",
+                "start_at": 0.0,
+                "end_at": 1.0,
+                "embeds_scaling": "V only",
+                "model": [lastModelNodeId, lastModelOutputIndex],
+                "ipadapter": ["201", 0],
+                "clip_vision": ["202", 0],
+                "image": ["200", 0]
+            },
+            "class_type": "IPAdapterAdvanced"
+        };
+        lastModelNodeId = "203";
+        lastModelOutputIndex = 0;
+    }
+
+    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
+    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
     workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
-    workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
     workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
+    workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
     workflowObj["110"] = { "inputs": { "prompt": negativePrompt, "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
     workflowObj["111"] = { "inputs": { "prompt": prompt || "change to red", "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
-    
-    // --- Stage 1 KSampler (Editor) ---
     workflowObj["3"] = {
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000), 
@@ -994,7 +954,7 @@ export default function App() {
         "cfg": cfg,
         "sampler_name": sampler,
         "scheduler": scheduler,
-        "denoise": 1.0, // Full denoise for initial edit
+        "denoise": denoise,
         "model": [lastModelNodeId, lastModelOutputIndex],
         "positive": ["111", 0],
         "negative": ["110", 0],
@@ -1003,44 +963,12 @@ export default function App() {
       "class_type": "KSampler"
     };
 
-    // Decode Stage 1 output back to pixels
-    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
-
-    // --- STAGE 2 (BigLust Refiner) ---
-    
-    // Encode pixels from Stage 1 into SDXL format using BigLust's VAE
-    workflowObj["200"] = { "inputs": { "pixels": ["8", 0], "vae": ["100", 2] }, "class_type": "VAEEncode" };
-    
-    // Standard CLIP encoders for BigLust (SDXL) - Explicitly forcing "biglust style"
-    workflowObj["202"] = { "inputs": { "text": "masterpiece, best quality, ultra detailed, highly realistic, biglust style, " + (prompt || ""), "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
-    workflowObj["203"] = { "inputs": { "text": negativePrompt || "blurry, worst quality", "clip": ["100", 1] }, "class_type": "CLIPTextEncode" };
-
-    // Refiner KSampler
-    workflowObj["201"] = {
-      "inputs": {
-        "seed": Math.floor(Math.random() * 1000000), 
-        "steps": Math.max(20, steps), // Refiners perform best with ample steps
-        "cfg": Math.min(cfg, 2.5), // Cap CFG so it doesn't over-process and ruin structure
-        "sampler_name": sampler, 
-        "scheduler": scheduler, 
-        "denoise": 0.15, // Choked denoise strictly locks structural geometry in place
-        "model": ["100", 0],
-        "positive": ["202", 0],
-        "negative": ["203", 0],
-        "latent_image": ["200", 0]
-      },
-      "class_type": "KSampler"
-    };
-
-    // Final Stage 2 Decode
-    workflowObj["300"] = { "inputs": { "samples": ["201", 0], "vae": ["100", 2] }, "class_type": "VAEDecode" };
-    
-    // Output Save Node
-    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit_Refined", "images": ["300", 0] }, "class_type": "SaveImage" };
-
     const imagesPayload = [
         { name: "input_image.png", image: safeBase64 }
     ];
+    if (faceBase64Data) {
+        imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
+    }
 
     const payload = {
       input: {
@@ -1066,9 +994,13 @@ export default function App() {
     
     const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
     let usedModelInfo = activeLoras.length === 0 
-      ? `${modelName} + biglust` 
-      : `${modelName} + biglust + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+      ? `${modelName} Base` 
+      : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
       
+    if (faceBase64Data) {
+        usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
+    }
+
     return {
       id,
       pollUrl: `https://api.runpod.ai/v2/${activeEndpointId}/status/${id}`,
@@ -1204,10 +1136,16 @@ export default function App() {
   const triggerWavespeed = async (base64Image: string) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
     const payload: any = { 
-        images: [safeBase64], 
         prompt: prompt, 
         seed: -1
     };
+
+    if (editorModel === 'qwen-lora') {
+        payload.image = safeBase64;
+        payload.loras = activeLoras.map(l => ({ path: l.id, scale: l.strength }));
+    } else {
+        payload.images = [safeBase64];
+    }
     
     if (editorModel === 'wan-2.6') {
         payload.enable_prompt_expansion = false;
@@ -1221,6 +1159,9 @@ export default function App() {
     if (editorModel === 'qwen-2.0') {
         endpoint = 'https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image-2.0/edit';
         basePath = 'wavespeed-ai/qwen-image-2.0/edit';
+    } else if (editorModel === 'qwen-lora') {
+        endpoint = 'https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-lora';
+        basePath = 'wavespeed-ai/qwen-image/edit-lora';
     } else {
         endpoint = `https://api.wavespeed.ai/api/v3/alibaba/${editorModel}/image-edit`;
         basePath = `alibaba/${editorModel}/image-edit`;
@@ -1251,7 +1192,13 @@ export default function App() {
       }
     }
     
-    const usedModelInfo = editorModel === 'wan-2.6' ? 'Wan 2.6' : editorModel === 'wan-2.7' ? 'Wan 2.7' : 'Qwen 2.0';
+    let usedModelInfo = 'AI Editor';
+    if (editorModel === 'wan-2.6') usedModelInfo = 'Wan 2.6';
+    else if (editorModel === 'wan-2.7') usedModelInfo = 'Wan 2.7';
+    else if (editorModel === 'qwen-2.0') usedModelInfo = 'Qwen 2.0';
+    else if (editorModel === 'qwen-lora') {
+       usedModelInfo = activeLoras.length === 0 ? 'Qwen Edit (LoRA)' : `Qwen Edit + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+    }
 
     return {
       id,
@@ -1263,13 +1210,23 @@ export default function App() {
   };
 
   const generateEdit = async () => {
-    if (mode === 'runpod') {
-      if (!runpodKey || !runpodEndpointId) {
+    if (mode === 'runpod' || mode === 'video') {
+      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
+        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
+        setError('Please enter your IP-Adapter Endpoint ID in settings.');
+        setShowSettings(true); 
+        return;
+      }
+      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
         setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
         setShowSettings(true); 
         return;
       }
-    } else if (mode !== 'video') {
+    } else {
       if (!wavespeedKey) {
         setError('Please enter your Wavespeed API Key in settings.');
         setShowSettings(true); 
@@ -1284,12 +1241,6 @@ export default function App() {
 
     if (!selectedFile) {
       setError('Please upload a primary image to process.');
-      return;
-    }
-    
-    // Check if Firebase upload is still pending before allowing queue
-    if (mode === 'video' && videoRefFile && !videoRefUrl) {
-      setError('Please wait for the reference video to finish uploading to Firebase.');
       return;
     }
 
@@ -1544,6 +1495,7 @@ export default function App() {
   const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
   const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
 
+  // Add these two lines before the return statement
   const memoizedPrompt = useMemo(() => prompt, [prompt]);
   const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPrompt(e.target.value);
@@ -1666,7 +1618,6 @@ export default function App() {
                 label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
-                accept="image/*"
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
                 onProcess={(f: File) => handleFileProcess(f)} 
               />
@@ -1785,7 +1736,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      Wan 2.1 Video Generator
+                      Wan 2.2 Video Generator
                     </label>
                     <div className="flex items-center gap-3">
                       <button
@@ -1870,102 +1821,6 @@ export default function App() {
                     <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
                       Negative
                     </div>
-                  </div>
-
-                  {/* --- NEW ASPECT RATIO SELECTOR --- */}
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                    <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-3">
-                      Frame Orientation
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        onClick={() => { setVideoWidth(512); setVideoHeight(768); }}
-                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 512 && videoHeight === 768
-                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
-                        }`}
-                      >
-                        Portrait
-                      </button>
-                      <button
-                        onClick={() => { setVideoWidth(768); setVideoHeight(512); }}
-                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 768 && videoHeight === 512
-                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
-                        }`}
-                      >
-                        Landscape
-                      </button>
-                      <button
-                        onClick={() => { setVideoWidth(512); setVideoHeight(512); }}
-                        className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                          videoWidth === 512 && videoHeight === 512
-                            ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-200'
-                        }`}
-                      >
-                        Square
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* --- WANANIMATE REFERENCE VIDEO SECTION --- */}
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Reference Video (Motion Transfer)</label>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-2">
-                           <div className="h-32">
-                               <UploadZone
-                                  label="Upload Ref Video"
-                                  file={videoRefFile}
-                                  preview={videoRefPreview}
-                                  icon={Film}
-                                  accept="video/*"
-                                  onClear={() => { 
-                                    if (videoRefPreview?.startsWith('blob:')) URL.revokeObjectURL(videoRefPreview);
-                                    setVideoRefFile(null); 
-                                    setVideoRefPreview(null);
-                                    setVideoRefUrl(null);
-                                    setVideoRefUploadProgress(null);
-                                  }}
-                                  onProcess={handleRefVideoProcess}
-                                />
-                           </div>
-                           
-                           {/* Upload Progress Bar */}
-                           {videoRefUploadProgress !== null && (
-                             <div className="w-full bg-zinc-900 border border-zinc-800 rounded-full h-2 mt-1 overflow-hidden">
-                               <div 
-                                 className="bg-indigo-500 h-full transition-all duration-300" 
-                                 style={{ width: `${videoRefUploadProgress}%` }} 
-                               />
-                             </div>
-                           )}
-
-                           {/* Duration Warning */}
-                           {videoRefFile && (
-                             <div className="mt-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[10px] text-amber-400 leading-relaxed">
-                               ⚠️ Best results with videos <strong>under 6.5 seconds</strong>. Longer clips may cause crashes.
-                             </div>
-                           )}
-                         </div>
-
-                         <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl h-32">
-                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
-                                 Output FPS <span>{videoFps}</span>
-                             </label>
-                             <input
-                                 type="range" min="8" max="24" step="1"
-                                 value={videoFps} onChange={(e) => setVideoFps(Number(e.target.value))}
-                                 className="w-full accent-zinc-100"
-                             />
-                             <p className="text-[9px] text-zinc-500 leading-relaxed italic">
-                               Match this to your frame orientation above to prevent stretching.
-                             </p>
-                         </div>
-                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
@@ -2093,6 +1948,51 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* --- IP ADAPTER SECTION --- */}
+                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
+                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         <div className="h-32">
+                             <UploadZone
+                                label="Upload Face Reference"
+                                file={faceRefFile}
+                                preview={faceRefPreview}
+                                icon={User}
+                                onClear={() => { 
+                                  if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                  setFaceRefFile(null); 
+                                  setFaceRefPreview(null); 
+                                }}
+                                onProcess={(f: File) => {
+                                    if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
+                                    const url = URL.createObjectURL(f);
+                                    setFaceRefFile(f);
+                                    setFaceRefPreview(url);
+                                }}
+                              />
+                         </div>
+                         {faceRefFile ? (
+                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
+                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
+                                 </label>
+                                 <input
+                                     type="range" min="0" max="1.5" step="0.05"
+                                     value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
+                                     className="w-full accent-zinc-100"
+                                 />
+                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                     Higher strength forces stricter facial mapping but may distort stylization.
+                                 </p>
+                             </div>
+                         ) : (
+                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
+                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
+                             </div>
+                         )}
+                     </div>
+                  </div>
+
                   <AnimatePresence>
                     {showAdvancedRunpod && (
                       <motion.div 
@@ -2202,7 +2102,7 @@ export default function App() {
                                 Steps <span>{steps}</span>
                               </label>
                               <input 
-                                type="range" min="4" max="40" step="1" 
+                                type="range" min="1" max="50" step="1" 
                                 value={steps} onChange={(e) => setSteps(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
@@ -2212,7 +2112,7 @@ export default function App() {
                                 CFG <span>{cfg.toFixed(1)}</span>
                               </label>
                               <input 
-                                type="range" min="1" max="8" step="0.1" 
+                                type="range" min="1" max="15" step="0.5" 
                                 value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
@@ -2222,7 +2122,7 @@ export default function App() {
                                 Denoise <span>{denoise.toFixed(2)}</span>
                               </label>
                               <input 
-                                type="range" min="0.6" max="1.1" step="0.01" 
+                                type="range" min="0" max="1" step="0.05" 
                                 value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
@@ -2302,7 +2202,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <button
                       onClick={() => setEditorModel('wan-2.6')}
                       className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
@@ -2333,8 +2233,63 @@ export default function App() {
                     >
                       Qwen 2.0
                     </button>
+                    <button
+                      onClick={() => setEditorModel('qwen-lora')}
+                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
+                        editorModel === 'qwen-lora' 
+                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
+                          : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
+                      }`}
+                    >
+                      Qwen LoRA
+                    </button>
                   </div>
                   
+                  {editorModel === 'qwen-lora' && (
+                     <div className="mt-4 mb-6 pt-4 border-t border-zinc-800/50">
+                       <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+                         <span>Active Style Injections (LoRAs)</span>
+                       </label>
+                       
+                       <div className="space-y-2 mb-3">
+                         {activeLoras.map(lora => (
+                           <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
+                             <span className="text-[9px] font-mono text-zinc-300 w-24 truncate">{lora.name}</span>
+                             <input 
+                               type="range" min="0" max="2" step="0.1" 
+                               value={lora.strength} 
+                               onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
+                               className="flex-1 accent-zinc-500 h-1" 
+                             />
+                             <span className="text-[9px] font-mono text-zinc-500 w-6 text-right">{lora.strength.toFixed(1)}</span>
+                             <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
+                               <X className="w-3 h-3" />
+                             </button>
+                           </div>
+                         ))}
+                         {activeLoras.length === 0 && (
+                           <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
+                         )}
+                       </div>
+
+                       <div className="flex gap-2">
+                         <select 
+                           onChange={addLora}
+                           value="none"
+                           className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
+                         >
+                           <option value="none">Add LoRA to Chain...</option>
+                           {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
+                             <option key={opt.id} value={opt.id}>{opt.name}</option>
+                           ))}
+                         </select>
+                         <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
+                           <Plus className="w-4 h-4" />
+                         </div>
+                       </div>
+                     </div>
+                  )}
+
                   <div className="relative">
                     <textarea 
                       value={memoizedPrompt} 
@@ -2351,7 +2306,7 @@ export default function App() {
                         <Wand2 className="w-3.5 h-3.5" />
                       </button>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                        {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : 'Wan-2.6 Editor'}
+                        {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : editorModel === 'qwen-lora' ? 'Qwen LoRA Editor' : 'Wan-2.6 Editor'}
                       </div>
                     </div>
                   </div>
@@ -2523,10 +2478,11 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = videoRefUrl || videoRefFile ? 'WanAnimate Video2Video' : 'WanAnimate Image2Video';
+                              dynamicModelInfo = 'Wan 2.2 Video';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+                            if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
                           }
                           
                           setSelectedHistoryItem(match || { 
@@ -2654,174 +2610,257 @@ export default function App() {
         </section>
       )}
 
-{/* === PREMIUM FLIP MODAL - DOUBLE TAP BOTH SIDES + AUTO HIDE HINT === */}
-<AnimatePresence>
-  {selectedHistoryItem && (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={() => { setSelectedHistoryItem(null); setIsFlipped(false); }}
-        className="fixed inset-0 bg-zinc-950/95 backdrop-blur-xl z-[80]"
-      />
-
-      <div
-        className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-8 overflow-hidden touch-none"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        {history.length > 1 && (
+      {/* History Card Modal (Fullscreen Carousel with Flips) */}
+      <AnimatePresence>
+        {selectedHistoryItem && (
           <>
-            <button
-              onClick={(e) => { e.stopPropagation(); handlePrevHistory(); }}
-              className="hidden sm:flex fixed left-4 sm:left-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
+            {/* Backdrop - Prevent any background interaction */}
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setSelectedHistoryItem(null)} 
+              className="fixed inset-0 bg-zinc-950/95 backdrop-blur-sm z-[80]"
+              style={{ touchAction: 'none' }}
+            />
+            
+            <div 
+              className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden touch-none"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              style={{ touchAction: 'pan-y' }}   // Allow vertical pan only for swipe, block others
             >
-              <ChevronLeft className="w-7 h-7" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleNextHistory(); }}
-              className="hidden sm:flex fixed right-4 sm:right-8 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-2xl bg-zinc-900/90 border border-zinc-700 items-center justify-center text-white hover:bg-zinc-800"
-            >
-              <ChevronRight className="w-7 h-7" />
-            </button>
-          </>
-        )}
-
-        <div className="relative w-full max-w-4xl" style={{ perspective: '1600px' }}>
-          <motion.div
-            className="relative mx-auto cursor-pointer"
-            style={{ 
-              transformStyle: 'preserve-3d',
-              width: 'fit-content',
-              maxWidth: '94vw',
-              maxHeight: '88vh'
-            }}
-            animate={{ rotateY: isFlipped ? 180 : 0 }}
-            transition={{ duration: 0.75, type: 'spring', stiffness: 280, damping: 26 }}
-          >
-            {/* FRONT */}
-            <div
-              className="relative backface-hidden rounded-3xl overflow-hidden shadow-2xl border border-zinc-800 bg-black"
-              style={{ backfaceVisibility: 'hidden' }}
-              onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
-            >
-              {isVideoUrl(selectedHistoryItem.url) ? (
-                <video
-                  src={selectedHistoryItem.url}
-                  autoPlay loop muted playsInline controls
-                  className="max-h-[82vh] w-auto max-w-full object-contain"
-                />
-              ) : (
-                <img
-                  src={selectedHistoryItem.url}
-                  alt={selectedHistoryItem.prompt}
-                  className="max-h-[82vh] w-auto max-w-full object-contain"
-                />
+              
+              {/* Navigation Controls */}
+              {history.length > 1 && (
+                <>
+                  <button 
+                    onClick={handlePrevHistory} 
+                    className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                  >
+                    <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                  <button 
+                    onClick={handleNextHistory} 
+                    className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 z-[3000] p-4 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-all hover:scale-110 shadow-2xl hidden sm:flex"
+                  >
+                    <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                </>
               )}
 
-              {/* Top Controls */}
-              <div className="absolute top-4 left-4 z-50">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setSelectedHistoryItem(null); setIsFlipped(false); }}
-                  className="p-3 bg-black/70 hover:bg-black rounded-2xl text-white transition-all"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="absolute top-4 right-4 z-50">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteHistory(selectedHistoryItem.id); }}
-                  className="p-3 bg-black/70 hover:bg-red-950 rounded-2xl text-red-400 transition-all"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
+              {/* 3D Carousel Mapper - Mobile Optimized */}
+              <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
+                {history.map((img, idx) => {
+                  const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
+                  let offset = idx - currentIndex;
+                  const len = history.length;
+                  
+                  if (offset > len / 2) offset -= len;
+                  else if (offset < -len / 2) offset += len;
+                  
+                  const isCenter = offset === 0;
+                  const isVisible = Math.abs(offset) <= 2;   // ← Reduced visible range
 
-              {/* Subtle Auto-Hide Hint */}
-              <motion.div
-                initial={{ opacity: 0.75 }}
-                animate={{ opacity: 0 }}
-                transition={{ delay: 5, duration: 1.2 }}
-                className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/30 text-white/50 text-[10px] px-5 py-1.5 rounded-full pointer-events-none tracking-widest backdrop-blur-md"
-              >
-                double tap to flip
-              </motion.div>
-            </div>
-
-            {/* BACK */}
-            <div
-              className="absolute inset-0 backface-hidden rounded-3xl bg-zinc-950 border border-zinc-700 flex flex-col overflow-hidden shadow-2xl"
-              style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              onClick={(e) => { e.stopPropagation(); handleDoubleTap(); }}
-            >
-              <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
-                <div className="flex justify-center mb-8">
-                  <History className="w-12 h-12 text-zinc-700" />
-                </div>
-
-                {selectedHistoryItem.modelInfo && (
-                  <p className="text-center text-emerald-400 text-xs font-mono tracking-[2px] mb-6">
-                    {selectedHistoryItem.modelInfo}
-                  </p>
-                )}
-
-                <p className="text-zinc-100 text-[15px] sm:text-[17px] leading-relaxed text-center px-4">
-                  {selectedHistoryItem.prompt}
-                </p>
-              </div>
-
-              <div className="p-6 border-t border-zinc-800 bg-zinc-900 space-y-3">
-                <button
-                  onClick={(e) => handleDownload(selectedHistoryItem.url, selectedHistoryItem.prompt, e)}
-                  className="w-full py-4 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-3 active:scale-95"
-                >
-                  <Download className="w-5 h-5" /> DOWNLOAD
-                </button>
-
-                {!isVideoUrl(selectedHistoryItem.url) &&
-                 !selectedHistoryItem.prompt?.startsWith('Multi-Angle') &&
-                 !selectedHistoryItem.prompt?.startsWith('Upscaled') && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleAnimateFromHistory(selectedHistoryItem.url); }}
-                      className="py-4 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl text-sm"
-                    >
-                      Use in Video
-                    </button>
-                    <button
-                      onClick={() => {
-                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                        setPrompt(clean);
-                        setSelectedHistoryItem(null);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                  return (
+                    <div
+                      key={`carousel-${img.id}`}
+                      className={`absolute transition-all duration-700 ease-out flex items-center justify-center ${!isVisible ? 'hidden' : ''}`}
+                      style={{
+                        transform: `translateX(${offset * 72}vw) translateZ(${isCenter ? 0 : -600}px) rotateY(${isCenter ? 0 : offset * 38}deg)`,
+                        zIndex: 1000 - Math.abs(offset),
+                        opacity: isCenter ? 1 : (Math.abs(offset) === 1 ? 0.65 : 0.25),
+                        pointerEvents: isCenter ? 'auto' : 'none',
+                        transformStyle: 'preserve-3d'
                       }}
-                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
                     >
-                      Load Prompt
-                    </button>
-                    <button
-                      onClick={() => {
-                        const clean = selectedHistoryItem.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
-                        setPromptToSave(clean);
-                        setShowSavePrompt(true);
-                      }}
-                      className="py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm"
-                    >
-                      Save Prompt
-                    </button>
-                  </div>
-                )}
+                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                        <motion.div 
+                          className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
+                          style={{ transformStyle: 'preserve-3d' }} 
+                          animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
+                          transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
+                          onDoubleClick={() => { if (isCenter) setIsFlipped(!isFlipped) }}
+                        >
+                          
+                          {/* --- FRONT OF CARD --- */}
+                          <div 
+                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
+                            style={{ backfaceVisibility: 'hidden' }}
+                          >
+                            {isVideoUrl(img.url) ? (
+                                <video 
+                                  src={img.url} 
+                                  autoPlay loop muted playsInline controls={isCenter}
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
+                                />
+                            ) : (
+                                <img 
+                                  src={img.url} 
+                                  alt="History Entry" 
+                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                />
+                            )}
+                            
+                            {isCenter && (
+                              <>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setSelectedHistoryItem(null); 
+                                  }} 
+                                  className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800 z-10"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+
+                                <button 
+                                  onClick={(e) => handleDeleteHistory(img.id, e)} 
+                                  className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20 z-10"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                <motion.div 
+                                  key={img.id}
+                                  initial={{ opacity: 1 }}
+                                  animate={{ opacity: 0 }}
+                                  transition={{ delay: 2.5, duration: 0.8 }}
+                                  className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
+                                >
+                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
+                                    <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
+                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 sm:hidden">
+                                      Double tap to flip
+                                    </span>
+                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100 hidden sm:inline">
+                                      Space to flip
+                                    </span>
+                                  </div>
+                                  
+                                  {img.modelInfo && (
+                                    <div className="bg-zinc-950/80 border border-zinc-800 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
+                                      <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
+                                        Model: {img.modelInfo}
+                                      </span>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* --- BACK OF CARD --- */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
+                            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                          >
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedHistoryItem(null); 
+                              }} 
+                              className="absolute top-4 right-4 p-2.5 text-zinc-500 hover:text-zinc-100 transition-colors bg-zinc-900 rounded-full"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            
+                            <button 
+                              onClick={(e) => handleDeleteHistory(img.id, e)} 
+                              className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-full transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            
+                            <History className="w-8 h-8 text-zinc-700 mb-6 shrink-0" />
+                            
+                            <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-2 shrink-0">
+                              Modification Log
+                            </h3>
+
+                            {img.modelInfo && (
+                                <p className="text-zinc-400 font-mono text-[9px] uppercase tracking-widest mb-6">
+                                  {img.modelInfo}
+                                </p>
+                            )}
+                            
+                            <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
+                              <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
+                                {img.prompt}
+                              </p>
+                            </div>
+                            
+                            <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
+                              
+                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
+                              <button
+                                onClick={(e) => handleDownload(img.url, img.prompt, e)}
+                                className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
+                              >
+                                <Download className="w-5 h-5 transition-transform group-active:scale-110" />
+                                Download
+                              </button>
+                              
+                              {/* Actions for Images Only */}
+                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                                <>
+                                  {/* USE IMAGE IN VIDEO BUTTON */}
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      handleAnimateFromHistory(img.url);
+                                    }} 
+                                    className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Film className="w-4 h-4" />
+                                    Use Image in Video
+                                  </button>
+
+                                  <button 
+                                    onClick={() => { 
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPrompt(cleanPrompt); 
+                                      setSelectedHistoryItem(null); 
+                                      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                    Use This Prompt
+                                  </button>
+
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
+                                      setPromptToSave(cleanPrompt);
+                                      setShowSavePrompt(true);
+                                    }} 
+                                    className="w-full py-4 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                    Save Prompt
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            
+                            <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
+                              <span className="sm:hidden">Double tap to view media</span>
+                              <span className="hidden sm:inline">Space to view media</span>
+                            </p>
+                          </div>
+                        </motion.div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </motion.div>
-        </div>
-      </div>
-    </>
-  )}
-</AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
 
-      
       {/* Settings Modal */}
       <AnimatePresence>
         {showSettings && (
@@ -2884,6 +2923,30 @@ export default function App() {
                       value={runpodEndpointId} 
                       onChange={(e) => setRunpodEndpointId(e.target.value)} 
                       placeholder="e.g. abc123def456"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod IP-Adapter Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={ipAdapterEndpointId} 
+                      onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
+                      placeholder="e.g. 9yusxkbksgwtyk"
+                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
+                      RunPod Video Endpoint ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={videoEndpointId} 
+                      onChange={(e) => setVideoEndpointId(e.target.value)} 
+                      placeholder="e.g. 7h6lpbp8ebiw6q"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
