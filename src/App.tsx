@@ -179,7 +179,7 @@ const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 
 
 const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
 const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
-const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
+const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, h: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -316,6 +316,9 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile2, setSelectedFile2] = useState<File | null>(null);
   const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
+  const [selectedFile3, setSelectedFile3] = useState<File | null>(null);
+  const [previewUrl3, setPreviewUrl3] = useState<string | null>(null);
+  const [qwenRatio, setQwenRatio] = useState<string>('1024*1024');
   
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -590,6 +593,19 @@ export default function App() {
     const url = URL.createObjectURL(file);
     setSelectedFile2(file); 
     setPreviewUrl2(url); 
+  };
+
+  const handleFile3Process = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please provide a valid image file.');
+      return;
+    }
+    if (previewUrl3 && previewUrl3.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl3);
+    }
+    const url = URL.createObjectURL(file);
+    setSelectedFile3(file); 
+    setPreviewUrl3(url); 
   };
 
   const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
@@ -1089,7 +1105,7 @@ export default function App() {
         pollUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}/status`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}`;
       } else {
-        pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
+        pollUrl = `https://api.wavespeed.ai/v3/predictions/${id}`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
       }
     }
@@ -1163,7 +1179,7 @@ export default function App() {
     };
   };
 
-  const triggerWavespeed = async (base64Image: string, base64Image2?: string | null) => {
+  const triggerWavespeed = async (base64Image: string, base64Image2?: string | null, base64Image3?: string | null) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
     const payload: any = { 
         prompt: prompt, 
@@ -1177,6 +1193,12 @@ export default function App() {
         payload.images = [safeBase64];
         if (base64Image2) {
             payload.images.push(cleanAndPadBase64(base64Image2));
+        }
+        if (base64Image3) {
+            payload.images.push(cleanAndPadBase64(base64Image3));
+        }
+        if (editorModel === 'qwen-2.0') {
+            payload.size = qwenRatio;
         }
     }
     
@@ -1300,10 +1322,12 @@ export default function App() {
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
         let base64ImageRaw2 = null;
-        if (selectedFile2 && mode === 'editor' && editorModel === 'qwen-2.0') {
-            base64ImageRaw2 = await fileToBase64(selectedFile2);
+        let base64ImageRaw3 = null;
+        if (mode === 'editor' && editorModel === 'qwen-2.0') {
+            if (selectedFile2) base64ImageRaw2 = await fileToBase64(selectedFile2);
+            if (selectedFile3) base64ImageRaw3 = await fileToBase64(selectedFile3);
         }
-        triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2);
+        triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2, base64ImageRaw3);
       } 
 
       const newTask: QueueTask = {
@@ -1650,22 +1674,31 @@ export default function App() {
               </h2>
             </div>
             
-            <div className={`grid gap-4 ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'h-[400px] sm:h-[200px]' : 'h-[200px]'}`}>
+            <div className={`grid gap-4 ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'} ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'h-[600px] sm:h-[200px]' : 'h-[200px]'}`}>
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Image 1 (Base)' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
                 onProcess={(f: File) => handleFileProcess(f)} 
               />
               {mode === 'editor' && editorModel === 'qwen-2.0' && (
-                <UploadZone
-                  label="Upload Secondary Reference (Optional)"
-                  file={selectedFile2}
-                  preview={previewUrl2}
-                  onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }}
-                  onProcess={(f: File) => handleFile2Process(f)}
-                />
+                <>
+                  <UploadZone
+                    label="Image 2 (Ref)"
+                    file={selectedFile2}
+                    preview={previewUrl2}
+                    onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }}
+                    onProcess={(f: File) => handleFile2Process(f)}
+                  />
+                  <UploadZone
+                    label="Image 3 (Ref)"
+                    file={selectedFile3}
+                    preview={previewUrl3}
+                    onClear={() => { setSelectedFile3(null); setPreviewUrl3(null); }}
+                    onProcess={(f: File) => handleFile3Process(f)}
+                  />
+                </>
               )}
             </div>
           </section>
@@ -2149,7 +2182,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="1" max="50" step="1" 
-                                value={steps} onChange={(e) => setSteps(Number(e.target.value))}
+                                value={steps} onChange={{e} => setSteps(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2159,7 +2192,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="1" max="15" step="0.5" 
-                                value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
+                                value={cfg} onChange={{e} => setCfg(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2169,7 +2202,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="0" max="1" step="0.05" 
-                                value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
+                                value={denoise} onChange={{e} => setDenoise(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2360,6 +2393,26 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Aspect Ratio Config Panel for Qwen 2.0 */}
+                  {editorModel === 'qwen-2.0' && (
+                    <div className="mb-4 pt-2 border-t border-zinc-800/30">
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
+                        Target Aspect Ratio (Output Dimensions)
+                      </label>
+                      <select
+                        value={qwenRatio}
+                        onChange={(e) => setQwenRatio(e.target.value)}
+                        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer font-mono"
+                      >
+                        <option value="1024*1024">1:1 (Square — 1024×1024)</option>
+                        <option value="720*1280">9:16 (Portrait — 720×1280)</option>
+                        <option value="1280*720">16:9 (Landscape — 1280×720)</option>
+                        <option value="768*1024">3:4 (Vertical — 768×1024)</option>
+                        <option value="1024*768">4:3 (Horizontal — 1024×768)</option>
+                      </select>
                     </div>
                   )}
 
