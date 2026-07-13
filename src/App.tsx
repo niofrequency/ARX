@@ -173,13 +173,21 @@ const LORA_OPTIONS = [
   { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
 ];
 
+const RATIO_OPTIONS = [
+  { label: '1:1', value: '1024*1024' },
+  { label: '9:16', value: '720*1280' },
+  { label: '16:9', value: '1280*720' },
+  { label: '4:3', value: '1024*768' },
+  { label: '3:4', value: '768*1024' }
+];
+
 const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
 const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
 const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
 
 const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
 const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
-const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, h: 'Far' }];
+const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -290,6 +298,7 @@ export default function App() {
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
   const [verticalAngle, setVerticalAngle] = useState<number>(0);
   const [distance, setDistance] = useState<number>(1);
+  const [selectedRatio, setSelectedRatio] = useState<string>('1024*1024');
 
   const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
@@ -318,7 +327,6 @@ export default function App() {
   const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
   const [selectedFile3, setSelectedFile3] = useState<File | null>(null);
   const [previewUrl3, setPreviewUrl3] = useState<string | null>(null);
-  const [qwenRatio, setQwenRatio] = useState<string>('1024*1024');
   
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1105,7 +1113,7 @@ export default function App() {
         pollUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}/status`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-multiple-angles/requests/${id}`;
       } else {
-        pollUrl = `https://api.wavespeed.ai/v3/predictions/${id}`;
+        pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
         targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
       }
     }
@@ -1198,7 +1206,7 @@ export default function App() {
             payload.images.push(cleanAndPadBase64(base64Image3));
         }
         if (editorModel === 'qwen-2.0') {
-            payload.size = qwenRatio;
+            payload.size = selectedRatio;
         }
     }
     
@@ -1572,7 +1580,6 @@ export default function App() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
-          
           {displayBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
@@ -1584,7 +1591,6 @@ export default function App() {
               </span>
             </div>
           )}
-
           {queue.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-full">
               <Layers className="w-3.5 h-3.5 text-zinc-100 animate-pulse" />
@@ -1609,60 +1615,20 @@ export default function App() {
           
           {/* Master Mode Switcher */}
           <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-            <button
-              onClick={() => setMode('editor')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'editor' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              Editor
+            <button onClick={() => setMode('editor')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'editor' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Editor
             </button>
-            <button
-              onClick={() => setMode('runpod')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'runpod' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              RunPod
+            <button onClick={() => setMode('runpod')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> RunPod
             </button>
-            <button
-              onClick={() => setMode('video')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'video' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              Video
+            <button onClick={() => setMode('video')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'video' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Video
             </button>
-            <button
-              onClick={() => setMode('angles')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'angles' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              Angles
+            <button onClick={() => setMode('angles')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'angles' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+              <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Angles
             </button>
-            <button
-              onClick={() => setMode('upscaler')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'upscaler' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              Upscale
+            <button onClick={() => setMode('upscaler')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'upscaler' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+              <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Upscale
             </button>
           </div>
 
@@ -1670,13 +1636,13 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
               <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-400 font-mono">
-                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
+                01 // {mode === 'editor' ? 'Asset Framework' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
-            <div className={`grid gap-4 ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'} ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'h-[600px] sm:h-[200px]' : 'h-[200px]'}`}>
+            <div className={`grid gap-4 ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'grid-cols-1 sm:grid-cols-3 h-[420px] sm:h-[160px]' : 'grid-cols-1 h-[200px]'}`}>
               <UploadZone 
-                label={mode === 'editor' ? 'Image 1 (Base)' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label="Primary Image"
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
@@ -1685,14 +1651,14 @@ export default function App() {
               {mode === 'editor' && editorModel === 'qwen-2.0' && (
                 <>
                   <UploadZone
-                    label="Image 2 (Ref)"
+                    label="Reference 2"
                     file={selectedFile2}
                     preview={previewUrl2}
                     onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }}
                     onProcess={(f: File) => handleFile2Process(f)}
                   />
                   <UploadZone
-                    label="Image 3 (Ref)"
+                    label="Reference 3"
                     file={selectedFile3}
                     preview={previewUrl3}
                     onClear={() => { setSelectedFile3(null); setPreviewUrl3(null); }}
@@ -1712,25 +1678,12 @@ export default function App() {
             </div>
             
             <div className="space-y-6">
-              
               {mode === 'upscaler' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">
-                    Target Output Resolution
-                  </label>
+                  <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">Target Output Resolution</label>
                   <div className="grid grid-cols-3 gap-3">
                     {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
-                      <button
-                        key={res}
-                        onClick={() => setTargetResolution(res)}
-                        className={`py-4 rounded-xl text-xs font-medium uppercase tracking-widest transition-all ${
-                          targetResolution === res 
-                            ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' 
-                            : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100'
-                        }`}
-                      >
-                        {res}
-                      </button>
+                      <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-medium uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100'}`}>{res}</button>
                     ))}
                   </div>
                 </div>
@@ -1738,7 +1691,6 @@ export default function App() {
 
               {mode === 'angles' && (
                 <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 border border-zinc-800/50 rounded-2xl">
-                  {/* Horizontal Angle */}
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
                       <span>Horizontal Rotation (Azimuth)</span>
@@ -1746,23 +1698,11 @@ export default function App() {
                     </label>
                     <div className="grid grid-cols-4 gap-2">
                       {horizontalOptions.map((opt) => (
-                        <button
-                          key={`h-${opt.v}`}
-                          onClick={() => setHorizontalAngle(opt.v)}
-                          className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                            horizontalAngle === opt.v 
-                              ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                              : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
-                          }`}
-                        >
-                          {opt.l}
-                        </button>
+                        <button key={`h-${opt.v}`} onClick={() => setHorizontalAngle(opt.v)} className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${horizontalAngle === opt.v ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>{opt.l}</button>
                       ))}
                     </div>
                   </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t border-zinc-800/50">
-                    {/* Vertical Angle */}
                     <div>
                       <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
                         <span>Vertical Tilt</span>
@@ -1770,22 +1710,10 @@ export default function App() {
                       </label>
                       <div className="grid grid-cols-2 gap-2">
                         {verticalOptions.map((opt) => (
-                          <button
-                            key={`v-${opt.v}`}
-                            onClick={() => setVerticalAngle(opt.v)}
-                            className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                              verticalAngle === opt.v 
-                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                                : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
-                            }`}
-                          >
-                            {opt.l}
-                          </button>
+                          <button key={`v-${opt.v}`} onClick={() => setVerticalAngle(opt.v)} className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${verticalAngle === opt.v ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>{opt.l}</button>
                         ))}
                       </div>
                     </div>
-
-                    {/* Distance */}
                     <div>
                       <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
                         <span>Distance</span>
@@ -1793,17 +1721,7 @@ export default function App() {
                       </label>
                       <div className="grid grid-cols-3 gap-2">
                         {distanceOptions.map((opt) => (
-                          <button
-                            key={`d-${opt.v}`}
-                            onClick={() => setDistance(opt.v)}
-                            className={`py-2 px-1 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${
-                              distance === opt.v 
-                                ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' 
-                                : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
-                            }`}
-                          >
-                            {opt.l}
-                          </button>
+                          <button key={`d-${opt.v}`} onClick={() => setDistance(opt.v)} className={`py-2 px-1 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${distance === opt.v ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>{opt.l}</button>
                         ))}
                       </div>
                     </div>
@@ -1814,114 +1732,54 @@ export default function App() {
               {mode === 'video' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      Wan 2.2 Video Generator
-                    </label>
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">Wan 2.2 Video Generator</label>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleRandomizePrompt}
-                        disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
-                      >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
-                        Architect Prompt
+                      <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} /> Architect Prompt
                       </button>
-                      <button
-                        onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                      >
-                        <Bookmark className="w-3 h-3" />
-                        Presets
+                      <button onClick={() => setShowLoadPrompt(true)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
+                        <Bookmark className="w-3 h-3" /> Presets
                       </button>
                     </div>
                   </div>
-
-                  {/* --- PROMPT CONFIGURATION UI --- */}
                   <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <UserCircle className="w-3.5 h-3.5" /> Body Type
-                        </label>
-                        <select 
-                          value={promptBodyType} 
-                          onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><UserCircle className="w-3.5 h-3.5" /> Body Type</label>
+                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Angle
-                        </label>
-                        <select 
-                          value={promptAngle} 
-                          onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Angle</label>
+                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Shot Type
-                        </label>
-                        <select 
-                          value={promptShotType} 
-                          onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Shot Type</label>
+                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
                         </select>
                       </div>
                     </div>
                   </div>
-
                   <div className="relative">
-                    <textarea 
-                      value={memoizedPrompt} 
-                      onChange={handlePromptChange}
-                      placeholder="Describe the motion and scene details..." 
-                      className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
-                    />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      Positive Prompt
-                    </div>
+                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" />
+                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
-
                   <div className="relative">
-                    <textarea 
-                      value={negativePrompt} 
-                      onChange={(e) => setNegativePrompt(e.target.value)} 
-                      placeholder="Negative prompt..." 
-                      className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
-                    />
-                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
-                      Negative
-                    </div>
+                    <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="Negative prompt..." className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" />
+                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">Negative</div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
                     <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                        Steps <span>{videoSteps}</span>
-                      </label>
-                      <input 
-                        type="range" min="1" max="50" step="1" 
-                        value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))}
-                        className="w-full accent-zinc-100" 
-                      />
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Steps <span>{videoSteps}</span></label>
+                      <input type="range" min="1" max="50" step="1" value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))} className="w-full accent-zinc-100" />
                     </div>
                     <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                        CFG <span>{videoCfg.toFixed(1)}</span>
-                      </label>
-                      <input 
-                        type="range" min="1" max="10" step="0.5" 
-                        value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))}
-                        className="w-full accent-zinc-100" 
-                      />
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">CFG <span>{videoCfg.toFixed(1)}</span></label>
+                      <input type="range" min="1" max="10" step="0.5" value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))} className="w-full accent-zinc-100" />
                     </div>
                   </div>
                 </div>
@@ -1930,104 +1788,46 @@ export default function App() {
               {mode === 'runpod' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      RunPod Endpoint
-                    </label>
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">RunPod Endpoint</label>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleRandomizePrompt}
-                        disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
-                      >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
-                        Architect Prompt
+                      <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} /> Architect Prompt
                       </button>
-                      <button
-                        onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                      >
-                        <Settings2 className="w-3 h-3" />
-                        Advanced
+                      <button onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
+                        <Settings2 className="w-3 h-3" /> Advanced
                       </button>
-                      <button
-                        onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                      >
-                        <Bookmark className="w-3 h-3" />
-                        Presets
+                      <button onClick={() => setShowLoadPrompt(true)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
+                        <Bookmark className="w-3 h-3" /> Presets
                       </button>
                     </div>
                   </div>
-                  
-{/* --- PROMPT CONFIGURATION UI --- */}
-<div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    
-    {/* Body Type */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Body Type
-      </label>
-      <select
-        value={promptBodyType}
-        onChange={(e) => setPromptBodyType(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {BODY_TYPES.map(bt => (
-          <option key={bt} value={bt}>{bt}</option>
-        ))}
-      </select>
-    </div>
-
-    {/* Angle */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Camera Angle
-      </label>
-      <select
-        value={promptAngle}
-        onChange={(e) => setPromptAngle(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {CAMERA_ANGLES.map(a => (
-          <option key={a} value={a}>{a}</option>
-        ))}
-      </select>
-    </div>
-
-    {/* Shot Type */}
-    <div>
-      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-        Shot Type
-      </label>
-      <select
-        value={promptShotType}
-        onChange={(e) => setPromptShotType(e.target.value)}
-        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer"
-      >
-        {SHOT_TYPES.map(st => (
-          <option key={st} value={st}>{st}</option>
-        ))}
-      </select>
-    </div>
-  </div>
-</div>
-
-{/* Prompt Textarea */}
-<div className="relative">
-  <textarea
-    value={memoizedPrompt}
-    onChange={handlePromptChange}
-    placeholder="Enter a base position (e.g., 'doggy style', 'missionary') or leave blank for random..."
-    className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]"
-  />
-  
-  <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-    Positive Prompt
-  </div>
-</div>
-
-                  {/* --- IP ADAPTER SECTION --- */}
+                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Body Type</label>
+                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
+                          {BODY_TYPES.map(bt => <option key={bt} value={bt}>{bt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Camera Angle</label>
+                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
+                          {CAMERA_ANGLES.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Shot Type</label>
+                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
+                          {SHOT_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Enter a base position..." className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]" />
+                    <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
+                  </div>
+                  {/* --- RunPod IP-Adapter & Advanced Elements stay identical --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2182,7 +1982,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="1" max="50" step="1" 
-                                value={steps} onChange={{e} => setSteps(Number(e.target.value))}
+                                value={steps} onChange={(e) => setSteps(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2192,7 +1992,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="1" max="15" step="0.5" 
-                                value={cfg} onChange={{e} => setCfg(Number(e.target.value))}
+                                value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2202,7 +2002,7 @@ export default function App() {
                               </label>
                               <input 
                                 type="range" min="0" max="1" step="0.05" 
-                                value={denoise} onChange={{e} => setDenoise(Number(e.target.value))}
+                                value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
                                 className="w-full accent-zinc-100" 
                               />
                             </div>
@@ -2217,64 +2017,34 @@ export default function App() {
               {mode === 'editor' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      AI Editing Engine
-                    </label>
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">AI Editing Engine</label>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleRandomizePrompt}
-                        disabled={isRandomizing}
-                        className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50"
-                      >
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} />
-                        Architect Prompt
+                      <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
+                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} /> Architect Prompt
                       </button>
-                      <button
-                        onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                      >
-                        <Bookmark className="w-3 h-3" />
-                        Saved Prompts
+                      <button onClick={() => setShowLoadPrompt(true)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
+                        <Bookmark className="w-3 h-3" /> Saved Prompts
                       </button>
                     </div>
                   </div>
                   
-                  {/* --- PROMPT CONFIGURATION UI --- */}
                   <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <UserCircle className="w-3.5 h-3.5" /> Body Type
-                        </label>
-                        <select 
-                          value={promptBodyType} 
-                          onChange={(e) => setPromptBodyType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><UserCircle className="w-3.5 h-3.5" /> Body Type</label>
+                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Angle
-                        </label>
-                        <select 
-                          value={promptAngle} 
-                          onChange={(e) => setPromptAngle(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Angle</label>
+                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5" /> Shot Type
-                        </label>
-                        <select 
-                          value={promptShotType} 
-                          onChange={(e) => setPromptShotType(e.target.value)}
-                          className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
-                        >
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Shot Type</label>
+                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
                           {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
                         </select>
                       </div>
@@ -2282,155 +2052,73 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                    <button
-                      onClick={() => setEditorModel('wan-2.6')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
-                        editorModel === 'wan-2.6' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
-                          : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
-                      }`}
-                    >
-                      Wan 2.6
-                    </button>
-                    <button
-                      onClick={() => setEditorModel('wan-2.7')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
-                        editorModel === 'wan-2.7' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
-                          : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
-                      }`}
-                    >
-                      Wan 2.7
-                    </button>
-                    <button
-                      onClick={() => setEditorModel('qwen-2.0')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
-                        editorModel === 'qwen-2.0' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
-                          : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
-                      }`}
-                    >
-                      Qwen 2.0
-                    </button>
-                    <button
-                      onClick={() => setEditorModel('qwen-lora')}
-                      className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${
-                        editorModel === 'qwen-lora' 
-                          ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' 
-                          : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'
-                      }`}
-                    >
-                      Qwen LoRA
-                    </button>
+                    <button onClick={() => setEditorModel('wan-2.6')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.6</button>
+                    <button onClick={() => setEditorModel('wan-2.7')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.7' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.7</button>
+                    <button onClick={() => setEditorModel('qwen-2.0')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-2.0' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Qwen 2.0</button>
+                    <button onClick={() => setEditorModel('qwen-lora')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-lora' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Qwen LoRA</button>
                   </div>
-                  
+
+                  {/* --- ASPECT RATIO COMPONENT FOR QWEN 2.0 --- */}
+                  {editorModel === 'qwen-2.0' && (
+                    <div className="space-y-3 bg-zinc-950 p-4 border border-zinc-800 rounded-xl">
+                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" /> Canvas Aspect Ratio
+                      </label>
+                      <div className="grid grid-cols-5 gap-2">
+                        {RATIO_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.label}
+                            onClick={() => setSelectedRatio(opt.value)}
+                            className={`py-2 rounded-lg text-[10px] font-medium font-mono transition-all border ${
+                              selectedRatio === opt.value
+                                ? 'bg-zinc-100 border-zinc-100 text-zinc-950 shadow-md scale-105'
+                                : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {editorModel === 'qwen-lora' && (
                     <div className="mt-4 mb-6 pt-4 border-t border-zinc-800/50">
                       <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
                         <span>Active Style Injections (LoRAs)</span>
                       </label>
-                      
                       <div className="space-y-2 mb-3">
                         {activeLoras.map(lora => (
                           <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                            <span className="text-[9px] font-mono text-zinc-300 w-24 truncate" title={lora.name}>
-                              {lora.name}
-                            </span>
-                            
-                            {/* --- STRENGTH / SCALE SLIDER --- */}
-                            <input 
-                              type="range" 
-                              min="0" 
-                              max="2" 
-                              step="0.05" 
-                              value={lora.strength} 
-                              onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
-                              className="flex-1 accent-zinc-500 h-1 cursor-pointer" 
-                            />
-                            <span className="text-[9px] font-mono text-zinc-500 w-8 text-right">
-                              {lora.strength.toFixed(2)}
-                            </span>
-                            
-                            <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
-                              <X className="w-3 h-3" />
-                            </button>
+                            <span className="text-[9px] font-mono text-zinc-300 w-24 truncate" title={lora.name}>{lora.name}</span>
+                            <input type="range" min="0" max="2" step="0.05" value={lora.strength} onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))} className="flex-1 accent-zinc-500 h-1 cursor-pointer" />
+                            <span className="text-[9px] font-mono text-zinc-500 w-8 text-right">{lora.strength.toFixed(2)}</span>
+                            <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors"><X className="w-3 h-3" /></button>
                           </div>
                         ))}
-                        {activeLoras.length === 0 && (
-                          <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
-                        )}
+                        {activeLoras.length === 0 && <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>}
                       </div>
-
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2">
-                          <select 
-                            onChange={addLora}
-                            value="none"
-                            className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner cursor-pointer"
-                          >
+                          <select onChange={addLora} value="none" className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner cursor-pointer">
                             <option value="none">Add LoRA to Chain...</option>
                             {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
                               <option key={opt.id} value={opt.id}>{opt.name}</option>
                             ))}
                           </select>
                         </div>
-                        
-                        {/* Custom URL Paste Field */}
                         <div className="flex gap-2 mt-1">
-                          <input 
-                            type="text" 
-                            placeholder="Paste .safetensors URL here..." 
-                            value={customLoraUrl}
-                            onChange={(e) => setCustomLoraUrl(e.target.value)}
-                            className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner"
-                          />
-                          <button 
-                            onClick={addCustomLora}
-                            disabled={!customLoraUrl.trim()}
-                            className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
+                          <input type="text" placeholder="Paste .safetensors URL here..." value={customLoraUrl} onChange={(e) => setCustomLoraUrl(e.target.value)} className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner" />
+                          <button onClick={addCustomLora} disabled={!customLoraUrl.trim()} className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Plus className="w-4 h-4" /></button>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Aspect Ratio Config Panel for Qwen 2.0 */}
-                  {editorModel === 'qwen-2.0' && (
-                    <div className="mb-4 pt-2 border-t border-zinc-800/30">
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">
-                        Target Aspect Ratio (Output Dimensions)
-                      </label>
-                      <select
-                        value={qwenRatio}
-                        onChange={(e) => setQwenRatio(e.target.value)}
-                        className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer font-mono"
-                      >
-                        <option value="1024*1024">1:1 (Square — 1024×1024)</option>
-                        <option value="720*1280">9:16 (Portrait — 720×1280)</option>
-                        <option value="1280*720">16:9 (Landscape — 1280×720)</option>
-                        <option value="768*1024">3:4 (Vertical — 768×1024)</option>
-                        <option value="1024*768">4:3 (Horizontal — 1024×768)</option>
-                      </select>
-                    </div>
-                  )}
-
                   <div className="relative">
-                    <textarea 
-                      value={memoizedPrompt} 
-                      onChange={handlePromptChange}
-                      placeholder="Describe the modifications (e.g. 'change her outfit to a red jacket')...." 
-                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
-                    />
+                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                      <button 
-                        onClick={enhancePrompt}
-                        className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
-                        title="Magic Prompt Enhancer"
-                      >
-                        <Wand2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button onClick={enhancePrompt} className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors" title="Magic Prompt Enhancer"><Wand2 className="w-3.5 h-3.5" /></button>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                         {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : editorModel === 'qwen-lora' ? 'Qwen LoRA Editor' : 'Wan-2.6 Editor'}
                       </div>
@@ -2439,14 +2127,8 @@ export default function App() {
                 </div>
               )}
 
-              <button 
-                onClick={generateEdit}
-                disabled={isSubmitting} 
-                className="w-full py-5 rounded-2xl font-medium uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-zinc-100 text-zinc-950 hover:bg-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
+              <button onClick={generateEdit} disabled={isSubmitting} className="w-full py-5 rounded-2xl font-medium uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-zinc-100 text-zinc-950 hover:bg-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
@@ -2455,15 +2137,9 @@ export default function App() {
                     {mode === 'angles' && <Box className="w-5 h-5" />}
                   </>
                 )}
-                {isSubmitting ? 'Uploading to Server...' 
-                 : mode === 'upscaler' ? 'Queue Resolution Enhancement' 
-                 : mode === 'angles' ? 'Queue 3D Camera Angle' 
-                 : mode === 'video' ? 'Queue Video Generation'
-                 : mode === 'runpod' ? 'Queue RunPod Task'
-                 : 'Queue AI Edit'}
+                {isSubmitting ? 'Uploading to Server...' : mode === 'upscaler' ? 'Queue Resolution Enhancement' : mode === 'angles' ? 'Queue 3D Camera Angle' : mode === 'video' ? 'Queue Video Generation' : mode === 'runpod' ? 'Queue RunPod Task' : 'Queue AI Edit'}
               </button>
-
-              {/* Dynamic Action Queue */}
+              
               <AnimatePresence>
                 {queue.length > 0 && (
                   <motion.div 
@@ -2506,7 +2182,6 @@ export default function App() {
                   </motion.div>
                 )}
               </AnimatePresence>
-              
             </div>
           </section>
           
