@@ -10,7 +10,7 @@ import {
   Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
   Bookmark, BookmarkPlus, Server, Settings2, Plus, User, Dices, Camera,
-  UserCircle, Wand2, Film, Layers3
+  UserCircle, Wand2, Film
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -146,7 +146,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 };
 
 // --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video' | 'flux';
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora';
 type Resolution = '2k' | '4k' | '8k';
 
@@ -312,11 +312,11 @@ export default function App() {
   const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
   const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
-  // New state for flux kontext pro
-  const [fluxGuidanceScale, setFluxGuidanceScale] = useState<number>(3.5);
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFile2, setSelectedFile2] = useState<File | null>(null);
+  const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
+  
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -461,7 +461,6 @@ export default function App() {
           let historyPrompt = item.input?.prompt || item.model || 'Cloud Generation';
           if (item.model?.includes('upscaler')) historyPrompt = `Upscaled Image`;
           if (item.model?.includes('multiple-angles') || item.model?.includes('qwen-image/edit-multiple')) historyPrompt = `Multi-Angle Render`;
-          if (item.model?.includes('flux-kontext')) historyPrompt = `Flux Kontext Pro`;
 
           return {
             id: item.id,
@@ -578,6 +577,19 @@ export default function App() {
     setResultUrl(null);
     setResultId(null);
     setError(null);
+  };
+
+  const handleFile2Process = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please provide a valid image file.');
+      return;
+    }
+    if (previewUrl2 && previewUrl2.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl2);
+    }
+    const url = URL.createObjectURL(file);
+    setSelectedFile2(file); 
+    setPreviewUrl2(url); 
   };
 
   const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
@@ -1151,53 +1163,7 @@ export default function App() {
     };
   };
 
-  const triggerFluxKontext = async (base64Image: string) => {
-    const safeBase64 = cleanAndPadBase64(base64Image);
-    const payload = {
-        enable_sync_mode: false,
-        guidance_scale: fluxGuidanceScale,
-        image: safeBase64,
-        prompt: prompt
-    };
-
-    const endpoint = 'https://api.wavespeed.ai/api/v3/wavespeed-ai/flux-kontext-pro';
-    const basePath = 'wavespeed-ai/flux-kontext-pro';
-
-    const triggerResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
-      body: JSON.stringify(payload)
-    });
-
-    const triggerData = await triggerResponse.json();
-    if (!triggerResponse.ok) throw new Error(`Failed to trigger Flux Kontext Pro: ${triggerData.message || 'Unknown Error'}`);
-
-    const id = triggerData.id || triggerData.request_id || triggerData.job_id || triggerData.task_id || triggerData.prediction_id || triggerData.uuid || triggerData.prediction?.id || triggerData.data?.id || triggerData.data?.request_id;
-    if (!id) throw new Error(`Server responded successfully but no ID was found.`);
-
-    let pollUrl = triggerData.status_url || triggerData.urls?.get || triggerData.data?.urls?.get;
-    let targetResultUrl = triggerData.response_url;
-
-    if (!pollUrl) {
-      if (triggerData.request_id || triggerData.data?.request_id) {
-        pollUrl = `https://api.wavespeed.ai/api/v3/${basePath}/requests/${id}/status`;
-        targetResultUrl = `https://api.wavespeed.ai/api/v3/${basePath}/requests/${id}`;
-      } else {
-        pollUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}`;
-        targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
-      }
-    }
-
-    return {
-      id,
-      pollUrl,
-      targetResultUrl,
-      historyPrompt: prompt,
-      modelInfo: 'Flux Kontext Pro'
-    };
-  };
-
-  const triggerWavespeed = async (base64Image: string) => {
+  const triggerWavespeed = async (base64Image: string, base64Image2?: string | null) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
     const payload: any = { 
         prompt: prompt, 
@@ -1209,6 +1175,9 @@ export default function App() {
         payload.loras = activeLoras.map(l => ({ path: l.id, scale: l.strength }));
     } else {
         payload.images = [safeBase64];
+        if (base64Image2) {
+            payload.images.push(cleanAndPadBase64(base64Image2));
+        }
     }
     
     if (editorModel === 'wan-2.6') {
@@ -1298,7 +1267,7 @@ export default function App() {
       }
     }
 
-    if ((mode === 'editor' || mode === 'runpod' || mode === 'video' || mode === 'flux') && !prompt) {
+    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -1328,12 +1297,13 @@ export default function App() {
       } else if (mode === 'runpod') {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerRunPod(base64ImageRaw);
-      } else if (mode === 'flux') {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerFluxKontext(base64ImageRaw);
       } else {
         const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerWavespeed(base64ImageRaw);
+        let base64ImageRaw2 = null;
+        if (selectedFile2 && mode === 'editor' && editorModel === 'qwen-2.0') {
+            base64ImageRaw2 = await fileToBase64(selectedFile2);
+        }
+        triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2);
       } 
 
       const newTask: QueueTask = {
@@ -1614,7 +1584,7 @@ export default function App() {
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
           {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-6 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
             <button
               onClick={() => setMode('editor')}
               className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
@@ -1625,17 +1595,6 @@ export default function App() {
             >
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               Editor
-            </button>
-            <button
-              onClick={() => setMode('flux')}
-              className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${
-                mode === 'flux' 
-                  ? 'bg-zinc-100 text-zinc-950 shadow-sm' 
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-            >
-              <Layers3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              Flux Pro
             </button>
             <button
               onClick={() => setMode('runpod')}
@@ -1687,18 +1646,27 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
               <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-400 font-mono">
-                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'flux' ? 'Image for Flux Kontext' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
+                01 // {mode === 'editor' ? 'Primary Asset' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
-            <div className="h-[200px]">
+            <div className={`grid gap-4 ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} ${mode === 'editor' && editorModel === 'qwen-2.0' ? 'h-[400px] sm:h-[200px]' : 'h-[200px]'}`}>
               <UploadZone 
-                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'flux' ? 'Upload Image for Flux Kontext' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
+                label={mode === 'editor' ? 'Upload Image to Edit' : mode === 'runpod' ? 'Upload Image for RunPod Endpoint' : mode === 'video' ? 'Upload Starting Frame' : mode === 'upscaler' ? 'Upload Image to Enhance' : 'Upload Image to Extract Angles'}
                 file={selectedFile} 
                 preview={previewUrl} 
                 onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
                 onProcess={(f: File) => handleFileProcess(f)} 
               />
+              {mode === 'editor' && editorModel === 'qwen-2.0' && (
+                <UploadZone
+                  label="Upload Secondary Reference (Optional)"
+                  file={selectedFile2}
+                  preview={previewUrl2}
+                  onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }}
+                  onProcess={(f: File) => handleFile2Process(f)}
+                />
+              )}
             </div>
           </section>
 
@@ -1922,48 +1890,6 @@ export default function App() {
                         className="w-full accent-zinc-100" 
                       />
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {mode === 'flux' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      Flux Kontext Pro Editor
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setShowLoadPrompt(true)}
-                        className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors"
-                      >
-                        <Bookmark className="w-3 h-3" />
-                        Saved Prompts
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="relative">
-                    <textarea 
-                      value={memoizedPrompt} 
-                      onChange={handlePromptChange}
-                      placeholder="Describe the modifications (e.g. 'A woman is brewing tea')...." 
-                      className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" 
-                    />
-                    <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                      Flux Prompt
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-zinc-800/50">
-                    <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                      Guidance Scale <span>{fluxGuidanceScale.toFixed(1)}</span>
-                    </label>
-                    <input 
-                      type="range" min="1" max="20" step="0.1" 
-                      value={fluxGuidanceScale} onChange={(e) => setFluxGuidanceScale(Number(e.target.value))}
-                      className="w-full accent-zinc-100" 
-                    />
                   </div>
                 </div>
               )}
@@ -2474,7 +2400,6 @@ export default function App() {
                     {mode === 'runpod' && <Server className="w-5 h-5" />}
                     {mode === 'video' && <Film className="w-5 h-5" />}
                     {mode === 'angles' && <Box className="w-5 h-5" />}
-                    {mode === 'flux' && <Layers3 className="w-5 h-5" />}
                   </>
                 )}
                 {isSubmitting ? 'Uploading to Server...' 
@@ -2482,7 +2407,6 @@ export default function App() {
                  : mode === 'angles' ? 'Queue 3D Camera Angle' 
                  : mode === 'video' ? 'Queue Video Generation'
                  : mode === 'runpod' ? 'Queue RunPod Task'
-                 : mode === 'flux' ? 'Queue Flux Kontext'
                  : 'Queue AI Edit'}
               </button>
 
@@ -2507,7 +2431,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod Serverless' : task.mode === 'video' ? 'Video' : task.mode === 'flux' ? 'Flux Kontext' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod Serverless' : task.mode === 'video' ? 'Video' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -2632,8 +2556,6 @@ export default function App() {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
                             if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
-                          } else if (mode === 'flux') {
-                              dynamicModelInfo = 'Flux Kontext Pro';
                           }
                           
                           setSelectedHistoryItem(match || { 
