@@ -124,13 +124,32 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
         isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
       }`}
     >
-      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); }} className="hidden" accept="image/*" />
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={(e) => { 
+          const f = e.target.files?.[0]; 
+          if(f) onProcess(f); 
+          e.target.value = ''; // reset so same file can be selected again
+        }} 
+        className="hidden" 
+        accept="image/*" 
+      />
       {preview ? (
-        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center group">
-          <img src={preview} alt="Preview" className="max-h-[120px] w-full object-cover rounded-xl" />
-          <div className="absolute inset-0 bg-zinc-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-sm gap-2">
-            <span className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/80 px-4 py-2 rounded-full border border-zinc-700">Replace</span>
-            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-400 text-[10px] font-medium uppercase tracking-widest bg-zinc-900/80 border border-zinc-700 px-5 py-2 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+        <div className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center bg-zinc-950/50 group/preview">
+          <img src={preview} alt="Preview" className="max-h-[160px] w-full object-contain" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} />
+          
+          {/* Always-visible explicit clear button */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); onClear(); }} 
+            className="absolute top-2 right-2 p-2 bg-zinc-950/80 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-full backdrop-blur-md border border-zinc-700/50 transition-all shadow-xl z-10"
+            title="Remove Image"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-zinc-950/80 backdrop-blur-md border border-zinc-700/50 rounded-full opacity-0 group-hover/preview:opacity-100 transition-opacity pointer-events-none">
+            <span className="text-[9px] font-medium text-zinc-300 uppercase tracking-widest">Replace</span>
           </div>
         </div>
       ) : (
