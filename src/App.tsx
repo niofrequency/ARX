@@ -114,43 +114,47 @@ const TechApexIcon = ({ className }: { className?: string }) => (
 const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
   return (
     <div 
       onClick={() => !file && fileInputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onProcess(f); }}
-      className={`relative group cursor-pointer border rounded-2xl p-4 sm:p-6 transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] ${
-        isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02]' : file ? 'bg-zinc-900 border-zinc-800/80' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600'
+      className={`relative group cursor-pointer border transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] rounded-2xl ${
+        isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02] p-4' : file ? 'bg-zinc-900 border-zinc-800/80 p-0' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600 p-4 sm:p-6'
       }`}
     >
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={(e) => { 
-          const f = e.target.files?.[0]; 
-          if(f) onProcess(f); 
-          e.target.value = ''; // reset so same file can be selected again
-        }} 
-        className="hidden" 
-        accept="image/*" 
-      />
+      <input type="file" ref={fileInputRef} onChange={(e) => { const f = e.target.files?.[0]; if(f) onProcess(f); e.target.value = ''; }} className="hidden" accept="image/*" />
+      
       {preview ? (
-        <div className="relative w-full h-full rounded-xl overflow-hidden shadow-md border border-zinc-800/50 flex-1 flex items-center justify-center bg-zinc-950/50 group/preview">
-          <img src={preview} alt="Preview" className="max-h-[160px] w-full object-contain" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} />
+        <div 
+          className="relative w-full h-full flex items-center justify-center group/preview"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+              setShowMobileMenu(!showMobileMenu);
+            } else {
+              fileInputRef.current?.click();
+            }
+          }}
+        >
+          <img src={preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
           
-          {/* Always-visible explicit clear button */}
+          <div className={`absolute inset-0 bg-zinc-950/40 backdrop-blur-[2px] transition-all flex items-center justify-center z-10 ${showMobileMenu ? 'opacity-100' : 'opacity-0 md:group-hover/preview:opacity-100'}`}>
+            <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowMobileMenu(false); }} className="text-zinc-100 text-[10px] sm:text-xs font-medium uppercase tracking-widest bg-zinc-900/90 px-5 py-2.5 rounded-full border border-zinc-700 shadow-xl hover:bg-zinc-800 transition-colors">
+              Replace
+            </button>
+          </div>
+
           <button 
-            onClick={(e) => { e.stopPropagation(); onClear(); }} 
-            className="absolute top-2 right-2 p-2 bg-zinc-950/80 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-full backdrop-blur-md border border-zinc-700/50 transition-all shadow-xl z-10"
+            onClick={(e) => { e.stopPropagation(); onClear(); setShowMobileMenu(false); }} 
+            className={`absolute top-3 right-3 p-2 bg-zinc-900/90 text-zinc-400 hover:text-red-400 hover:bg-red-950/50 rounded-full border border-zinc-700/50 transition-all shadow-xl z-20 ${showMobileMenu ? 'opacity-100 scale-100' : 'opacity-0 scale-95 md:group-hover/preview:opacity-100 md:group-hover/preview:scale-100'}`}
             title="Remove Image"
           >
             <X className="w-4 h-4" />
           </button>
-
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-zinc-950/80 backdrop-blur-md border border-zinc-700/50 rounded-full opacity-0 group-hover/preview:opacity-100 transition-opacity pointer-events-none">
-            <span className="text-[9px] font-medium text-zinc-300 uppercase tracking-widest">Replace</span>
-          </div>
         </div>
       ) : (
         <div className="flex flex-col items-center text-center pointer-events-none">
@@ -1840,19 +1844,19 @@ export default function App() {
                       <div>
                         <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Body Type</label>
                         <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {BODY_TYPES.map(bt => <option key={bt} value={bt}>{bt}</option>)}
+                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Camera Angle</label>
                         <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {CAMERA_ANGLES.map(a => <option key={a} value={a}>{a}</option>)}
+                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Shot Type</label>
                         <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {SHOT_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
+                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
                         </select>
                       </div>
                     </div>
