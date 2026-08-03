@@ -172,7 +172,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream';
 type Resolution = '2k' | '4k' | '8k';
-type VideoEngine = 'runpod' | 'wavespeed-wan' | 'wavespeed-pruna';
+type VideoEngine = 'runpod' | 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
 
 interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
@@ -212,7 +212,8 @@ const RATIO_OPTIONS = [
   { label: '9:16', qwen: '720*1280', seedream: '9:16' },
   { label: '16:9', qwen: '1280*720', seedream: '16:9' },
   { label: '4:3', qwen: '1024*768', seedream: '4:3' },
-  { label: '3:4', qwen: '768*1024', seedream: '3:4' }
+  { label: '3:4', qwen: '768*1024', seedream: '3:4' },
+  { label: '21:9', qwen: '1280*720', seedream: '21:9' }
 ];
 
 const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
@@ -272,7 +273,7 @@ const AUTO_LORA_MAP: Record<string, any> = {
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
-  const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-pruna');
+  const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-wan2i2v');
   
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
@@ -294,7 +295,7 @@ export default function App() {
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
   const [verticalAngle, setVerticalAngle] = useState<number>(0);
   const [distance, setDistance] = useState<number>(1);
-  const [selectedRatio, setSelectedRatio] = useState<string>('1:1');
+  const [selectedRatio, setSelectedRatio] = useState<string>('16:9');
 
   const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
@@ -313,9 +314,9 @@ export default function App() {
   const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
 
-  // New Pruna controls
-  const [prunaDuration, setPrunaDuration] = useState<number>(5);
-  const [prunaResolution, setPrunaResolution] = useState<'720p' | '1080p'>('720p');
+  // New Pruna / Seedance / Wan Ultra Fast API Controls
+  const [apiVideoDuration, setApiVideoDuration] = useState<number>(5);
+  const [apiVideoResolution, setApiVideoResolution] = useState<'480p' | '720p' | '1080p'>('720p');
 
   const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
   const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
@@ -952,9 +953,20 @@ export default function App() {
     if (videoEngine === 'wavespeed-pruna') {
       endpoint = "https://api.wavespeed.ai/api/v3/pruna-ai/p-video/image-to-video";
       modelName = "Pruna AI P-Video";
-      payload.duration = prunaDuration;
-      payload.resolution = prunaResolution;
+      payload.duration = apiVideoDuration;
+      payload.resolution = apiVideoResolution === '480p' ? '720p' : apiVideoResolution;
       payload.save_audio = true;
+    } else if (videoEngine === 'wavespeed-seedance') {
+      endpoint = "https://api.wavespeed.ai/api/v3/bytedance/seedance-v1-pro-fast/image-to-video";
+      modelName = "Seedance V1 Pro Fast";
+      payload.duration = apiVideoDuration > 12 ? 12 : apiVideoDuration < 2 ? 2 : apiVideoDuration;
+      payload.resolution = apiVideoResolution;
+      payload.aspect_ratio = selectedRatio;
+      payload.camera_fixed = false;
+    } else if (videoEngine === 'wavespeed-wan2i2v') {
+      endpoint = "https://api.wavespeed.ai/api/v3/wavespeed-ai/wan-2.2/i2v-480p-ultra-fast";
+      modelName = "Wan 2.2 Ultra Fast";
+      payload.duration = apiVideoDuration >= 8 ? 8 : 5;
     }
 
     const triggerResponse = await fetch(endpoint, {
@@ -1359,7 +1371,7 @@ export default function App() {
           setShowSettings(true); 
           return;
         }
-        if ((videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna') && !wavespeedKey) {
+        if ((videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && !wavespeedKey) {
           setError('Please enter your Wavespeed API Key in settings.');
           setShowSettings(true); 
           return;
@@ -1409,6 +1421,8 @@ export default function App() {
     let initialModelInfo = mode === 'upscaler' ? 'AI Upscaler' : 
                            mode === 'angles' ? 'Multi-Angle' : 
                            mode === 'video' ? (
+                              videoEngine === 'wavespeed-seedance' ? 'Seedance V1' :
+                              videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' :
                               videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video' :
                               videoEngine === 'wavespeed-wan' ? 'Wan 2.2 (Wavespeed)' :
                               'Wan 2.2 (RunPod)'
@@ -1442,7 +1456,7 @@ export default function App() {
         } else if (mode === 'angles') {
           triggerResult = await triggerWavespeedAngles(selectedFile);
         } else if (mode === 'video') {
-          if (videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna') {
+          if (videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') {
             triggerResult = await triggerWavespeedVideo(selectedFile);
           } else {
             const base64ImageRaw = await fileToBase64(selectedFile);
@@ -1850,7 +1864,10 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      {videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video Engine' : 'Wan 2.2 Video Engine'}
+                      {videoEngine === 'wavespeed-seedance' ? 'Seedance V1 Video Engine' : 
+                       videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video Engine' : 
+                       videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' :
+                       'Wan 2.2 Video Engine'}
                     </label>
                     <div className="flex items-center gap-3">
                       <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
@@ -1862,8 +1879,10 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+                    <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Seedance V1</button>
                     <button onClick={() => setVideoEngine('wavespeed-pruna')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-pruna' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Pruna P-Video</button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan2i2v')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan2i2v' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan2i2v (Fast)</button>
                     <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (Wavespeed)</button>
                     <button onClick={() => setVideoEngine('runpod')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (RunPod)</button>
                   </div>
@@ -1914,19 +1933,57 @@ export default function App() {
                     </>
                   )}
 
-                  {videoEngine === 'wavespeed-pruna' && (
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Duration <span>{prunaDuration}s</span></label>
-                        <input type="range" min="1" max="20" step="1" value={prunaDuration} onChange={(e) => setPrunaDuration(Number(e.target.value))} className="w-full accent-zinc-100" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Resolution</label>
-                        <div className="flex gap-2">
-                            <button onClick={() => setPrunaResolution('720p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${prunaResolution === '720p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>720p</button>
-                            <button onClick={() => setPrunaResolution('1080p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${prunaResolution === '1080p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>1080p</button>
+                  {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && (
+                    <div className="space-y-4 pt-4 border-t border-zinc-800/50">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
+                            Duration <span>{videoEngine === 'wavespeed-wan2i2v' ? (apiVideoDuration >= 8 ? 8 : 5) : apiVideoDuration}s</span>
+                          </label>
+                          <input 
+                            type="range" 
+                            min={videoEngine === 'wavespeed-seedance' ? "2" : videoEngine === 'wavespeed-wan2i2v' ? "5" : "1"} 
+                            max={videoEngine === 'wavespeed-seedance' ? "12" : videoEngine === 'wavespeed-wan2i2v' ? "8" : "20"} 
+                            step={videoEngine === 'wavespeed-wan2i2v' ? "3" : "1"} 
+                            value={apiVideoDuration} 
+                            onChange={(e) => setApiVideoDuration(Number(e.target.value))} 
+                            className="w-full accent-zinc-100" 
+                          />
                         </div>
+                        {(videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-pruna') && (
+                          <div>
+                            <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Resolution</label>
+                            <div className="flex gap-2">
+                                {videoEngine === 'wavespeed-seedance' && (
+                                  <button onClick={() => setApiVideoResolution('480p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${apiVideoResolution === '480p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>480p</button>
+                                )}
+                                <button onClick={() => setApiVideoResolution('720p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${apiVideoResolution === '720p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>720p</button>
+                                <button onClick={() => setApiVideoResolution('1080p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${apiVideoResolution === '1080p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>1080p</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      
+                      {videoEngine === 'wavespeed-seedance' && (
+                        <div>
+                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Aspect Ratio</label>
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                            {RATIO_OPTIONS.map((opt) => (
+                              <button
+                                key={`vid-ratio-${opt.label}`}
+                                onClick={() => setSelectedRatio(opt.label)}
+                                className={`py-2 rounded-lg text-[9px] font-medium font-mono uppercase tracking-widest transition-all border ${
+                                  selectedRatio === opt.label
+                                    ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm'
+                                    : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-zinc-100'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2210,7 +2267,7 @@ export default function App() {
                       <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
                         <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" /> Canvas Aspect Ratio
                       </label>
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-6 gap-2">
                         {RATIO_OPTIONS.map((opt) => (
                           <button
                             key={opt.label}
@@ -2419,7 +2476,9 @@ export default function App() {
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
                               dynamicModelInfo = videoEngine === 'runpod' ? 'Wan 2.2 Video' : 
-                                                 videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 'Wan 2.2 (Wavespeed)';
+                                                 videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 
+                                                 videoEngine === 'wavespeed-seedance' ? 'Seedance V1 Pro Fast' : 
+                                                 videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' : 'Wan 2.2 (Wavespeed)';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
