@@ -172,6 +172,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream';
 type Resolution = '2k' | '4k' | '8k';
+type VideoEngine = 'runpod' | 'wavespeed-wan' | 'wavespeed-pruna';
 
 interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
@@ -271,7 +272,7 @@ const AUTO_LORA_MAP: Record<string, any> = {
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
-  const [videoEngine, setVideoEngine] = useState<'runpod' | 'wavespeed'>('wavespeed');
+  const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-pruna');
   
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
@@ -311,6 +312,10 @@ export default function App() {
   const [videoSteps, setVideoSteps] = useState<number>(10);
   const [videoCfg, setVideoCfg] = useState<number>(2.0);
   const [videoSeed, setVideoSeed] = useState<number>(-1);
+
+  // New Pruna controls
+  const [prunaDuration, setPrunaDuration] = useState<number>(5);
+  const [prunaResolution, setPrunaResolution] = useState<'720p' | '1080p'>('720p');
 
   const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
   const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
@@ -360,7 +365,7 @@ export default function App() {
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
     const savedMode = localStorage.getItem('arx_mode') as AppMode;
-    const savedVidEngine = localStorage.getItem('arx_video_engine') as 'runpod'|'wavespeed';
+    const savedVidEngine = localStorage.getItem('arx_video_engine') as VideoEngine;
     
     setMode(savedMode || 'editor');
     if (savedVidEngine) setVideoEngine(savedVidEngine);
@@ -907,7 +912,7 @@ export default function App() {
         id: data.id,
         pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
         historyPrompt: activePrompt,
-        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2'
+        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2 (RunPod)'
       };
     } catch (err: any) {
       console.error("Video trigger failed:", err);
@@ -935,13 +940,24 @@ export default function App() {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
     }
 
-    const payload = {
+    const payload: any = {
       prompt: activePrompt,
       image: cdnUrl,
       seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed
     };
 
-    const triggerResponse = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/wan-2.2/i2v-5b-720p", {
+    let endpoint = "https://api.wavespeed.ai/api/v3/wavespeed-ai/wan-2.2/i2v-5b-720p";
+    let modelName = "Wan 2.2 I2V";
+
+    if (videoEngine === 'wavespeed-pruna') {
+      endpoint = "https://api.wavespeed.ai/api/v3/pruna-ai/p-video/image-to-video";
+      modelName = "Pruna AI P-Video";
+      payload.duration = prunaDuration;
+      payload.resolution = prunaResolution;
+      payload.save_audio = true;
+    }
+
+    const triggerResponse = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -964,7 +980,7 @@ export default function App() {
       pollUrl,
       targetResultUrl,
       historyPrompt: activePrompt,
-      modelInfo: "Wan 2.2 I2V (Wavespeed)"
+      modelInfo: modelName
     };
   };
 
@@ -1335,7 +1351,7 @@ export default function App() {
     };
   };
 
-  const generateEdit = async () => {
+  const generateEdit = () => {
     if (mode === 'runpod' || mode === 'video') {
       if (mode === 'video') {
         if (videoEngine === 'runpod' && (!runpodKey || !videoEndpointId)) {
@@ -1343,7 +1359,7 @@ export default function App() {
           setShowSettings(true); 
           return;
         }
-        if (videoEngine === 'wavespeed' && !wavespeedKey) {
+        if ((videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna') && !wavespeedKey) {
           setError('Please enter your Wavespeed API Key in settings.');
           setShowSettings(true); 
           return;
@@ -1378,61 +1394,98 @@ export default function App() {
     }
 
     setError(null); 
+    
+    // Quick visual feedback that generation started, without blocking the UI
     setIsSubmitting(true);
+    setTimeout(() => setIsSubmitting(false), 500);
 
-    try {
-      if (window.innerWidth < 1024 && resultRef.current) {
-        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+    const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
+    let apiProvider: 'runpod' | 'wavespeed' = 'wavespeed';
+    if (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) {
+        apiProvider = 'runpod';
+    }
+    
+    let initialModelInfo = mode === 'upscaler' ? 'AI Upscaler' : 
+                           mode === 'angles' ? 'Multi-Angle' : 
+                           mode === 'video' ? (
+                              videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video' :
+                              videoEngine === 'wavespeed-wan' ? 'Wan 2.2 (Wavespeed)' :
+                              'Wan 2.2 (RunPod)'
+                           ) : 
+                           editorModel;
 
-      let triggerResult;
-      
-      if (mode === 'upscaler') {
-        triggerResult = await triggerWavespeedUpscale(selectedFile);
-      } else if (mode === 'angles') {
-        triggerResult = await triggerWavespeedAngles(selectedFile);
-      } else if (mode === 'video') {
-        if (videoEngine === 'wavespeed') {
-          triggerResult = await triggerWavespeedVideo(selectedFile);
+    const initialTask: QueueTask = {
+      id: taskId,
+      mode: mode,
+      apiProvider: apiProvider,
+      prompt: prompt || 'Generation',
+      progress: 2,
+      message: 'Uploading assets...',
+      pollUrl: '',
+      targetResultUrl: '',
+      modelInfo: initialModelInfo
+    };
+    
+    setQueue(prev => [...prev, initialTask]);
+
+    if (window.innerWidth < 1024 && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const executeTask = async () => {
+      try {
+        let triggerResult;
+        
+        if (mode === 'upscaler') {
+          triggerResult = await triggerWavespeedUpscale(selectedFile);
+        } else if (mode === 'angles') {
+          triggerResult = await triggerWavespeedAngles(selectedFile);
+        } else if (mode === 'video') {
+          if (videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna') {
+            triggerResult = await triggerWavespeedVideo(selectedFile);
+          } else {
+            const base64ImageRaw = await fileToBase64(selectedFile);
+            triggerResult = await triggerRunPodVideo(base64ImageRaw);
+          }
+        } else if (mode === 'runpod') {
+          const base64ImageRaw = await fileToBase64(selectedFile);
+          triggerResult = await triggerRunPod(base64ImageRaw);
         } else {
           const base64ImageRaw = await fileToBase64(selectedFile);
-          triggerResult = await triggerRunPodVideo(base64ImageRaw);
-        }
-      } else if (mode === 'runpod') {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPod(base64ImageRaw);
-      } else {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        let base64ImageRaw2 = null;
-        let base64ImageRaw3 = null;
-        if (mode === 'editor' && (editorModel === 'qwen-2.0' || editorModel === 'seedream')) {
-            if (selectedFile2) base64ImageRaw2 = await fileToBase64(selectedFile2);
-            if (selectedFile3) base64ImageRaw3 = await fileToBase64(selectedFile3);
-        }
-        triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2, base64ImageRaw3);
-      } 
+          let base64ImageRaw2 = null;
+          let base64ImageRaw3 = null;
+          if (editorModel === 'qwen-2.0' || editorModel === 'seedream') {
+              if (selectedFile2) base64ImageRaw2 = await fileToBase64(selectedFile2);
+              if (selectedFile3) base64ImageRaw3 = await fileToBase64(selectedFile3);
+          }
+          triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2, base64ImageRaw3);
+        } 
 
-      const newTask: QueueTask = {
-        id: triggerResult.id,
-        mode: mode,
-        apiProvider: mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod') ? 'runpod' : 'wavespeed',
-        prompt: triggerResult.historyPrompt,
-        progress: 15,
-        message: 'Queued...',
-        pollUrl: triggerResult.pollUrl,
-        targetResultUrl: triggerResult.targetResultUrl,
-        modelInfo: triggerResult.modelInfo
-      };
+        const newTaskObj: QueueTask = {
+          id: triggerResult.id,
+          mode: mode,
+          apiProvider: apiProvider,
+          prompt: triggerResult.historyPrompt,
+          progress: 15,
+          message: 'Queued on server...',
+          pollUrl: triggerResult.pollUrl,
+          targetResultUrl: triggerResult.targetResultUrl,
+          modelInfo: triggerResult.modelInfo
+        };
 
-      setQueue(prev => [...prev, newTask]);
-      pollBackground(newTask);
+        setQueue(prev => prev.map(t => t.id === taskId ? newTaskObj : t));
+        pollBackground(newTaskObj);
 
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'An unexpected error occurred.');
-    } finally {
-      setIsSubmitting(false);
-    }
+      } catch (err: any) {
+        console.error(err);
+        setQueue(prev => prev.filter(t => t.id !== taskId));
+        setError(`Task Failed: ${err.message || 'An unexpected error occurred.'}`);
+      }
+    };
+
+    // Fire and forget, runs seamlessly in the background
+    executeTask();
   };
 
   const pollBackground = async (task: QueueTask) => {
@@ -1538,7 +1591,7 @@ export default function App() {
     } catch (err: any) {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
-      setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
+      setError(`Task Failed: ${err.message}`);
     }
   };
 
@@ -1631,8 +1684,8 @@ export default function App() {
     setSliderPosition(percentage);
   };
 
-  const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
-  const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
+  const displayBalance = (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) ? runpodBalance : wavespeedBalance;
+  const balanceLabel = (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) ? 'RunPod' : 'Wavespeed';
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
@@ -1658,15 +1711,15 @@ export default function App() {
           {queue.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-full">
               <Layers className="w-3.5 h-3.5 text-zinc-100 animate-pulse" />
-              <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest hidden sm:inline">{queue.length} Active Queue</span>
-              <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest sm:hidden">{queue.length} Active</span>
+              <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest hidden sm:inline">{queue.length} Active</span>
+              <span className="text-[10px] font-medium text-zinc-100 uppercase tracking-widest sm:hidden">{queue.length} Queue</span>
             </div>
           )}
           <button 
             onClick={() => setShowSettings(!showSettings)} 
             className="p-2.5 hover:bg-zinc-900 rounded-xl border border-transparent hover:border-zinc-800 transition-all group"
           >
-            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && mode !== 'video' && !wavespeedKey) || ((mode === 'runpod' || mode === 'video') && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
+            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && (mode !== 'video' || videoEngine !== 'runpod') && !wavespeedKey) || ((mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
           </button>
         </div>
       </nav>
@@ -1796,7 +1849,9 @@ export default function App() {
               {mode === 'video' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">Wan 2.2 Video Generator</label>
+                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                      {videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video Engine' : 'Wan 2.2 Video Engine'}
+                    </label>
                     <div className="flex items-center gap-3">
                       <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
                         <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} /> Architect Prompt
@@ -1807,9 +1862,10 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <button onClick={() => setVideoEngine('wavespeed')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wavespeed API</button>
-                    <button onClick={() => setVideoEngine('runpod')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>RunPod Serverless</button>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                    <button onClick={() => setVideoEngine('wavespeed-pruna')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-pruna' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Pruna P-Video</button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (Wavespeed)</button>
+                    <button onClick={() => setVideoEngine('runpod')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (RunPod)</button>
                   </div>
 
                   <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
@@ -1856,6 +1912,22 @@ export default function App() {
                         </div>
                       </div>
                     </>
+                  )}
+
+                  {videoEngine === 'wavespeed-pruna' && (
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Duration <span>{prunaDuration}s</span></label>
+                        <input type="range" min="1" max="20" step="1" value={prunaDuration} onChange={(e) => setPrunaDuration(Number(e.target.value))} className="w-full accent-zinc-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Resolution</label>
+                        <div className="flex gap-2">
+                            <button onClick={() => setPrunaResolution('720p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${prunaResolution === '720p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>720p</button>
+                            <button onClick={() => setPrunaResolution('1080p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${prunaResolution === '1080p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>1080p</button>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -2346,7 +2418,8 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = videoEngine === 'runpod' ? 'Wan 2.2 Video' : 'Wan 2.2 I2V (Wavespeed)';
+                              dynamicModelInfo = videoEngine === 'runpod' ? 'Wan 2.2 Video' : 
+                                                 videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 'Wan 2.2 (Wavespeed)';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
