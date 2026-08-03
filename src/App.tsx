@@ -2689,8 +2689,6 @@ export default function App() {
                                   src={img.url} 
                                   autoPlay loop muted playsInline controls={isCenter}
                                   className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
-                                  onClick={(e) => e.stopPropagation()}
-                                  onDoubleClick={(e) => e.stopPropagation()}
                                 />
                             ) : (
                                 <img 
