@@ -273,7 +273,7 @@ const AUTO_LORA_MAP: Record<string, any> = {
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
-  const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-wan2i2v');
+  const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-seedance');
   
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
@@ -352,6 +352,7 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const lastTapTime = useRef<number>(0);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -1974,7 +1975,7 @@ export default function App() {
                                 onClick={() => setSelectedRatio(opt.label)}
                                 className={`py-2 rounded-lg text-[9px] font-medium font-mono uppercase tracking-widest transition-all border ${
                                   selectedRatio === opt.label
-                                    ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm'
+                                    ? 'bg-zinc-100 border-zinc-100 text-zinc-950 shadow-sm'
                                     : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-zinc-100'
                                 }`}
                               >
@@ -2666,8 +2667,15 @@ export default function App() {
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
-                          onClick={() => { 
-                            if (isCenter) setIsFlipped(!isFlipped);
+                          onClick={(e) => { 
+                            if (!isCenter) return;
+                            const now = Date.now();
+                            if (now - lastTapTime.current < 350) {
+                              setIsFlipped(!isFlipped);
+                              lastTapTime.current = 0;
+                            } else {
+                              lastTapTime.current = now;
+                            }
                           }}
                         >
                           
@@ -2681,6 +2689,8 @@ export default function App() {
                                   src={img.url} 
                                   autoPlay loop muted playsInline controls={isCenter}
                                   className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => e.stopPropagation()}
                                 />
                             ) : (
                                 <img 
@@ -2777,7 +2787,8 @@ export default function App() {
                                   </button>
 
                                   <button 
-                                    onClick={() => { 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
                                       const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                                       setPrompt(cleanPrompt); 
                                       setSelectedHistoryItem(null); 
@@ -2806,8 +2817,8 @@ export default function App() {
                             </div>
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
-                              <span className="sm:hidden">Tap card to view media</span>
-                              <span className="hidden sm:inline">Space to view media</span>
+                              <span className="sm:hidden">Double tap card for details</span>
+                              <span className="hidden sm:inline">Double click or Space for details</span>
                             </p>
                           </div>
                         </motion.div>
