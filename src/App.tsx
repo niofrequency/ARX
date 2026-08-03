@@ -6,7 +6,7 @@ import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase } from './lib/firebase';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Upload, Sparkles, Settings, Loader2, Download,
+  Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
   Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
   Bookmark, BookmarkPlus, Server, Settings2, Plus, User, Dices, Camera,
@@ -208,9 +208,9 @@ const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'P
 const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
 const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
 
-const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
-const verticalOptions = [ { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' }, { v: 30, l: 'High Angle' }];
-const distanceOptions = [ { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
+const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
+const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
+const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -248,14 +248,54 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "creampie coming out": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.95, low_weight: 0.9 },
-  "vagina": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "pussy": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
-  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 }
+  "creampie": { 
+    high: "creampie.safetensors", 
+    low: "creampie.safetensors", 
+    high_weight: 0.9, 
+    low_weight: 0.85 
+  },
+  "cum in mouth": { 
+    high: "cum-in-mouth.safetensors", 
+    low: "cum-in-mouth.safetensors", 
+    high_weight: 0.9, 
+    low_weight: 0.85 
+  },
+  "creampie coming out": { 
+    high: "creampie.safetensors", 
+    low: "creampie.safetensors", 
+    high_weight: 0.95, 
+    low_weight: 0.9 
+  },
+  "vagina": { 
+    high: "vagina.safetensors", 
+    low: "pussy.safetensors", 
+    high_weight: 0.9, 
+    low_weight: 0.85 
+  },
+  "pussy": { 
+    high: "vagina.safetensors", 
+    low: "pussy.safetensors", 
+    high_weight: 0.9, 
+    low_weight: 0.85 
+  },
+  "fingering": { 
+    high: "fingering.safetensors", 
+    low: "fingering.safetensors", 
+    high_weight: 0.9, 
+    low_weight: 0.85 
+  },
+  "twerk": { 
+    high: "twerk.safetensors", 
+    low: "twerk.safetensors", 
+    high_weight: 0.85, 
+    low_weight: 0.8 
+  },
+  "twerking": { 
+    high: "twerk.safetensors", 
+    low: "twerk.safetensors", 
+    high_weight: 0.85, 
+    low_weight: 0.8 
+  }
 };
 
 export default function App() {
@@ -334,6 +374,7 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const lastTapTime = useRef<number>(0);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -519,7 +560,7 @@ export default function App() {
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
+      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -817,11 +858,13 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
     let safeBase64 = cleanAndPadBase64(base64Image);
 
+    // Aggressive compression for large images
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
     }
 
+    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
@@ -844,7 +887,7 @@ export default function App() {
 
     const finalAutoLoras = autoLoras.slice(0, 2);
     
-    console.log("📤 Sending to RunPod Video Wan 2.2:", {
+    console.log("📤 Sending to RunPod Video:", {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
       loraCount: finalAutoLoras.length,
       loras: finalAutoLoras.map(l => l.high)
@@ -1292,7 +1335,7 @@ export default function App() {
       }
     }
 
-    if ((mode === 'editor' || mode === 'runpod') && !prompt) {
+    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -1459,6 +1502,8 @@ export default function App() {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
       setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -2554,7 +2599,8 @@ export default function App() {
                                   </button>
 
                                   <button 
-                                    onClick={() => { 
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
                                       const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                                       setPrompt(cleanPrompt); 
                                       setSelectedHistoryItem(null); 
