@@ -474,7 +474,7 @@ export default function App() {
       });
     } catch (e) {
       console.warn("Cloud sync failed gracefully:", e);
-    } font-mono {
+    } finally {
       setIsSyncing(false);
     }
   };
