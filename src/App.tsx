@@ -4,7 +4,7 @@
  */
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase } from './lib/firebase';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
   Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
@@ -175,7 +175,17 @@ type Resolution = '2k' | '4k' | '8k';
 
 interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
-interface QueueTask { id: string; mode: AppMode; prompt: string; progress: number; message: string; pollUrl: string; targetResultUrl: string; modelInfo: string; }
+interface QueueTask { 
+  id: string; 
+  mode: AppMode; 
+  apiProvider: 'runpod' | 'wavespeed'; 
+  prompt: string; 
+  progress: number; 
+  message: string; 
+  pollUrl: string; 
+  targetResultUrl: string; 
+  modelInfo: string; 
+}
 interface ActiveLora { id: string; name: string; strength: number; }
 
 const RUNPOD_MODELS = [
@@ -208,9 +218,9 @@ const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'P
 const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
 const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
 
-const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
-const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
-const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
+const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
+const verticalOptions = [ { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' }, { v: 30, l: 'High Angle' }];
+const distanceOptions = [ { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -248,59 +258,21 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "cum in mouth": { 
-    high: "cum-in-mouth.safetensors", 
-    low: "cum-in-mouth.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "creampie coming out": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.95, 
-    low_weight: 0.9 
-  },
-  "vagina": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "pussy": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "fingering": { 
-    high: "fingering.safetensors", 
-    low: "fingering.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "twerk": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  },
-  "twerking": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  }
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "creampie coming out": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.95, low_weight: 0.9 },
+  "vagina": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 }
 };
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
+  const [videoEngine, setVideoEngine] = useState<'runpod' | 'wavespeed'>('wavespeed');
+  
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
   const [runpodKey, setRunpodKey] = useState<string>('');
   const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
@@ -374,7 +346,6 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const lastTapTime = useRef<number>(0);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -389,8 +360,10 @@ export default function App() {
     const savedLoras = localStorage.getItem('arx_runpod_loras');
     const savedRpModel = localStorage.getItem('arx_runpod_model');
     const savedMode = localStorage.getItem('arx_mode') as AppMode;
+    const savedVidEngine = localStorage.getItem('arx_video_engine') as 'runpod'|'wavespeed';
     
     setMode(savedMode || 'editor');
+    if (savedVidEngine) setVideoEngine(savedVidEngine);
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
     if (savedRpModel) setRunpodModel(savedRpModel);
     
@@ -425,6 +398,7 @@ export default function App() {
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
+  useEffect(() => { localStorage.setItem('arx_video_engine', videoEngine); }, [videoEngine]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
@@ -560,7 +534,7 @@ export default function App() {
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
+      document.body.style.touchAction = 'none';
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -858,13 +832,11 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
     let safeBase64 = cleanAndPadBase64(base64Image);
 
-    // Aggressive compression for large images
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
     }
 
-    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
@@ -887,7 +859,7 @@ export default function App() {
 
     const finalAutoLoras = autoLoras.slice(0, 2);
     
-    console.log("📤 Sending to RunPod Video:", {
+    console.log("📤 Sending to RunPod Video Wan 2.2:", {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
       loraCount: finalAutoLoras.length,
       loras: finalAutoLoras.map(l => l.high)
@@ -941,6 +913,59 @@ export default function App() {
       console.error("Video trigger failed:", err);
       throw err;
     }
+  };
+
+  const triggerWavespeedVideo = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadRes = await fetch("https://api.wavespeed.ai/api/v3/media/upload/binary", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${wavespeedKey}` },
+      body: formData 
+    });
+
+    if (!uploadRes.ok) throw new Error('Asset upload failed for video generation.');
+    const uploadData = await uploadRes.json();
+    const cdnUrl = uploadData.data?.download_url || uploadData.url;
+    if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
+
+    let activePrompt = prompt.trim();
+    if (!activePrompt) {
+      activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
+    }
+
+    const payload = {
+      prompt: activePrompt,
+      image: cdnUrl,
+      seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed
+    };
+
+    const triggerResponse = await fetch("https://api.wavespeed.ai/api/v3/wavespeed-ai/wan-2.2/i2v-5b-720p", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${wavespeedKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const triggerData = await triggerResponse.json();
+    if (!triggerResponse.ok) throw new Error(`Wavespeed Video API Error: ${triggerData.message || triggerData.error || triggerData.detail || 'Unknown Error'}`);
+
+    const id = triggerData.id || triggerData.data?.id;
+    if (!id) throw new Error(`API Rejected Request: Missing Task ID.`);
+
+    let pollUrl = triggerData.urls?.get || triggerData.data?.urls?.get || `https://api.wavespeed.ai/api/v3/predictions/${id}`;
+    let targetResultUrl = `https://api.wavespeed.ai/api/v3/predictions/${id}/result`;
+
+    return {
+      id,
+      pollUrl,
+      targetResultUrl,
+      historyPrompt: activePrompt,
+      modelInfo: "Wan 2.2 I2V (Wavespeed)"
+    };
   };
 
   const triggerRunPod = async (base64Image: string) => {
@@ -1312,10 +1337,17 @@ export default function App() {
 
   const generateEdit = async () => {
     if (mode === 'runpod' || mode === 'video') {
-      if (mode === 'video' && (!runpodKey || !videoEndpointId)) {
-        setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
+      if (mode === 'video') {
+        if (videoEngine === 'runpod' && (!runpodKey || !videoEndpointId)) {
+          setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
+          setShowSettings(true); 
+          return;
+        }
+        if (videoEngine === 'wavespeed' && !wavespeedKey) {
+          setError('Please enter your Wavespeed API Key in settings.');
+          setShowSettings(true); 
+          return;
+        }
       }
       if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
         setError('Please enter your IP-Adapter Endpoint ID in settings.');
@@ -1360,8 +1392,12 @@ export default function App() {
       } else if (mode === 'angles') {
         triggerResult = await triggerWavespeedAngles(selectedFile);
       } else if (mode === 'video') {
-        const base64ImageRaw = await fileToBase64(selectedFile);
-        triggerResult = await triggerRunPodVideo(base64ImageRaw);
+        if (videoEngine === 'wavespeed') {
+          triggerResult = await triggerWavespeedVideo(selectedFile);
+        } else {
+          const base64ImageRaw = await fileToBase64(selectedFile);
+          triggerResult = await triggerRunPodVideo(base64ImageRaw);
+        }
       } else if (mode === 'runpod') {
         const base64ImageRaw = await fileToBase64(selectedFile);
         triggerResult = await triggerRunPod(base64ImageRaw);
@@ -1379,6 +1415,7 @@ export default function App() {
       const newTask: QueueTask = {
         id: triggerResult.id,
         mode: mode,
+        apiProvider: mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod') ? 'runpod' : 'wavespeed',
         prompt: triggerResult.historyPrompt,
         progress: 15,
         message: 'Queued...',
@@ -1420,7 +1457,7 @@ export default function App() {
         pollCount++;
 
         const headers: any = {};
-        if (task.mode === 'runpod' || task.mode === 'video') {
+        if (task.apiProvider === 'runpod') {
           headers["Authorization"] = `Bearer ${runpodKey}`;
         } else {
           headers["Authorization"] = `Bearer ${wavespeedKey}`;
@@ -1440,7 +1477,7 @@ export default function App() {
           clearInterval(progressInterval);
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
-          if (task.mode === 'runpod' || task.mode === 'video') {
+          if (task.apiProvider === 'runpod') {
             let finalOutput = extractBase64(pollData.output || pollData, task.mode === 'video') || '';
 
             if (finalOutput) {
@@ -1502,8 +1539,6 @@ export default function App() {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
       setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -1771,6 +1806,12 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <button onClick={() => setVideoEngine('wavespeed')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wavespeed API</button>
+                    <button onClick={() => setVideoEngine('runpod')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>RunPod Serverless</button>
+                  </div>
+
                   <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
@@ -1797,20 +1838,25 @@ export default function App() {
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
-                  <div className="relative">
-                    <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="Negative prompt..." className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" />
-                    <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">Negative</div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
-                    <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Steps <span>{videoSteps}</span></label>
-                      <input type="range" min="1" max="50" step="1" value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))} className="w-full accent-zinc-100" />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">CFG <span>{videoCfg.toFixed(1)}</span></label>
-                      <input type="range" min="1" max="10" step="0.5" value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))} className="w-full accent-zinc-100" />
-                    </div>
-                  </div>
+
+                  {videoEngine === 'runpod' && (
+                    <>
+                      <div className="relative">
+                        <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="Negative prompt..." className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" />
+                        <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">Negative</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
+                        <div>
+                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Steps <span>{videoSteps}</span></label>
+                          <input type="range" min="1" max="50" step="1" value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))} className="w-full accent-zinc-100" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">CFG <span>{videoCfg.toFixed(1)}</span></label>
+                          <input type="range" min="1" max="10" step="0.5" value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))} className="w-full accent-zinc-100" />
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -2300,7 +2346,7 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = 'Wan 2.2 Video';
+                              dynamicModelInfo = videoEngine === 'runpod' ? 'Wan 2.2 Video' : 'Wan 2.2 I2V (Wavespeed)';
                           } else if (mode === 'runpod') {
                             const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
                             dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
@@ -2599,8 +2645,7 @@ export default function App() {
                                   </button>
 
                                   <button 
-                                    onClick={(e) => { 
-                                      e.stopPropagation();
+                                    onClick={() => { 
                                       const cleanPrompt = img.prompt.replace(/^\[RunPod ComfyUI\]\s*/i, '');
                                       setPrompt(cleanPrompt); 
                                       setSelectedHistoryItem(null); 
