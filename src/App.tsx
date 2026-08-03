@@ -4,9 +4,9 @@
  */
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase } from './lib/firebase';
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
+  Upload, Sparkles, Settings, Loader2, Download,
   Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
   Bookmark, BookmarkPlus, Server, Settings2, Plus, User, Dices, Camera,
@@ -208,9 +208,9 @@ const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'P
 const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
 const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
 
-const horizontalOptions = [  { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' },  { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
-const verticalOptions = [  { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' },  { v: 30, l: 'High Angle' }];
-const distanceOptions = [  { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
+const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
+const verticalOptions = [ { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' }, { v: 30, l: 'High Angle' }];
+const distanceOptions = [ { v: 1, l: 'Close' }, { v: 2, l: 'Medium' }, { v: 3, l: 'Far' }];
 
 // --- Utilities ---
 const isVideoUrl = (url?: string | null) => {
@@ -248,54 +248,14 @@ const cleanAndPadBase64 = (base64Str: string) => {
 };
 
 const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "cum in mouth": { 
-    high: "cum-in-mouth.safetensors", 
-    low: "cum-in-mouth.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "creampie coming out": { 
-    high: "creampie.safetensors", 
-    low: "creampie.safetensors", 
-    high_weight: 0.95, 
-    low_weight: 0.9 
-  },
-  "vagina": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "pussy": { 
-    high: "vagina.safetensors", 
-    low: "pussy.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "fingering": { 
-    high: "fingering.safetensors", 
-    low: "fingering.safetensors", 
-    high_weight: 0.9, 
-    low_weight: 0.85 
-  },
-  "twerk": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  },
-  "twerking": { 
-    high: "twerk.safetensors", 
-    low: "twerk.safetensors", 
-    high_weight: 0.85, 
-    low_weight: 0.8 
-  }
+  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "creampie coming out": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.95, low_weight: 0.9 },
+  "vagina": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "pussy": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
+  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
+  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 }
 };
 
 export default function App() {
@@ -374,7 +334,6 @@ export default function App() {
   const resultRef = useRef<HTMLDivElement>(null);
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const lastTapTime = useRef<number>(0);
 
   const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
   const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
@@ -515,7 +474,7 @@ export default function App() {
       });
     } catch (e) {
       console.warn("Cloud sync failed gracefully:", e);
-    } finally {
+    } font-mono {
       setIsSyncing(false);
     }
   };
@@ -560,7 +519,7 @@ export default function App() {
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';     // Prevent zoom & background scroll
+      document.body.style.touchAction = 'none';
     } else {
       document.body.style.overflow = 'auto';
       document.body.style.touchAction = 'auto';
@@ -858,13 +817,11 @@ export default function App() {
   const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
     let safeBase64 = cleanAndPadBase64(base64Image);
 
-    // Aggressive compression for large images
     if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
       const compressed = await optimizeImageForUpload(selectedFile, 768);
       safeBase64 = cleanAndPadBase64(compressed);
     }
 
-    // Generalized default prompt with good Wan 2.2 enhancers
     let activePrompt = prompt.trim();
     if (!activePrompt) {
       activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
@@ -887,7 +844,7 @@ export default function App() {
 
     const finalAutoLoras = autoLoras.slice(0, 2);
     
-    console.log("📤 Sending to RunPod Video:", {
+    console.log("📤 Sending to RunPod Video Wan 2.2:", {
       prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
       loraCount: finalAutoLoras.length,
       loras: finalAutoLoras.map(l => l.high)
@@ -1335,7 +1292,7 @@ export default function App() {
       }
     }
 
-    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
+    if ((mode === 'editor' || mode === 'runpod') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -1393,6 +1350,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An unexpected error occurred.');
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1501,16 +1459,12 @@ export default function App() {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
       setError(`Task ${task.id.substring(0, 6)} Failed: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
     let displayUrl = finalDataUrl;
 
-    // Create a local blob specifically for rendering the active UI if it's base64
-    // (This prevents sluggish UI rendering for massive base64 strings)
     if (finalDataUrl.startsWith('data:video')) {
       try {
         const blob = base64ToBlob(finalDataUrl, 'video/mp4');
@@ -1527,7 +1481,6 @@ export default function App() {
       }
     }
 
-    // Save the PERMANENT URL (Firebase or Base64) to history, never the blob
     const newItem: HistoryItem = { 
       id: taskId, 
       prompt: taskPrompt, 
@@ -1547,7 +1500,6 @@ export default function App() {
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
     
-    // Set the live UI to use the efficient Blob URL
     setResultUrl(displayUrl);
     setResultId(taskId);
     
@@ -1601,12 +1553,6 @@ export default function App() {
 
   const displayBalance = (mode === 'runpod' || mode === 'video') ? runpodBalance : wavespeedBalance;
   const balanceLabel = (mode === 'runpod' || mode === 'video') ? 'RunPod' : 'Wavespeed';
-
-  // Add these two lines before the return statement
-  const memoizedPrompt = useMemo(() => prompt, [prompt]);
-  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(e.target.value);
-  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
@@ -1803,7 +1749,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="relative">
-                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" />
+                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
                   <div className="relative">
@@ -1862,10 +1808,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="relative">
-                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Enter a base position..." className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px]" />
+                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Enter a base position..." className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px] text-zinc-100" />
                     <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
-                  {/* --- RunPod IP-Adapter & Advanced Elements stay identical --- */}
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2097,7 +2042,6 @@ export default function App() {
                     <button onClick={() => setEditorModel('seedream')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'seedream' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Seedream V5</button>
                   </div>
 
-                  {/* --- ASPECT RATIO COMPONENT FOR QWEN 2.0 & SEEDREAM --- */}
                   {(editorModel === 'qwen-2.0' || editorModel === 'seedream') && (
                     <div className="space-y-3 bg-zinc-950 p-4 border border-zinc-800 rounded-xl">
                       <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -2155,7 +2099,7 @@ export default function App() {
                   )}
 
                   <div className="relative">
-                    <textarea value={memoizedPrompt} onChange={handlePromptChange} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y" />
+                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
                       <button onClick={enhancePrompt} className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors" title="Magic Prompt Enhancer"><Wand2 className="w-3.5 h-3.5" /></button>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
@@ -2179,7 +2123,6 @@ export default function App() {
                 {isSubmitting ? 'Uploading to Server...' : mode === 'upscaler' ? 'Queue Resolution Enhancement' : mode === 'angles' ? 'Queue 3D Camera Angle' : mode === 'video' ? 'Queue Video Generation' : mode === 'runpod' ? 'Queue RunPod Task' : 'Queue AI Edit'}
               </button>
               
-              {/* Dynamic Action Queue Component stays identical to your previous iteration */}
               <AnimatePresence>
                 {queue.length > 0 && (
                   <motion.div 
@@ -2226,7 +2169,7 @@ export default function App() {
           </section>
         </div>
         
-        {/* Right Column Layout and Modals stay perfectly identical to your code */}
+        {/* Right Column Layout */}
         <div className="lg:col-span-7" id="result-section" ref={resultRef}>
           <div className="lg:sticky lg:top-28">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
@@ -2335,19 +2278,6 @@ export default function App() {
                               src={resultUrl} 
                               autoPlay loop muted playsInline controls
                               className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]" 
-                              onError={(e) => {
-                                console.error("Video playback error:", e);
-                                // Fallback: try creating blob URL
-                                if (resultUrl.startsWith('data:')) {
-                                  try {
-                                    const blob = base64ToBlob(resultUrl, 'video/mp4');
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    e.currentTarget.src = blobUrl;
-                                  } catch(err) {
-                                    console.error("Fallback blob creation failed", err);
-                                  }
-                                }
-                              }}
                             />
                         ) : (
                             <img 
@@ -2448,7 +2378,6 @@ export default function App() {
       <AnimatePresence>
         {selectedHistoryItem && (
           <>
-            {/* Backdrop - Prevent any background interaction */}
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
@@ -2462,7 +2391,7 @@ export default function App() {
               className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden touch-none"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
-              style={{ touchAction: 'pan-y' }}   // Allow vertical pan only for swipe, block others
+              style={{ touchAction: 'pan-y' }}
             >
               
               {/* Navigation Controls */}
@@ -2483,7 +2412,7 @@ export default function App() {
                 </>
               )}
 
-              {/* 3D Carousel Mapper - Mobile Optimized */}
+              {/* 3D Carousel Mapper */}
               <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: '1800px', touchAction: 'pan-y' }}>
                 {history.map((img, idx) => {
                   const currentIndex = history.findIndex(h => h.id === selectedHistoryItem.id);
@@ -2494,7 +2423,7 @@ export default function App() {
                   else if (offset < -len / 2) offset += len;
                   
                   const isCenter = offset === 0;
-                  const isVisible = Math.abs(offset) <= 2;   // ← Reduced visible range
+                  const isVisible = Math.abs(offset) <= 2;
 
                   return (
                     <div
@@ -2514,15 +2443,8 @@ export default function App() {
                           style={{ transformStyle: 'preserve-3d' }} 
                           animate={{ rotateY: isCenter && isFlipped ? 180 : 0 }} 
                           transition={{ duration: 0.6, type: 'spring', stiffness: 260, damping: 20 }} 
-                          onClick={(e) => { 
-                            if (!isCenter) return;
-                            const now = Date.now();
-                            if (now - lastTapTime.current < 350) {
-                              setIsFlipped(!isFlipped);
-                              lastTapTime.current = 0;
-                            } else {
-                              lastTapTime.current = now;
-                            }
+                          onClick={() => { 
+                            if (isCenter) setIsFlipped(!isFlipped);
                           }}
                         >
                           
@@ -2563,29 +2485,6 @@ export default function App() {
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-
-                                <motion.div 
-                                  key={img.id}
-                                  initial={{ opacity: 1 }}
-                                  animate={{ opacity: 0 }}
-                                  transition={{ delay: 2.5, duration: 0.8 }}
-                                  className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-10"
-                                >
-                                  <div className="flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-zinc-800">
-                                    <RefreshCw className="w-3.5 h-3.5 text-zinc-300 animate-spin-slow" />
-                                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-100">
-                                      Double tap to flip
-                                    </span>
-                                  </div>
-                                  
-                                  {img.modelInfo && (
-                                    <div className="bg-zinc-950/80 border border-zinc-800 backdrop-blur-md px-4 py-1.5 rounded-full shadow-xl">
-                                      <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">
-                                        Model: {img.modelInfo}
-                                      </span>
-                                    </div>
-                                  )}
-                                </motion.div>
                               </>
                             )}
                           </div>
@@ -2632,7 +2531,6 @@ export default function App() {
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
                               
-                              {/* SINGLE CLEAN DOWNLOAD BUTTON */}
                               <button
                                 onClick={(e) => handleDownload(img.url, img.prompt, e)}
                                 className="w-full py-4 bg-zinc-900 hover:bg-black text-white rounded-2xl font-medium flex items-center justify-center gap-3 transition-all active:scale-[0.97] group"
@@ -2641,8 +2539,7 @@ export default function App() {
                                 Download
                               </button>
                               
-                              {/* Actions for Images Only */}
-                              {!isVideoUrl(img.url) && !img.prompt.startsWith('Multi-Angle') && !img.prompt.startsWith('Upscaled') && !img.prompt.startsWith('Cloud') && (
+                              {!isVideoUrl(img.url) && (
                                 <>
                                   {/* USE IMAGE IN VIDEO BUTTON */}
                                   <button 
@@ -2686,7 +2583,7 @@ export default function App() {
                             </div>
                             
                             <p className="text-[9px] text-zinc-500 mt-4 uppercase tracking-widest shrink-0">
-                              <span className="sm:hidden">Double tap to view media</span>
+                              <span className="sm:hidden">Tap card to view media</span>
                               <span className="hidden sm:inline">Space to view media</span>
                             </p>
                           </div>
