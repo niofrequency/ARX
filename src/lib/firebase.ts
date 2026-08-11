@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { getFirestore } from "firebase/firestore";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -28,6 +29,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -57,6 +59,22 @@ export const uploadToFirebase = async (blob: Blob, path: string): Promise<string
   } catch (error) {
     console.error("Firebase upload error:", error);
     throw new Error("Failed to upload asset to Firebase Storage.");
+  }
+};
+
+/**
+ * Deletes a file from Firebase Storage by its path (e.g. 'outputs/uid/task123.mp4').
+ * Safe to call even if the file was already removed — Storage's "not found"
+ * error is swallowed so callers don't need special-case handling.
+ */
+export const deleteFromFirebase = async (path: string): Promise<void> => {
+  try {
+    await deleteObject(ref(storage, path));
+  } catch (error: any) {
+    if (error?.code !== 'storage/object-not-found') {
+      console.error("Firebase delete error:", error);
+      throw new Error("Failed to delete asset from Firebase Storage.");
+    }
   }
 };
 
