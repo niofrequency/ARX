@@ -1,0 +1,109 @@
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  startAfter,
+  type QueryDocumentSnapshot,
+  type DocumentData,
+} from 'firebase/firestore';
+import { db, deleteFromFirebase } from './firebase';
+
+// --- Types (kept in sync with the ones in App.tsx) ---
+export interface HistoryItem {
+  id: string;
+  prompt: string;
+  url: string;
+  storagePath?: string;
+  date: string;
+  modelInfo?: string;
+}
+
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
+export const HISTORY_PAGE_SIZE = 24;
+
+const historyCollection = (uid: string) => collection(db, 'users', uid, 'history');
+const savedPromptsCollection = (uid: string) => collection(db, 'users', uid, 'savedPrompts');
+
+/**
+ * Fetches one page of a user's generation history, newest first. Pass the
+ * last document snapshot from the previous page as `cursor` to get the next
+ * page. This keeps the gallery from having to load a user's entire history
+ * (which could be hundreds/thousands of images) all at once.
+ */
+export const fetchHistoryPage = async (
+  uid: string,
+  cursor: QueryDocumentSnapshot<DocumentData> | null = null
+): Promise<{ items: HistoryItem[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null; hasMore: boolean }> => {
+  const constraints = [orderBy('date', 'desc'), ...(cursor ? [startAfter(cursor)] : []), limit(HISTORY_PAGE_SIZE)];
+  const snap = await getDocs(query(historyCollection(uid), ...constraints));
+  const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<HistoryItem, 'id'>) }));
+  return {
+    items,
+    lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+    hasMore: snap.docs.length === HISTORY_PAGE_SIZE,
+  };
+};
+
+/** Saves a completed generation to the signed-in user's Firestore history. */
+export const addHistoryDoc = async (uid: string, item: HistoryItem): Promise<void> => {
+  await setDoc(doc(historyCollection(uid), item.id), item);
+};
+
+/**
+ * Deletes a history entry: removes the Firestore record and, if it has an
+ * associated file in Firebase Storage, deletes that too so a user's deleted
+ * photos don't keep sitting in storage.
+ */
+export const deleteHistoryDoc = async (uid: string, id: string, storagePath?: string): Promise<void> => {
+  await deleteDoc(doc(historyCollection(uid), id));
+  if (storagePath) {
+    await deleteFromFirebase(storagePath);
+  }
+};
+
+/**
+ * Deletes every history entry (and its storage file) for a user. Used by the
+ * "Delete All My Generations" action. Walks pages so it works even for very
+ * large histories.
+ */
+export const deleteAllHistory = async (uid: string): Promise<void> => {
+  let cursor: QueryDocumentSnapshot<DocumentData> | null = null;
+  while (true) {
+    const { items, lastDoc } = await fetchHistoryPage(uid, cursor);
+    if (items.length === 0) break;
+    await Promise.all(items.map((item) => deleteHistoryDoc(uid, item.id, item.storagePath)));
+    if (!lastDoc) break;
+    cursor = lastDoc;
+  }
+};
+
+/** Fetches all of a user's saved prompts. */
+export const fetchSavedPrompts = async (uid: string): Promise<SavedPrompt[]> => {
+  const snap = await getDocs(query(savedPromptsCollection(uid), orderBy('createdAt', 'desc')));
+  return snap.docs.map((d) => {
+    const data = d.data() as { name: string; prompt: string };
+    return { id: d.id, name: data.name, prompt: data.prompt };
+  });
+};
+
+/** Saves a new named prompt for the signed-in user. Returns the new doc id. */
+export const addSavedPromptDoc = async (uid: string, name: string, prompt: string): Promise<string> => {
+  const ref = doc(savedPromptsCollection(uid));
+  await setDoc(ref, { name, prompt, createdAt: Date.now() });
+  return ref.id;
+};
+
+/** Deletes one of the signed-in user's saved prompts. */
+export const deleteSavedPromptDoc = async (uid: string, id: string): Promise<void> => {
+  await deleteDoc(doc(savedPromptsCollection(uid), id));
+};
