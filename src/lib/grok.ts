@@ -16,19 +16,19 @@ export const generateRandomIdea = async (
   }
 
   const systemInstruction = `You are an expert AI image prompt architect.
-Your job is to turn basic parameters into a highly detailed, cinematic, comma-separated prompt optimized for Flux / SDXL / Wan 2.2 style models.
+Your job is to turn basic parameters into a highly detailed, cinematic, comma-separated prompt optimized for professional design, cinematic portraits, and high-end visual production models.
 Return ONLY the raw prompt. No explanations, no quotes, no markdown.`;
 
   const userMessage = `Create a detailed, high-quality image prompt using these parameters:
 
-Base concept: ${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'beautiful seductive woman'}
-Body Type: ${bodyType !== 'Random' ? bodyType : 'curvy athletic feminine body'}
+Base concept: ${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'stunning cinematic portrait of a professional subject'}
+Body Type: ${bodyType !== 'Random' ? bodyType : 'balanced natural proportions'}
 Camera Angle: ${angle !== 'Random' ? angle : 'dynamic cinematic angle'}
-Shot Type: ${shotType !== 'Random' ? shotType : 'full body dramatic shot'}
+Shot Type: ${shotType !== 'Random' ? shotType : 'dramatic medium shot'}
 
 Requirements:
 - Extremely detailed, photorealistic, cinematic lighting
-- Beautiful anatomy, realistic skin texture, natural expression
+- Professional photography, realistic textures, natural expression
 - Best quality, masterpiece, ultra-detailed, 8k
 - Rich atmosphere and depth`;
 
@@ -40,7 +40,7 @@ Requirements:
         "Authorization": `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "grok-4-1-fast",                    // ← Fixed model name
+        model: "grok-4-1-fast",
         messages: [
           { role: "system", content: systemInstruction },
           { role: "user", content: userMessage }
