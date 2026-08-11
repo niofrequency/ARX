@@ -1,5 +1,5 @@
 {
   "name": "ARX",
-  "description": "A sharp, minimalist image editing platform powered by Alibaba Wan-2.6.",
+  "description": "A sharp, minimalist AI platform for image editing, multi-angle generation, upscaling, and image-to-video, powered by Wan 2.6/2.7, Qwen, and Seedream.",
   "requestFramePermissions": []
 }
