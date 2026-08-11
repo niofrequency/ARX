@@ -4,12 +4,12 @@
  */
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase } from './lib/firebase';
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Upload, Sparkles, Settings, Loader2, AlertCircle, Download,
-  Image as ImageIcon, X, History, RefreshCw, ChevronLeft, ChevronRight,
+  Upload, Sparkles, Settings, Loader2, Download,
+  Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
-  Bookmark, BookmarkPlus, Server, Settings2, Plus, User, Dices, Camera,
+  Bookmark, BookmarkPlus, Plus, Dices, Camera,
   UserCircle, Wand2, Film
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -169,17 +169,16 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 };
 
 // --- Types ---
-type AppMode = 'editor' | 'upscaler' | 'angles' | 'runpod' | 'video';
+type AppMode = 'editor' | 'upscaler' | 'angles' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream';
 type Resolution = '2k' | '4k' | '8k';
-type VideoEngine = 'runpod' | 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
+type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
 
 interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
 interface QueueTask { 
   id: string; 
   mode: AppMode; 
-  apiProvider: 'runpod' | 'wavespeed'; 
   prompt: string; 
   progress: number; 
   message: string; 
@@ -189,21 +188,12 @@ interface QueueTask {
 }
 interface ActiveLora { id: string; name: string; strength: number; }
 
-const RUNPOD_MODELS = [
-  { id: "Qwen-Rapid-AIO-NSFW-v23.safetensors", name: "Qwen AIO (Rapid-v23)" },
-  { id: "Qwen-Rapid-AIO-NSFW-v19.safetensors", name: "Qwen AIO (Rapid-v19)" }
-];
-
 const LORA_OPTIONS = [
-  { id: "yarn_qwen.safetensors", name: "YARN" }, { id: "hairypussy.safetensors", name: "HRYPSY" },
-  { id: "hmfemme_qwen.safetensors", name: "HMFEM" }, { id: "hairypussy2.safetensors", name: "HRYPSY2" },
-  { id: "qwen4play.safetensors", name: "QWEN4PLAY" }, { id: "FemNde.safetensors", name: "FEMNUDE" },
-  { id: "ENZOM_BJ.safetensors", name: "ENZOM_BJ" }, { id: "ZOOTALLURES_BJ.safetensors", name: "ZOOTALLURES_BJ" },
-  { id: "GNASS_SXE.safetensors", name: "GNASS_SXE" }, { id: "FOK_SXE.safetensors", name: "FOK_SXE" },
-  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" }, { id: "HEARME_BOOBS.safetensors", name: "HEARME_BOOBS" },
-  { id: "LIMABOG_PUSSY.safetensors", name: "LIMABOG_PUSSY" }, { id: "HARPY_BKAKKE.safetensors", name: "HARPY_BKAKKE" },
-  { id: "IR_BJ.safetensors", name: "IR_BJ" }, { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
-  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" }, { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
+  { id: "yarn_qwen.safetensors", name: "YARN" },
+  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" },
+  { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
+  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" },
+  { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
   { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
 ];
 
@@ -259,27 +249,12 @@ const cleanAndPadBase64 = (base64Str: string) => {
   return cleanStr;
 };
 
-const AUTO_LORA_MAP: Record<string, any> = {
-  "creampie": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "cum in mouth": { high: "cum-in-mouth.safetensors", low: "cum-in-mouth.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "creampie coming out": { high: "creampie.safetensors", low: "creampie.safetensors", high_weight: 0.95, low_weight: 0.9 },
-  "vagina": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "pussy": { high: "vagina.safetensors", low: "pussy.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "fingering": { high: "fingering.safetensors", low: "fingering.safetensors", high_weight: 0.9, low_weight: 0.85 },
-  "twerk": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 },
-  "twerking": { high: "twerk.safetensors", low: "twerk.safetensors", high_weight: 0.85, low_weight: 0.8 }
-};
-
 export default function App() {
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
   const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-seedance');
   
   const [wavespeedKey, setWavespeedKey] = useState<string>('');
-  const [runpodKey, setRunpodKey] = useState<string>('');
-  const [runpodEndpointId, setRunpodEndpointId] = useState<string>('');
-  const [ipAdapterEndpointId, setIpAdapterEndpointId] = useState<string>('');
-  const [videoEndpointId, setVideoEndpointId] = useState<string>('7h6lpbp8ebiw6q');
   const [grokKey, setGrokKey] = useState<string>('');
   
   const [prompt, setPrompt] = useState<string>('');
@@ -289,7 +264,6 @@ export default function App() {
   const [promptShotType, setPromptShotType] = useState('Random');
   
   const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
-  const [runpodBalance, setRunpodBalance] = useState<string | null>(null);
 
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
@@ -297,30 +271,12 @@ export default function App() {
   const [distance, setDistance] = useState<number>(1);
   const [selectedRatio, setSelectedRatio] = useState<string>('16:9');
 
-  const [runpodModel, setRunpodModel] = useState<string>('Qwen-Rapid-AIO-NSFW-v23.safetensors');
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
   const [customLoraUrl, setCustomLoraUrl] = useState<string>('');
-  const [sampler, setSampler] = useState<string>('euler');
-  const [scheduler, setScheduler] = useState<string>('simple');
-  const [negativePrompt, setNegativePrompt] = useState<string>('lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature');
-  const [steps, setSteps] = useState<number>(6);
-  const [cfg, setCfg] = useState<number>(1.5);
-  const [denoise, setDenoise] = useState<number>(1.0); 
-
-  const [videoWidth, setVideoWidth] = useState<number>(480);
-  const [videoHeight, setVideoHeight] = useState<number>(832);
-  const [videoLength, setVideoLength] = useState<number>(81);
-  const [videoSteps, setVideoSteps] = useState<number>(10);
-  const [videoCfg, setVideoCfg] = useState<number>(2.0);
+  
   const [videoSeed, setVideoSeed] = useState<number>(-1);
-
-  // New Pruna / Seedance / Wan Ultra Fast API Controls
   const [apiVideoDuration, setApiVideoDuration] = useState<number>(5);
   const [apiVideoResolution, setApiVideoResolution] = useState<'480p' | '720p' | '1080p'>('720p');
-
-  const [faceRefFile, setFaceRefFile] = useState<File | null>(null);
-  const [faceRefPreview, setFaceRefPreview] = useState<string | null>(null);
-  const [ipAdapterStrength, setIpAdapterStrength] = useState<number>(0.75);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -340,7 +296,6 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [showAdvancedRunpod, setShowAdvancedRunpod] = useState(false);
   
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [showLoadPrompt, setShowLoadPrompt] = useState(false);
@@ -354,25 +309,27 @@ export default function App() {
   const touchStartX = useRef<number | null>(null);
   const lastTapTime = useRef<number>(0);
 
-  const COMFY_SAMPLERS = ["euler", "euler_ancestral", "heun", "heunpp2", "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu", "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2"];
-  const COMFY_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"];
-
   useEffect(() => {
     const savedWsKey = localStorage.getItem('arx_wavespeed_key') || '';
-    const savedRpKey = localStorage.getItem('arx_runpod_key') || '';
-    const savedRpEndpoint = localStorage.getItem('arx_runpod_endpoint') || '';
-    const savedIpEndpoint = localStorage.getItem('arx_ipadapter_endpoint') || '';
-    const savedVidEndpoint = localStorage.getItem('arx_video_endpoint') || '7h6lpbp8ebiw6q';
     const savedGrok = localStorage.getItem('arx_grok_key') || '';
-    const savedLoras = localStorage.getItem('arx_runpod_loras');
-    const savedRpModel = localStorage.getItem('arx_runpod_model');
+    const savedLoras = localStorage.getItem('arx_runpod_loras'); // Keeping legacy key to not break local setups
     const savedMode = localStorage.getItem('arx_mode') as AppMode;
     const savedVidEngine = localStorage.getItem('arx_video_engine') as VideoEngine;
     
-    setMode(savedMode || 'editor');
-    if (savedVidEngine) setVideoEngine(savedVidEngine);
+    // Ensure mode doesn't load a deprecated option like 'runpod'
+    if (savedMode && ['editor', 'upscaler', 'angles', 'video'].includes(savedMode)) {
+        setMode(savedMode);
+    } else {
+        setMode('editor');
+    }
+    
+    if (savedVidEngine && savedVidEngine !== 'runpod' as any) {
+        setVideoEngine(savedVidEngine);
+    } else {
+        setVideoEngine('wavespeed-seedance');
+    }
+    
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
-    if (savedRpModel) setRunpodModel(savedRpModel);
     
     if (savedLoras) {
       try { setActiveLoras(JSON.parse(savedLoras)); } 
@@ -380,10 +337,6 @@ export default function App() {
     }
     
     setWavespeedKey(savedWsKey);
-    setRunpodKey(savedRpKey);
-    setRunpodEndpointId(savedRpEndpoint);
-    setIpAdapterEndpointId(savedIpEndpoint);
-    setVideoEndpointId(savedVidEndpoint);
     setGrokKey(savedGrok);
     
     const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
@@ -398,16 +351,12 @@ export default function App() {
         syncCloudHistory(savedWsKey);
         fetchWavespeedBalance(savedWsKey);
       }
-      if (savedRpKey) {
-        fetchRunPodBalance(savedRpKey);
-      }
     }).catch(console.error);
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_video_engine', videoEngine); }, [videoEngine]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
-  useEffect(() => { localStorage.setItem('arx_runpod_model', runpodModel); }, [runpodModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
   const fetchWavespeedBalance = async (keyToUse: string) => {
@@ -425,30 +374,6 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to fetch Wavespeed balance", e);
-    }
-  };
-
-  const fetchRunPodBalance = async (keyToUse: string) => {
-    if (!keyToUse) return;
-    try {
-      const res = await fetch("https://api.runpod.io/graphql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${keyToUse}`
-        },
-        body: JSON.stringify({
-          query: `query { myself { balance } }`
-        })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.myself && typeof json.data.myself.balance === 'number') {
-          setRunpodBalance(`$${json.data.myself.balance.toFixed(2)}`);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch RunPod balance", e);
     }
   };
 
@@ -537,7 +462,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHistoryItem, history]);
 
-  // Lock body scroll when modal is open
   useEffect(() => {
     if (selectedHistoryItem) {
       document.body.style.overflow = 'hidden';
@@ -691,18 +615,11 @@ export default function App() {
 
   const handleSaveSettings = () => {
     localStorage.setItem('arx_wavespeed_key', wavespeedKey);
-    localStorage.setItem('arx_runpod_key', runpodKey);
-    localStorage.setItem('arx_runpod_endpoint', runpodEndpointId);
-    localStorage.setItem('arx_ipadapter_endpoint', ipAdapterEndpointId);
-    localStorage.setItem('arx_video_endpoint', videoEndpointId);
     localStorage.setItem('arx_grok_key', grokKey);
     setShowSettings(false);
     if (wavespeedKey) {
       syncCloudHistory(wavespeedKey);
       fetchWavespeedBalance(wavespeedKey);
-    }
-    if (runpodKey) {
-      fetchRunPodBalance(runpodKey);
     }
   };
 
@@ -800,128 +717,6 @@ export default function App() {
     setActiveLoras(prev => prev.filter(l => l.id !== id));
   };
 
-  const extractBase64 = (obj: any, isVideo: boolean = false): string | null => {
-    if (typeof obj === 'string') {
-      if (obj.startsWith('data:video') || obj.startsWith('http')) return obj;
-      if (obj.startsWith('data:image')) return obj;
-      if (obj.length > 2000) {
-        return isVideo ? `data:video/mp4;base64,${obj}` : `data:image/png;base64,${obj}`;
-      }
-      return null;
-    }
-    if (typeof obj === 'object' && obj !== null) {
-      if (obj.video) {
-        const v = obj.video;
-        return typeof v === 'string' 
-          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
-          : null;
-      }
-      if (obj.output?.video) {
-        const v = obj.output.video;
-        return typeof v === 'string' 
-          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
-          : null;
-      }
-      if (obj.data?.video) {
-        const v = obj.data.video;
-        return typeof v === 'string' 
-          ? (v.startsWith('data:') ? v : `data:video/mp4;base64,${v}`)
-          : null;
-      }
-      for (const key in obj) {
-        const res = extractBase64(obj[key], isVideo);
-        if (res) return res;
-      }
-    }
-    return null;
-  };
-
-  const triggerRunPodVideo = async (base64Image: string, retryCount = 0): Promise<any> => {
-    let safeBase64 = cleanAndPadBase64(base64Image);
-
-    if ((safeBase64.length > 2_500_000 || (selectedFile && selectedFile.size > 1_200_000)) && selectedFile) {
-      const compressed = await optimizeImageForUpload(selectedFile, 768);
-      safeBase64 = cleanAndPadBase64(compressed);
-    }
-
-    let activePrompt = prompt.trim();
-    if (!activePrompt) {
-      activePrompt = "beautiful woman, natural smooth motion, detailed face, realistic movement, high quality, cinematic lighting";
-    }
-
-    const lowerPrompt = activePrompt.toLowerCase();
-
-    const autoLoras: any[] = [];
-    const sortedKeywords = Object.keys(AUTO_LORA_MAP).sort((a, b) => b.length - a.length);
-
-    for (const keyword of sortedKeywords) {
-      const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      if (regex.test(lowerPrompt)) {
-        const config = AUTO_LORA_MAP[keyword];
-        if (!autoLoras.some(l => l.high === config.high)) {
-          autoLoras.push(config);
-        }
-      }
-    }
-
-    const finalAutoLoras = autoLoras.slice(0, 2);
-    
-    console.log("📤 Sending to RunPod Video Wan 2.2:", {
-      prompt: activePrompt.substring(0, 120) + (activePrompt.length > 120 ? "..." : ""),
-      loraCount: finalAutoLoras.length,
-      loras: finalAutoLoras.map(l => l.high)
-    });
-
-    const payload = {
-      input: {
-        prompt: activePrompt,
-        negative_prompt: negativePrompt || "blurry, low quality, deformed, ugly, static, frozen, jitter, artifacts",
-        image_base64: safeBase64,
-        seed: videoSeed === -1 ? Math.floor(Math.random() * 999999999) : videoSeed,
-        cfg: videoCfg,
-        width: videoWidth,
-        height: videoHeight,
-        length: videoLength,
-        steps: videoSteps,
-        lora_pairs: finalAutoLoras
-      }
-    };
-
-    try {
-      const response = await fetch(`https://api.runpod.ai/v2/${videoEndpointId}/run`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${runpodKey}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("🚨 RunPod Error Response:", errorText);
-        
-        if (retryCount < 2 && (errorText.includes("time") || errorText.includes("Connection"))) {
-          console.log(`🔄 Retrying (${retryCount + 1}/3)...`);
-          await new Promise(r => setTimeout(r, 5000));
-          return triggerRunPodVideo(base64Image, retryCount + 1);
-        }
-        throw new Error(`RunPod rejected request: ${errorText.substring(0, 200)}`);
-      }
-
-      const data = await response.json();
-      return {
-        id: data.id,
-        pollUrl: `https://api.runpod.ai/v2/${videoEndpointId}/status/${data.id}`,
-        historyPrompt: activePrompt,
-        modelInfo: finalAutoLoras.length > 0 ? `Wan 2.2 + ${finalAutoLoras.length} LoRAs` : 'Wan 2.2 (RunPod)'
-      };
-    } catch (err: any) {
-      console.error("Video trigger failed:", err);
-      throw err;
-    }
-  };
-
   const triggerWavespeedVideo = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -994,150 +789,6 @@ export default function App() {
       targetResultUrl,
       historyPrompt: activePrompt,
       modelInfo: modelName
-    };
-  };
-
-  const triggerRunPod = async (base64Image: string) => {
-    const safeBase64 = cleanAndPadBase64(base64Image);
-    let faceBase64Data = null;
-    if (faceRefFile) {
-        const rawFaceBase64 = await fileToBase64(faceRefFile);
-        faceBase64Data = cleanAndPadBase64(rawFaceBase64);
-    }
-    
-    const activeEndpointId = faceBase64Data ? ipAdapterEndpointId : runpodEndpointId;
-
-    const workflowObj: any = {
-      "5": { 
-        "inputs": { "ckpt_name": runpodModel },
-        "class_type": "CheckpointLoaderSimple"
-      }
-    };
-
-    let lastModelNodeId = "5";
-    let lastModelOutputIndex = 0;
-    let lastClipNodeId = "5";
-    let lastClipOutputIndex = 1;
-    let currentId = 100;
-
-    activeLoras.forEach(lora => {
-      const nodeId = currentId.toString();
-      workflowObj[nodeId] = {
-        "inputs": {
-          "lora_name": lora.id,
-          "strength_model": lora.strength,
-          "strength_clip": lora.strength,
-          "model": [lastModelNodeId, lastModelOutputIndex],
-          "clip": [lastClipNodeId, lastClipOutputIndex]
-        },
-        "class_type": "LoraLoader"
-      };
-      lastModelNodeId = nodeId;
-      lastModelOutputIndex = 0;
-      lastClipNodeId = nodeId;
-      lastClipOutputIndex = 1;
-      currentId++;
-    });
-
-    if (faceBase64Data) {
-        workflowObj["200"] = {
-            "inputs": { "image": "face_ref.png" },
-            "class_type": "LoadImage"
-        };
-        workflowObj["201"] = {
-            "inputs": { "ipadapter_file": "ip-adapter-plus-face_sdxl_vit-h.safetensors" },
-            "class_type": "IPAdapterModelLoader"
-        };
-        workflowObj["202"] = {
-            "inputs": { "clip_name": "clip_vision_h.safetensors" },
-            "class_type": "CLIPVisionLoader"
-        };
-        workflowObj["203"] = {
-            "inputs": {
-                "weight": ipAdapterStrength,
-                "weight_type": "linear",
-                "combine_embeds": "concat",
-                "start_at": 0.0,
-                "end_at": 1.0,
-                "embeds_scaling": "V only",
-                "model": [lastModelNodeId, lastModelOutputIndex],
-                "ipadapter": ["201", 0],
-                "clip_vision": ["202", 0],
-                "image": ["200", 0]
-            },
-            "class_type": "IPAdapterAdvanced"
-        };
-        lastModelNodeId = "203";
-        lastModelOutputIndex = 0;
-    }
-
-    workflowObj["8"] = { "inputs": { "samples": ["3", 0], "vae": ["5", 2] }, "class_type": "VAEDecode" };
-    workflowObj["60"] = { "inputs": { "filename_prefix": "ARX_Edit", "images": ["8", 0] }, "class_type": "SaveImage" };
-    workflowObj["78"] = { "inputs": { "image": "input_image.png" }, "class_type": "LoadImage" };
-    workflowObj["88"] = { "inputs": { "pixels": ["93", 0], "vae": ["5", 2] }, "class_type": "VAEEncode" };
-    workflowObj["93"] = { "inputs": { "upscale_method": "lanczos", "megapixels": 1, "resolution_steps": 64, "image": ["78", 0] }, "class_type": "ImageScaleToTotalPixels" };
-    workflowObj["110"] = { "inputs": { "prompt": negativePrompt, "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
-    workflowObj["111"] = { "inputs": { "prompt": prompt || "change to red", "clip": [lastClipNodeId, lastClipOutputIndex], "vae": ["5", 2], "image1": ["93", 0] }, "class_type": "TextEncodeQwenImageEditPlus" };
-    workflowObj["3"] = {
-      "inputs": {
-        "seed": Math.floor(Math.random() * 1000000), 
-        "steps": steps, 
-        "cfg": cfg,
-        "sampler_name": sampler,
-        "scheduler": scheduler,
-        "denoise": denoise,
-        "model": [lastModelNodeId, lastModelOutputIndex],
-        "positive": ["111", 0],
-        "negative": ["110", 0],
-        "latent_image": ["88", 0]
-      },
-      "class_type": "KSampler"
-    };
-
-    const imagesPayload = [
-        { name: "input_image.png", image: safeBase64 }
-    ];
-    if (faceBase64Data) {
-        imagesPayload.push({ name: "face_ref.png", image: faceBase64Data });
-    }
-
-    const payload = {
-      input: {
-        workflow: workflowObj,
-        images: imagesPayload
-      }
-    };
-
-    const response = await fetch(`https://api.runpod.ai/v2/${activeEndpointId}/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${runpodKey}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(`RunPod API Error: ${data.error?.message || data.error || 'Request Failed'}`);
-
-    const id = data.id;
-    if (!id) throw new Error('RunPod API Error: Missing Job ID');
-    
-    const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
-    let usedModelInfo = activeLoras.length === 0 
-      ? `${modelName} Base` 
-      : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
-      
-    if (faceBase64Data) {
-        usedModelInfo += ` | IP-Adapter Face (${ipAdapterStrength.toFixed(2)})`;
-    }
-
-    return {
-      id,
-      pollUrl: `https://api.runpod.ai/v2/${activeEndpointId}/status/${id}`,
-      targetResultUrl: '',
-      historyPrompt: prompt,
-      modelInfo: usedModelInfo
     };
   };
 
@@ -1365,38 +1016,13 @@ export default function App() {
   };
 
   const generateEdit = () => {
-    if (mode === 'runpod' || mode === 'video') {
-      if (mode === 'video') {
-        if (videoEngine === 'runpod' && (!runpodKey || !videoEndpointId)) {
-          setError('Please enter your RunPod API Key and Video Endpoint ID in settings.');
-          setShowSettings(true); 
-          return;
-        }
-        if ((videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && !wavespeedKey) {
-          setError('Please enter your Wavespeed API Key in settings.');
-          setShowSettings(true); 
-          return;
-        }
-      }
-      if (mode === 'runpod' && faceRefFile && !ipAdapterEndpointId) {
-        setError('Please enter your IP-Adapter Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-      if (mode === 'runpod' && !faceRefFile && (!runpodKey || !runpodEndpointId)) {
-        setError('Please enter your RunPod API Key and Standard Endpoint ID in settings.');
-        setShowSettings(true); 
-        return;
-      }
-    } else {
-      if (!wavespeedKey) {
-        setError('Please enter your Wavespeed API Key in settings.');
-        setShowSettings(true); 
-        return;
-      }
+    if (!wavespeedKey) {
+      setError('Please enter your Wavespeed API Key in settings.');
+      setShowSettings(true); 
+      return;
     }
 
-    if ((mode === 'editor' || mode === 'runpod' || mode === 'video') && !prompt) {
+    if ((mode === 'editor' || mode === 'video') && !prompt) {
       setError('Please enter a generation prompt.');
       return;
     }
@@ -1414,26 +1040,19 @@ export default function App() {
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
-    let apiProvider: 'runpod' | 'wavespeed' = 'wavespeed';
-    if (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) {
-        apiProvider = 'runpod';
-    }
-    
     let initialModelInfo = mode === 'upscaler' ? 'AI Upscaler' : 
                            mode === 'angles' ? 'Multi-Angle' : 
                            mode === 'video' ? (
                               videoEngine === 'wavespeed-seedance' ? 'Seedance V1' :
                               videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' :
                               videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video' :
-                              videoEngine === 'wavespeed-wan' ? 'Wan 2.2 (Wavespeed)' :
-                              'Wan 2.2 (RunPod)'
+                              'Wan 2.2 (Wavespeed)'
                            ) : 
                            editorModel;
 
     const initialTask: QueueTask = {
       id: taskId,
       mode: mode,
-      apiProvider: apiProvider,
       prompt: prompt || 'Generation',
       progress: 2,
       message: 'Uploading assets...',
@@ -1457,15 +1076,7 @@ export default function App() {
         } else if (mode === 'angles') {
           triggerResult = await triggerWavespeedAngles(selectedFile);
         } else if (mode === 'video') {
-          if (videoEngine === 'wavespeed-wan' || videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') {
-            triggerResult = await triggerWavespeedVideo(selectedFile);
-          } else {
-            const base64ImageRaw = await fileToBase64(selectedFile);
-            triggerResult = await triggerRunPodVideo(base64ImageRaw);
-          }
-        } else if (mode === 'runpod') {
-          const base64ImageRaw = await fileToBase64(selectedFile);
-          triggerResult = await triggerRunPod(base64ImageRaw);
+          triggerResult = await triggerWavespeedVideo(selectedFile);
         } else {
           const base64ImageRaw = await fileToBase64(selectedFile);
           let base64ImageRaw2 = null;
@@ -1480,7 +1091,6 @@ export default function App() {
         const newTaskObj: QueueTask = {
           id: triggerResult.id,
           mode: mode,
-          apiProvider: apiProvider,
           prompt: triggerResult.historyPrompt,
           progress: 15,
           message: 'Queued on server...',
@@ -1524,13 +1134,7 @@ export default function App() {
         await new Promise(r => setTimeout(r, delay));
         pollCount++;
 
-        const headers: any = {};
-        if (task.apiProvider === 'runpod') {
-          headers["Authorization"] = `Bearer ${runpodKey}`;
-        } else {
-          headers["Authorization"] = `Bearer ${wavespeedKey}`;
-        }
-
+        const headers: any = { "Authorization": `Bearer ${wavespeedKey}` };
         const pollResponse = await fetch(task.pollUrl, { headers });
 
         if (!pollResponse.ok) {
@@ -1545,57 +1149,27 @@ export default function App() {
           clearInterval(progressInterval);
           setQueue(prev => prev.map(t => t.id === task.id ? { ...t, progress: 95, message: 'Fetching output...' } : t));
 
-          if (task.apiProvider === 'runpod') {
-            let finalOutput = extractBase64(pollData.output || pollData, task.mode === 'video') || '';
+          let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
 
-            if (finalOutput) {
-              isCompleted = true;
+          if (!outputs || outputs.length === 0) {
+            const fetchTarget = task.targetResultUrl;
+            const resultResponse = await fetch(fetchTarget, {
+              headers: { "Authorization": `Bearer ${wavespeedKey}` }
+            });
+            if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
+            const resultData = await resultResponse.json();
+            outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
+          }
 
-              if (finalOutput.startsWith('data:')) {
-                setQueue(prev => prev.map(t => t.id === task.id ? { ...t, message: 'Uploading to Firebase...' } : t));
-                const isVid = finalOutput.startsWith('data:video') || isVideoUrl(finalOutput);
-                const contentType = isVid ? 'video/mp4' : 'image/png';
-                const fileExt = isVid ? 'mp4' : 'png';
-                
-                try {
-                  const fileBlob = base64ToBlob(finalOutput, contentType);
-                  const firebaseUrl = await uploadToFirebase(fileBlob, `outputs/${task.id}.${fileExt}`);
-                  await handleFinalSuccess(firebaseUrl, task.id, task.prompt, task.modelInfo);
-                } catch (fbErr) {
-                  console.error("Firebase upload failed, falling back to local base64.", fbErr);
-                  await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
-                }
-              } else {
-                await handleFinalSuccess(finalOutput, task.id, task.prompt, task.modelInfo);
-              }
-              continue;
-            } else {
-              const dump = JSON.stringify(pollData.output || pollData).substring(0, 300);
-              throw new Error(`RunPod returned success but no output found. Payload preview: ${dump}...`);
+          if (outputs && outputs.length > 0) {
+            let finalImage = outputs[0];
+            if (typeof finalImage === 'object' && finalImage !== null) {
+                finalImage = finalImage.url || finalImage.file?.url;
             }
+            isCompleted = true;
+            await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
           } else {
-            let outputs = pollData.outputs || pollData.output || pollData.data?.outputs;
-
-            if (!outputs || outputs.length === 0) {
-              const fetchTarget = task.targetResultUrl;
-              const resultResponse = await fetch(fetchTarget, {
-                headers: { "Authorization": `Bearer ${wavespeedKey}` }
-              });
-              if (!resultResponse.ok) throw new Error('Failed to fetch final result.');
-              const resultData = await resultResponse.json();
-              outputs = resultData.outputs || resultData.output || resultData.data?.outputs;
-            }
-
-            if (outputs && outputs.length > 0) {
-              let finalImage = outputs[0];
-              if (typeof finalImage === 'object' && finalImage !== null) {
-                  finalImage = finalImage.url || finalImage.file?.url;
-              }
-              isCompleted = true;
-              await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
-            } else {
-              throw new Error("Generation succeeded but no output URL was found.");
-            }
+            throw new Error("Generation succeeded but no output URL was found.");
           }
         } else if (currentStatus === "failed" || currentStatus === "error" || currentStatus === "canceled") {
           throw new Error(pollData.error || pollData.data?.error || "Task failed on the server.");
@@ -1652,7 +1226,6 @@ export default function App() {
     setResultId(taskId);
     
     if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
-    if (runpodKey) fetchRunPodBalance(runpodKey);
   };
 
   const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
@@ -1699,9 +1272,6 @@ export default function App() {
     setSliderPosition(percentage);
   };
 
-  const displayBalance = (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) ? runpodBalance : wavespeedBalance;
-  const balanceLabel = (mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) ? 'RunPod' : 'Wavespeed';
-
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans flex flex-col selection:bg-zinc-800 selection:text-zinc-100">
       
@@ -1712,14 +1282,14 @@ export default function App() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
-          {displayBalance && (
+          {wavespeedBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
               <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest hidden sm:inline">
-                {balanceLabel}: {displayBalance}
+                Wavespeed: {wavespeedBalance}
               </span>
               <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest sm:hidden">
-                {displayBalance}
+                {wavespeedBalance}
               </span>
             </div>
           )}
@@ -1734,7 +1304,7 @@ export default function App() {
             onClick={() => setShowSettings(!showSettings)} 
             className="p-2.5 hover:bg-zinc-900 rounded-xl border border-transparent hover:border-zinc-800 transition-all group"
           >
-            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${(mode !== 'runpod' && (mode !== 'video' || videoEngine !== 'runpod') && !wavespeedKey) || ((mode === 'runpod' || (mode === 'video' && videoEngine === 'runpod')) && !runpodKey) ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
+            <Settings className={`w-5 h-5 transition-transform group-hover:rotate-90 ${!wavespeedKey ? 'text-zinc-500 animate-pulse' : 'text-zinc-400 group-hover:text-zinc-100'}`} />
           </button>
         </div>
       </nav>
@@ -1746,12 +1316,9 @@ export default function App() {
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
           {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-4 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
             <button onClick={() => setMode('editor')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'editor' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Editor
-            </button>
-            <button onClick={() => setMode('runpod')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
-              <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> RunPod
             </button>
             <button onClick={() => setMode('video')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'video' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Video
@@ -1768,7 +1335,7 @@ export default function App() {
             <div className="flex items-center gap-2 mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
               <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-400 font-mono">
-                01 // {mode === 'editor' ? 'Asset Framework' : mode === 'runpod' ? 'Image for ComfyUI' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
+                01 // {mode === 'editor' ? 'Asset Framework' : mode === 'video' ? 'Image for Video Generation' : mode === 'upscaler' ? 'Image to Upscale' : 'Subject to Rotate'}
               </h2>
             </div>
             
@@ -1880,12 +1447,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Seedance V1</button>
                     <button onClick={() => setVideoEngine('wavespeed-pruna')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-pruna' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Pruna P-Video</button>
                     <button onClick={() => setVideoEngine('wavespeed-wan2i2v')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan2i2v' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan2i2v (Fast)</button>
-                    <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (Wavespeed)</button>
-                    <button onClick={() => setVideoEngine('runpod')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'runpod' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2 (RunPod)</button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2</button>
                   </div>
 
                   <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
@@ -1914,25 +1480,6 @@ export default function App() {
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
-
-                  {videoEngine === 'runpod' && (
-                    <>
-                      <div className="relative">
-                        <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="Negative prompt..." className="w-full h-16 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" />
-                        <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">Negative</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
-                        <div>
-                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Steps <span>{videoSteps}</span></label>
-                          <input type="range" min="1" max="50" step="1" value={videoSteps} onChange={(e) => setVideoSteps(Number(e.target.value))} className="w-full accent-zinc-100" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">CFG <span>{videoCfg.toFixed(1)}</span></label>
-                          <input type="range" min="1" max="10" step="0.5" value={videoCfg} onChange={(e) => setVideoCfg(Number(e.target.value))} className="w-full accent-zinc-100" />
-                        </div>
-                      </div>
-                    </>
-                  )}
 
                   {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && (
                     <div className="space-y-4 pt-4 border-t border-zinc-800/50">
@@ -1987,234 +1534,6 @@ export default function App() {
                       )}
                     </div>
                   )}
-                </div>
-              )}
-
-              {mode === 'runpod' && (
-                <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">RunPod Endpoint</label>
-                    <div className="flex items-center gap-3">
-                      <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
-                        <Dices className={`w-3 h-3 ${isRandomizing ? 'animate-spin' : ''}`} /> Architect Prompt
-                      </button>
-                      <button onClick={() => setShowAdvancedRunpod(!showAdvancedRunpod)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
-                        <Settings2 className="w-3 h-3" /> Advanced
-                      </button>
-                      <button onClick={() => setShowLoadPrompt(true)} className="text-[9px] flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 uppercase tracking-widest font-mono transition-colors">
-                        <Bookmark className="w-3 h-3" /> Presets
-                      </button>
-                    </div>
-                  </div>
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Body Type</label>
-                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Camera Angle</label>
-                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Shot Type</label>
-                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none focus:border-zinc-600 transition-colors cursor-pointer">
-                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="relative">
-                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Enter a base position..." className="w-full h-28 p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl focus:border-zinc-600 focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y min-h-[100px] text-zinc-100" />
-                    <div className="absolute bottom-4 right-5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
-                  </div>
-                  <div className="pt-4 border-t border-zinc-800/50 mt-4">
-                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Face Consistency (IP-Adapter)</label>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="h-32">
-                             <UploadZone
-                                label="Upload Face Reference"
-                                file={faceRefFile}
-                                preview={faceRefPreview}
-                                icon={User}
-                                onClear={() => { 
-                                  if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
-                                  setFaceRefFile(null); 
-                                  setFaceRefPreview(null); 
-                                }}
-                                onProcess={(f: File) => {
-                                    if (faceRefPreview && faceRefPreview.startsWith('blob:')) URL.revokeObjectURL(faceRefPreview);
-                                    const url = URL.createObjectURL(f);
-                                    setFaceRefFile(f);
-                                    setFaceRefPreview(url);
-                                }}
-                              />
-                         </div>
-                         {faceRefFile ? (
-                             <div className="flex flex-col justify-center space-y-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
-                                 <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex justify-between">
-                                     Influence Strength <span>{ipAdapterStrength.toFixed(2)}</span>
-                                 </label>
-                                 <input
-                                     type="range" min="0" max="1.5" step="0.05"
-                                     value={ipAdapterStrength} onChange={(e) => setIpAdapterStrength(Number(e.target.value))}
-                                     className="w-full accent-zinc-100"
-                                 />
-                                 <p className="text-[9px] text-zinc-500 leading-relaxed">
-                                     Higher strength forces stricter facial mapping but may distort stylization.
-                                 </p>
-                             </div>
-                         ) : (
-                             <div className="flex items-center justify-center p-4 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-xl">
-                               <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest text-center">Optional: Upload a portrait image to lock facial identity via IP-Adapter.</p>
-                             </div>
-                         )}
-                     </div>
-                  </div>
-
-                  <AnimatePresence>
-                    {showAdvancedRunpod && (
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="space-y-4 pt-4 border-t border-zinc-800/50">
-
-                          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-                            <div>
-                              <label className="block text-[10px] font-medium text-zinc-100 uppercase tracking-widest mb-3">Base Neural Architecture</label>
-                              <select
-                                value={runpodModel}
-                                onChange={(e) => setRunpodModel(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 font-mono uppercase tracking-widest"
-                              >
-                                {RUNPOD_MODELS.map(m => (
-                                  <option key={m.id} value={m.id}>{m.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                            
-                            <div className="mt-4 pt-4 border-t border-zinc-800/50">
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
-                                <span>Active Style Injections (LoRAs)</span>
-                              </label>
-                              
-                              <div className="space-y-2 mb-3">
-                                {activeLoras.map(lora => (
-                                  <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                                    <span className="text-[9px] font-mono text-zinc-300 w-24 truncate">{lora.name}</span>
-                                    <input 
-                                      type="range" min="0" max="2" step="0.1" 
-                                      value={lora.strength} 
-                                      onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))}
-                                      className="flex-1 accent-zinc-500 h-1" 
-                                    />
-                                    <span className="text-[9px] font-mono text-zinc-500 w-6 text-right">{lora.strength.toFixed(1)}</span>
-                                    <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors">
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                                {activeLoras.length === 0 && (
-                                  <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>
-                                )}
-                              </div>
-
-                              <div className="flex gap-2">
-                                <select 
-                                  onChange={addLora}
-                                  value="none"
-                                  className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner"
-                                >
-                                  <option value="none">Add LoRA to Chain...</option>
-                                  {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
-                                    <option key={opt.id} value={opt.id}>{opt.name}</option>
-                                  ))}
-                                </select>
-                                <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 border border-zinc-700 pointer-events-none">
-                                  <Plus className="w-4 h-4" />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="relative">
-                            <textarea 
-                              value={negativePrompt} 
-                              onChange={(e) => setNegativePrompt(e.target.value)} 
-                              placeholder="Negative prompt..." 
-                              className="w-full h-20 p-4 bg-red-950/20 border border-red-900/30 rounded-xl focus:ring-1 focus:ring-red-500/50 outline-none text-xs leading-relaxed text-zinc-300" 
-                            />
-                            <div className="absolute bottom-3 right-3 text-[9px] font-mono text-red-500/50 uppercase tracking-widest pointer-events-none">
-                              Negative Prompt
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Sampler</label>
-                              <select 
-                                value={sampler} 
-                                onChange={(e) => setSampler(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
-                              >
-                                {COMFY_SAMPLERS.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Scheduler</label>
-                              <select 
-                                value={scheduler} 
-                                onChange={(e) => setScheduler(e.target.value)}
-                                className="w-full p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300"
-                              >
-                                {COMFY_SCHEDULERS.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-4">
-                            <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                Steps <span>{steps}</span>
-                              </label>
-                              <input 
-                                type="range" min="1" max="50" step="1" 
-                                value={steps} onChange={(e) => setSteps(Number(e.target.value))}
-                                className="w-full accent-zinc-100" 
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                CFG <span>{cfg.toFixed(1)}</span>
-                              </label>
-                              <input 
-                                type="range" min="1" max="15" step="0.5" 
-                                value={cfg} onChange={(e) => setCfg(Number(e.target.value))}
-                                className="w-full accent-zinc-100" 
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                                Denoise <span>{denoise.toFixed(2)}</span>
-                              </label>
-                              <input 
-                                type="range" min="0" max="1" step="0.05" 
-                                value={denoise} onChange={(e) => setDenoise(Number(e.target.value))}
-                                className="w-full accent-zinc-100" 
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               )}
 
@@ -2336,12 +1655,11 @@ export default function App() {
                   <>
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
-                    {mode === 'runpod' && <Server className="w-5 h-5" />}
                     {mode === 'video' && <Film className="w-5 h-5" />}
                     {mode === 'angles' && <Box className="w-5 h-5" />}
                   </>
                 )}
-                {isSubmitting ? 'Uploading to Server...' : mode === 'upscaler' ? 'Queue Resolution Enhancement' : mode === 'angles' ? 'Queue 3D Camera Angle' : mode === 'video' ? 'Queue Video Generation' : mode === 'runpod' ? 'Queue RunPod Task' : 'Queue AI Edit'}
+                {isSubmitting ? 'Uploading to Server...' : mode === 'upscaler' ? 'Queue Resolution Enhancement' : mode === 'angles' ? 'Queue 3D Camera Angle' : mode === 'video' ? 'Queue Video Generation' : 'Queue AI Edit'}
               </button>
               
               <AnimatePresence>
@@ -2364,7 +1682,7 @@ export default function App() {
                       >
                         <div className="flex justify-between items-center mb-3">
                            <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'runpod' ? 'RunPod Serverless' : task.mode === 'video' ? 'Video' : task.mode}
+                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'video' ? 'Video' : task.mode}
                            </span>
                            <span className="text-[10px] font-medium text-zinc-100">
                              {Math.round(task.progress)}%
@@ -2476,14 +1794,9 @@ export default function App() {
                           
                           let dynamicModelInfo = editorModel;
                           if (mode === 'video') {
-                              dynamicModelInfo = videoEngine === 'runpod' ? 'Wan 2.2 Video' : 
-                                                 videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 
+                              dynamicModelInfo = videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 
                                                  videoEngine === 'wavespeed-seedance' ? 'Seedance V1 Pro Fast' : 
                                                  videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' : 'Wan 2.2 (Wavespeed)';
-                          } else if (mode === 'runpod') {
-                            const modelName = RUNPOD_MODELS.find(m => m.id === runpodModel)?.name || 'RunPod Base';
-                            dynamicModelInfo = activeLoras.length === 0 ? `${modelName} Base` : `${modelName} + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
-                            if (faceRefFile) dynamicModelInfo += ` | IP-Adapter (${ipAdapterStrength.toFixed(2)})`;
                           }
                           
                           setSelectedHistoryItem(match || { 
@@ -2865,57 +2178,6 @@ export default function App() {
                       value={wavespeedKey} 
                       onChange={(e) => setWavespeedKey(e.target.value)} 
                       placeholder="Enter Wavespeed API Key"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-zinc-800/50">
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod API Key
-                    </label>
-                    <input 
-                      type="password" 
-                      value={runpodKey} 
-                      onChange={(e) => setRunpodKey(e.target.value)} 
-                      placeholder="Enter RunPod API Key"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod Standard Endpoint ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={runpodEndpointId} 
-                      onChange={(e) => setRunpodEndpointId(e.target.value)} 
-                      placeholder="e.g. abc123def456"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod IP-Adapter Endpoint ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={ipAdapterEndpointId} 
-                      onChange={(e) => setIpAdapterEndpointId(e.target.value)} 
-                      placeholder="e.g. 9yusxkbksgwtyk"
-                      className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-medium uppercase tracking-widest text-zinc-400 mb-3">
-                      RunPod Video Endpoint ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={videoEndpointId} 
-                      onChange={(e) => setVideoEndpointId(e.target.value)} 
-                      placeholder="e.g. 7h6lpbp8ebiw6q"
                       className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none transition-all placeholder:text-zinc-700 text-sm" 
                     />
                   </div>
