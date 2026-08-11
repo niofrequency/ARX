@@ -5,6 +5,16 @@
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
+import {
+  fetchHistoryPage,
+  addHistoryDoc,
+  deleteHistoryDoc,
+  deleteAllHistory,
+  fetchSavedPrompts,
+  addSavedPromptDoc,
+  deleteSavedPromptDoc,
+} from './lib/userData';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, Download,
@@ -24,92 +34,17 @@ const toProxyUrl = (url: string): string => {
   return url.replace(WAVESPEED_ORIGIN, '/api/wavespeed/');
 };
 
-// --- Native IndexedDB Wrapper ---
-const DB_NAME = 'ARX_DB';
-const STORE_NAME = 'history';
-const DB_VERSION = 2;
-
-const initDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (e) => {
-      const db = (e.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-  });
-};
-
-const saveHistoryItem = async (item: HistoryItem) => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    store.put(item);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-};
-
-const getHistoryDB = async (): Promise<HistoryItem[]> => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => {
-      const data = request.result as HistoryItem[];
-      resolve(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    };
-    request.onerror = () => reject(request.error);
-  });
-};
-
-const deleteHistoryItemDB = async (id: string) => {
-  const db = await initDB();
-  const itemToRevoke: HistoryItem | undefined = await new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.get(id);
-    request.onsuccess = () => resolve(request.result);
-  });
-  if (itemToRevoke?.url && itemToRevoke.url.startsWith('blob:')) {
-    URL.revokeObjectURL(itemToRevoke.url);
+// --- Utilities: convert a generated result (base64 data URI or a hosted
+// URL from Wavespeed) into a Blob we can hand to Firebase Storage / use for
+// local preview / download. ---
+const urlToBlob = async (url: string): Promise<Blob> => {
+  if (url.startsWith('data:')) {
+    const contentType = url.substring(5, url.indexOf(';')) || 'application/octet-stream';
+    return base64ToBlob(url, contentType);
   }
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    store.delete(id);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-};
-
-const clearHistoryDB = async () => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    store.clear();
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-};
-
-const pruneHistoryDB = async (keepCount: number = 100) => {
-  const history = await getHistoryDB();
-  if (history.length <= keepCount) return;
-  const toDelete = history.slice(keepCount);
-  const db = await initDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  toDelete.forEach(item => {
-    if (item.url && item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
-    store.delete(item.id);
-  });
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch the generated asset.');
+  return res.blob();
 };
 
 // --- Reusable Components ---
@@ -184,7 +119,7 @@ type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream'
 type Resolution = '2k' | '4k' | '8k';
 type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
 
-interface HistoryItem { id: string; prompt: string; url: string; date: string; modelInfo?: string; }
+interface HistoryItem { id: string; prompt: string; url: string; storagePath?: string; date: string; modelInfo?: string; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
 interface QueueTask { 
   id: string; 
@@ -309,6 +244,10 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isDeletingAllHistory, setIsDeletingAllHistory] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -324,14 +263,57 @@ export default function App() {
   const sliderContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
   const lastTapTime = useRef<number>(0);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Loads the first page of the signed-in user's history from Firestore.
+  // Called on sign-in and after bulk-deletes; individual add/delete actions
+  // update local state directly instead of re-fetching.
+  const loadInitialHistory = async (uid: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const { items, lastDoc, hasMore } = await fetchHistoryPage(uid, null);
+      setHistory(items);
+      setHistoryCursor(lastDoc);
+      setHasMoreHistory(hasMore);
+    } catch (e) {
+      console.error('Failed to load history from Firebase', e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Loads the next page of history (pagination), so a user with hundreds or
+  // thousands of generations doesn't have their whole gallery load at once.
+  const loadMoreHistory = async () => {
+    if (!user || isLoadingHistory || !hasMoreHistory) return;
+    setIsLoadingHistory(true);
+    try {
+      const { items, lastDoc, hasMore } = await fetchHistoryPage(user.uid, historyCursor);
+      setHistory(prev => {
+        const merged = [...prev, ...items];
+        return Array.from(new Map(merged.map(item => [item.id, item])).values());
+      });
+      setHistoryCursor(lastDoc);
+      setHasMoreHistory(hasMore);
+    } catch (e) {
+      console.error('Failed to load more history from Firebase', e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   // Keep a fresh Firebase ID token in state at all times while signed in, and
-  // use it to kick off the initial cloud history sync / balance fetch. Tokens
-  // are refreshed on a timer since Firebase ID tokens expire after ~1 hour.
+  // use it to kick off the initial Wavespeed cloud sync / balance fetch, and
+  // load this user's own history + saved prompts from Firestore. Tokens are
+  // refreshed on a timer since Firebase ID tokens expire after ~1 hour.
   useEffect(() => {
     if (!user) {
       setWavespeedKey('');
       setGrokKey('');
+      setHistory([]);
+      setHistoryCursor(null);
+      setHasMoreHistory(true);
+      setSavedPrompts([]);
       return;
     }
     let active = true;
@@ -348,6 +330,8 @@ export default function App() {
         fetchWavespeedBalance(token);
       }
     });
+    loadInitialHistory(user.uid);
+    fetchSavedPrompts(user.uid).then(setSavedPrompts).catch(e => console.error('Failed to load saved prompts', e));
     const interval = setInterval(() => refreshToken(true), 45 * 60 * 1000);
     return () => { active = false; clearInterval(interval); };
   }, [user]);
@@ -376,22 +360,27 @@ export default function App() {
       try { setActiveLoras(JSON.parse(savedLoras)); } 
       catch (e) { console.error("Failed to parse saved LoRAs", e); }
     }
-    
-    const localSavedPrompts = localStorage.getItem('arx_saved_prompts');
-    if (localSavedPrompts) {
-      try { setSavedPrompts(JSON.parse(localSavedPrompts)); } 
-      catch (e) { console.error("Failed to parse saved prompts", e); }
-    }
-
-    getHistoryDB().then(localData => {
-      setHistory(localData);
-    }).catch(console.error);
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_video_engine', videoEngine); }, [videoEngine]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
+
+  // Infinite-scroll: automatically load the next page of history when the
+  // sentinel div at the bottom of the gallery scrolls into view, instead of
+  // fetching the user's whole history up front.
+  useEffect(() => {
+    const el = loadMoreSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        loadMoreHistory();
+      }
+    }, { rootMargin: '400px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMoreHistory, isLoadingHistory, historyCursor, user]);
 
   const fetchWavespeedBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
@@ -449,10 +438,16 @@ export default function App() {
       setHistory(prev => {
         const merged = [...cloudHistory, ...prev];
         const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-        const sorted = unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
-        sorted.forEach(item => saveHistoryItem(item));
-        return sorted;
+        return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       });
+
+      // Also persist these into the user's own Firestore history so they show
+      // up consistently across devices/pagination, not just this session.
+      if (user) {
+        cloudHistory.forEach((item: HistoryItem) => {
+          addHistoryDoc(user.uid, item).catch(e => console.warn('Failed to persist synced item', e));
+        });
+      }
     } catch (e) {
       console.warn("Cloud sync failed gracefully:", e);
     } finally {
@@ -685,33 +680,48 @@ export default function App() {
 
   const handleDeleteHistory = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const item = history.find(h => h.id === id);
     setHistory(prev => prev.filter(item => item.id !== id));
-    await deleteHistoryItemDB(id);
+    if (item?.url?.startsWith('blob:')) URL.revokeObjectURL(item.url);
     if (selectedHistoryItem?.id === id) {
       setSelectedHistoryItem(null);
       setIsFlipped(false);
     }
+    if (user) {
+      try {
+        await deleteHistoryDoc(user.uid, id, item?.storagePath);
+      } catch (err) {
+        console.error('Failed to delete this generation from Firebase', err);
+        setError('Could not delete this image from your account. Please try again.');
+      }
+    }
   };
 
-  const handleSavePromptData = () => {
-    if (!newPromptName.trim() || !promptToSave.trim()) return;
-    const newSavedPrompt = {
-      id: Date.now().toString(),
-      name: newPromptName.trim(),
-      prompt: promptToSave.trim()
-    };
-    const updated = [...savedPrompts, newSavedPrompt];
-    setSavedPrompts(updated);
-    localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
+  const handleSavePromptData = async () => {
+    if (!newPromptName.trim() || !promptToSave.trim() || !user) return;
+    const name = newPromptName.trim();
+    const promptText = promptToSave.trim();
     setShowSavePrompt(false);
     setNewPromptName('');
+    try {
+      const id = await addSavedPromptDoc(user.uid, name, promptText);
+      setSavedPrompts(prev => [{ id, name, prompt: promptText }, ...prev]);
+    } catch (err) {
+      console.error('Failed to save prompt to Firebase', err);
+      setError('Could not save this prompt. Please try again.');
+    }
   };
 
-  const handleDeleteSavedPrompt = (id: string, e: React.MouseEvent) => {
+  const handleDeleteSavedPrompt = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updated = savedPrompts.filter(p => p.id !== id);
-    setSavedPrompts(updated);
-    localStorage.setItem('arx_saved_prompts', JSON.stringify(updated));
+    setSavedPrompts(prev => prev.filter(p => p.id !== id));
+    if (user) {
+      try {
+        await deleteSavedPromptDoc(user.uid, id);
+      } catch (err) {
+        console.error('Failed to delete saved prompt from Firebase', err);
+      }
+    }
   };
 
   const addLora = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1221,39 +1231,56 @@ export default function App() {
 
   const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
     let displayUrl = finalDataUrl;
+    let blob: Blob | null = null;
+    const isVideo = finalDataUrl.startsWith('data:video') || isVideoUrl(finalDataUrl);
 
-    if (finalDataUrl.startsWith('data:video')) {
+    try {
+      blob = await urlToBlob(finalDataUrl);
+      displayUrl = URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn("Could not create a local preview for this result", e);
+    }
+
+    // Upload the result into this user's own Firebase Storage so it's
+    // permanently theirs (not dependent on Wavespeed continuing to host it),
+    // then store the permanent download URL — not the temporary blob — in
+    // their Firestore history record.
+    let permanentUrl = finalDataUrl;
+    let storagePath: string | undefined;
+
+    if (blob && user) {
       try {
-        const blob = base64ToBlob(finalDataUrl, 'video/mp4');
-        displayUrl = URL.createObjectURL(blob);
+        const ext = isVideo ? 'mp4' : 'png';
+        storagePath = `outputs/${user.uid}/${taskId}.${ext}`;
+        permanentUrl = await uploadToFirebase(blob, storagePath);
       } catch (e) {
-        console.warn("Could not create blob URL for video", e);
-      }
-    } else if (finalDataUrl.startsWith('data:image')) {
-      try {
-        const blob = base64ToBlob(finalDataUrl, 'image/png');
-        displayUrl = URL.createObjectURL(blob);
-      } catch (e) {
-        console.warn("Could not create blob URL for image", e);
+        console.error('Failed to save this generation to Firebase Storage', e);
+        storagePath = undefined;
       }
     }
 
     const newItem: HistoryItem = { 
       id: taskId, 
       prompt: taskPrompt, 
-      url: finalDataUrl, 
+      url: permanentUrl, 
+      storagePath,
       date: new Date().toISOString(),
       modelInfo: modelInfoStr 
     };
     
     setHistory(prev => {
       const merged = [newItem, ...prev];
-      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10000);
+      return Array.from(new Map(merged.map(item => [item.id, item])).values())
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     });
-    
-    await saveHistoryItem(newItem);
-    await pruneHistoryDB(100);
+
+    if (user) {
+      try {
+        await addHistoryDoc(user.uid, newItem);
+      } catch (e) {
+        console.error('Failed to save history to Firestore', e);
+      }
+    }
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
     
@@ -1923,6 +1950,7 @@ export default function App() {
                 {isVideoUrl(item.url) ? (
                    <video 
                      src={item.url} 
+                     preload="none"
                      autoPlay loop muted playsInline
                      className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
                      onClick={() => { 
@@ -1934,6 +1962,8 @@ export default function App() {
                    <img 
                      src={item.url} 
                      alt={item.prompt} 
+                     loading="lazy"
+                     decoding="async"
                      className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
                      onClick={() => { 
                        setSelectedHistoryItem(item); 
@@ -1951,6 +1981,22 @@ export default function App() {
               </div>
             ))}
           </div>
+
+          {/* Pagination sentinel: triggers loadMoreHistory() when scrolled
+              into view, plus a manual fallback button for anyone with
+              scroll-triggered fetches disabled/blocked. */}
+          {hasMoreHistory && (
+            <div ref={loadMoreSentinelRef} className="flex items-center justify-center mt-8">
+              <button
+                onClick={loadMoreHistory}
+                disabled={isLoadingHistory}
+                className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-full transition-colors text-[9px] font-medium uppercase tracking-widest text-zinc-300 disabled:opacity-50 border border-zinc-800"
+              >
+                {isLoadingHistory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {isLoadingHistory ? 'Loading…' : 'Load More'}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -2232,13 +2278,26 @@ export default function App() {
 
                 <div className="pt-4 border-t border-zinc-800/50">
                   <button 
-                    onClick={async () => { 
-                      await clearHistoryDB(); 
-                      setHistory([]); 
+                    onClick={async () => {
+                      if (!user) return;
+                      if (!window.confirm('This permanently deletes every image and video you\'ve generated from your account. This cannot be undone. Continue?')) return;
+                      setIsDeletingAllHistory(true);
+                      try {
+                        await deleteAllHistory(user.uid);
+                        setHistory([]);
+                        setHistoryCursor(null);
+                        setHasMoreHistory(false);
+                      } catch (e) {
+                        console.error('Failed to delete all history', e);
+                        setError('Could not delete all your generations. Please try again.');
+                      } finally {
+                        setIsDeletingAllHistory(false);
+                      }
                     }} 
-                    className="w-full py-4 bg-red-500/10 text-red-400 rounded-xl font-medium uppercase tracking-widest text-[10px] border border-red-500/20 transition-all hover:bg-red-500/20"
+                    disabled={isDeletingAllHistory}
+                    className="w-full py-4 bg-red-500/10 text-red-400 rounded-xl font-medium uppercase tracking-widest text-[10px] border border-red-500/20 transition-all hover:bg-red-500/20 disabled:opacity-50"
                   >
-                    Wipe Local Log
+                    {isDeletingAllHistory ? 'Deleting…' : 'Delete All My Generations'}
                   </button>
                 </div>
               </div>
