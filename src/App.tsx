@@ -19,7 +19,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, Download,
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
-  Trash2, Maximize, SlidersHorizontal, Box, Layers, CloudDownload,
+  Trash2, Maximize, SlidersHorizontal, Box, Layers,
   Bookmark, BookmarkPlus, Plus, Dices, Camera,
   UserCircle, Wand2, Film, LogOut
 } from 'lucide-react';
@@ -248,7 +248,6 @@ export default function App() {
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isDeletingAllHistory, setIsDeletingAllHistory] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   
@@ -326,7 +325,6 @@ export default function App() {
     };
     refreshToken().then((token) => {
       if (token) {
-        syncCloudHistory(token);
         fetchWavespeedBalance(token);
       }
     });
@@ -397,68 +395,6 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to fetch Wavespeed balance", e);
-    }
-  };
-
-  const syncCloudHistory = async (keyToUse: string) => {
-    if (!keyToUse) return;
-    setIsSyncing(true);
-    try {
-      // Wavespeed's prediction-history listing is a POST with page/page_size
-      // in the JSON body, not a GET with query params — a GET here 404s.
-      const res = await fetch("/api/wavespeed/predictions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${keyToUse}`
-        },
-        body: JSON.stringify({ page: 1, page_size: 100 })
-      });
-      if (!res.ok) return;
-      
-      const json = await res.json();
-      const items = json.data?.items || json.items || [];
-      const cloudHistory = items
-        .filter((item: any) => item.status === "completed" || item.status === "succeeded" || item.outputs?.length > 0 || item.data?.outputs?.length > 0)
-        .map((item: any) => {
-          let imageUrl = '';
-          const outputs = item.outputs || item.data?.outputs || (typeof item.output === 'string' ? [item.output] : item.output);
-          const out = outputs?.[0];
-          
-          if (typeof out === 'string') imageUrl = out;
-          else if (typeof out === 'object' && out !== null) imageUrl = out.url || out.file?.url;
-
-          let historyPrompt = item.input?.prompt || item.model || 'Cloud Generation';
-          if (item.model?.includes('upscaler')) historyPrompt = `Upscaled Image`;
-          if (item.model?.includes('multiple-angles') || item.model?.includes('qwen-image/edit-multiple')) historyPrompt = `Multi-Angle Render`;
-
-          return {
-            id: item.id,
-            prompt: historyPrompt,
-            url: imageUrl,
-            date: item.created_at || new Date().toISOString(),
-            modelInfo: 'Cloud Generation'
-          };
-        })
-        .filter((item: any) => item.url);
-
-      setHistory(prev => {
-        const merged = [...cloudHistory, ...prev];
-        const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-        return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      });
-
-      // Also persist these into the user's own Firestore history so they show
-      // up consistently across devices/pagination, not just this session.
-      if (user) {
-        cloudHistory.forEach((item: HistoryItem) => {
-          addHistoryDoc(user.uid, item).catch(e => console.warn('Failed to persist synced item', e));
-        });
-      }
-    } catch (e) {
-      console.warn("Cloud sync failed gracefully:", e);
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -1935,17 +1871,7 @@ export default function App() {
             <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 font-mono">
               03 // Generation Log
             </h2>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => syncCloudHistory(wavespeedKey)}
-                disabled={isSyncing || !wavespeedKey}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-full transition-colors text-[9px] font-medium uppercase tracking-widest text-zinc-300 disabled:opacity-50 border border-zinc-800"
-              >
-                <CloudDownload className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce text-zinc-100' : ''}`} />
-                {isSyncing ? 'Syncing...' : 'Fetch Cloud Sync'}
-              </button>
-              <History className="w-4 h-4 text-zinc-500 hidden sm:block" />
-            </div>
+            <History className="w-4 h-4 text-zinc-500 hidden sm:block" />
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
