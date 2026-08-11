@@ -1386,17 +1386,17 @@ export default function App() {
         <div className="lg:col-span-5 space-y-8 sm:space-y-10">
           
           {/* Master Mode Switcher */}
-          <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1 overflow-x-auto sm:grid sm:grid-cols-4 sm:overflow-x-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-            <button onClick={() => setMode('editor')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'editor' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+          <div className="grid grid-cols-4 bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800/50 shadow-inner gap-1">
+            <button onClick={() => setMode('editor')} className={`py-3 sm:py-3.5 px-1 sm:px-2 rounded-xl text-[8px] sm:text-[10px] font-medium uppercase tracking-tight sm:tracking-widest transition-all duration-300 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${mode === 'editor' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Editor
             </button>
-            <button onClick={() => setMode('video')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'video' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+            <button onClick={() => setMode('video')} className={`py-3 sm:py-3.5 px-1 sm:px-2 rounded-xl text-[8px] sm:text-[10px] font-medium uppercase tracking-tight sm:tracking-widest transition-all duration-300 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${mode === 'video' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Video
             </button>
-            <button onClick={() => setMode('angles')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'angles' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+            <button onClick={() => setMode('angles')} className={`py-3 sm:py-3.5 px-1 sm:px-2 rounded-xl text-[8px] sm:text-[10px] font-medium uppercase tracking-tight sm:tracking-widest transition-all duration-300 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${mode === 'angles' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Angles
             </button>
-            <button onClick={() => setMode('upscaler')} className={`py-3.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-medium uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap sm:whitespace-normal ${mode === 'upscaler' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+            <button onClick={() => setMode('upscaler')} className={`py-3 sm:py-3.5 px-1 sm:px-2 rounded-xl text-[8px] sm:text-[10px] font-medium uppercase tracking-tight sm:tracking-widest transition-all duration-300 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${mode === 'upscaler' ? 'bg-zinc-100 text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
               <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Upscale
             </button>
           </div>
