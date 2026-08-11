@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# 🔴 1. STARTUP LIFESPAN: Replaces @modal.enter()
+# 🔴 1. STARTUP LIFESPAN
 # This boots ComfyUI in the background the moment the Cerebrium container spins up.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -158,5 +158,3 @@ async def process_generate(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"Python backend error: {str(e)}"})
-
-# Note: No @modal endpoints exist below here. Uvicorn will automatically serve the `app` object above!
