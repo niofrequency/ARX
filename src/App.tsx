@@ -404,8 +404,15 @@ export default function App() {
     if (!keyToUse) return;
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/wavespeed/predictions?page=1&page_size=100", {
-        headers: { "Authorization": `Bearer ${keyToUse}` }
+      // Wavespeed's prediction-history listing is a POST with page/page_size
+      // in the JSON body, not a GET with query params — a GET here 404s.
+      const res = await fetch("/api/wavespeed/predictions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyToUse}`
+        },
+        body: JSON.stringify({ page: 1, page_size: 100 })
       });
       if (!res.ok) return;
       
