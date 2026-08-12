@@ -5,6 +5,7 @@
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
+import { BrandMark, BrandLoader } from './components/BrandMark';
 import {
   fetchHistoryPage,
   addHistoryDoc,
@@ -21,7 +22,7 @@ import {
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers,
   Bookmark, BookmarkPlus, Plus, Dices, Camera,
-  UserCircle, Wand2, Film, LogOut
+  UserCircle, Wand2, Film, LogOut, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -48,14 +49,6 @@ const urlToBlob = async (url: string): Promise<Blob> => {
 };
 
 // --- Reusable Components ---
-const TechApexIcon = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M12 22L2 2h20L12 22z" />
-    <path d="M12 22V2" />
-    <path d="M2 2l10 10 10-10" />
-  </svg>
-);
-
 const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -119,7 +112,7 @@ type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream'
 type Resolution = '2k' | '4k' | '8k';
 type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
 
-interface HistoryItem { id: string; prompt: string; url: string; storagePath?: string; date: string; modelInfo?: string; }
+interface HistoryItem { id: string; prompt: string; url: string; storagePath?: string; date: string; modelInfo?: string; mode?: AppMode; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
 interface QueueTask { 
   id: string; 
@@ -130,6 +123,14 @@ interface QueueTask {
   pollUrl: string; 
   targetResultUrl: string; 
   modelInfo: string; 
+}
+interface FailedTask {
+  id: string;
+  mode: AppMode;
+  prompt: string;
+  modelInfo: string;
+  errorMessage: string;
+  retry: () => void;
 }
 interface ActiveLora { id: string; name: string; strength: number; }
 
@@ -154,6 +155,23 @@ const RATIO_OPTIONS = [
 const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
 const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
 const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
+
+// One-tap starter prompts, shown while the prompt field is empty, to give
+// first-time users a fast on-ramp before they've learned what a good prompt
+// looks like for each mode.
+const EDITOR_PROMPT_STARTERS = [
+  'Change the background to a neon-lit city at night',
+  'Add soft cinematic lighting and shallow depth of field',
+  'Turn this into a professional studio portrait',
+  'Replace the background with pure white, studio style',
+];
+const VIDEO_PROMPT_STARTERS = [
+  'Slow cinematic zoom in with gentle parallax',
+  'Camera slowly pans left to right',
+  'Subtle wind moving through hair and clothing',
+  'Gentle falling snow in the background',
+];
+
 
 const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
 const verticalOptions = [ { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' }, { v: 30, l: 'High Angle' }];
@@ -237,7 +255,10 @@ export default function App() {
   const [previewUrl3, setPreviewUrl3] = useState<string | null>(null);
   
   const [queue, setQueue] = useState<QueueTask[]>([]);
+  const [queueBatchTotal, setQueueBatchTotal] = useState(0);
+  const [failedTasks, setFailedTasks] = useState<FailedTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChaining, setIsChaining] = useState<AppMode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultId, setResultId] = useState<string | null>(null);
@@ -247,6 +268,12 @@ export default function App() {
   const [historyCursor, setHistoryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [hasLoadedHistoryOnce, setHasLoadedHistoryOnce] = useState(false);
+  const [galleryModeFilter, setGalleryModeFilter] = useState<AppMode | null>(null);
+  const [gallerySortDir, setGallerySortDir] = useState<'asc' | 'desc'>('desc');
+  const [gallerySelectMode, setGallerySelectMode] = useState(false);
+  const [selectedGalleryIds, setSelectedGalleryIds] = useState<Set<string>>(new Set());
+  const [isBulkActing, setIsBulkActing] = useState(false);
   const [isDeletingAllHistory, setIsDeletingAllHistory] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -265,12 +292,14 @@ export default function App() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Loads the first page of the signed-in user's history from Firestore.
-  // Called on sign-in and after bulk-deletes; individual add/delete actions
-  // update local state directly instead of re-fetching.
-  const loadInitialHistory = async (uid: string) => {
+  // Called on sign-in, after bulk-deletes, and whenever the mode filter or
+  // sort direction changes (those need a fresh query, not just more pages of
+  // the old one). Individual add/delete actions update local state directly
+  // instead of re-fetching.
+  const loadInitialHistory = async (uid: string, filter: { mode?: AppMode | null; sortDir?: 'asc' | 'desc' } = {}) => {
     setIsLoadingHistory(true);
     try {
-      const { items, lastDoc, hasMore } = await fetchHistoryPage(uid, null);
+      const { items, lastDoc, hasMore } = await fetchHistoryPage(uid, null, filter);
       setHistory(items);
       setHistoryCursor(lastDoc);
       setHasMoreHistory(hasMore);
@@ -278,6 +307,7 @@ export default function App() {
       console.error('Failed to load history from Firebase', e);
     } finally {
       setIsLoadingHistory(false);
+      setHasLoadedHistoryOnce(true);
     }
   };
 
@@ -287,7 +317,10 @@ export default function App() {
     if (!user || isLoadingHistory || !hasMoreHistory) return;
     setIsLoadingHistory(true);
     try {
-      const { items, lastDoc, hasMore } = await fetchHistoryPage(user.uid, historyCursor);
+      const { items, lastDoc, hasMore } = await fetchHistoryPage(user.uid, historyCursor, {
+        mode: galleryModeFilter,
+        sortDir: gallerySortDir,
+      });
       setHistory(prev => {
         const merged = [...prev, ...items];
         return Array.from(new Map(merged.map(item => [item.id, item])).values());
@@ -300,6 +333,17 @@ export default function App() {
       setIsLoadingHistory(false);
     }
   };
+
+  // Loads the initial page whenever the signed-in user changes, or whenever
+  // the filter/sort changes (those need a fresh query, not just more pages
+  // of the old one).
+  useEffect(() => {
+    if (!user) return;
+    setGallerySelectMode(false);
+    setSelectedGalleryIds(new Set());
+    loadInitialHistory(user.uid, { mode: galleryModeFilter, sortDir: gallerySortDir });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, galleryModeFilter, gallerySortDir]);
 
   // Keep a fresh Firebase ID token in state at all times while signed in, and
   // use it to kick off the initial Wavespeed cloud sync / balance fetch, and
@@ -328,7 +372,6 @@ export default function App() {
         fetchWavespeedBalance(token);
       }
     });
-    loadInitialHistory(user.uid);
     fetchSavedPrompts(user.uid).then(setSavedPrompts).catch(e => console.error('Failed to load saved prompts', e));
     const interval = setInterval(() => refreshToken(true), 45 * 60 * 1000);
     return () => { active = false; clearInterval(interval); };
@@ -365,6 +408,15 @@ export default function App() {
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
   useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
+  // Reset the queue batch counter once every queued item has finished, so the
+  // next round of generations starts a fresh "1/N" count instead of
+  // continuing to climb.
+  useEffect(() => {
+    if (queue.length === 0 && queueBatchTotal !== 0) {
+      setQueueBatchTotal(0);
+    }
+  }, [queue.length, queueBatchTotal]);
+
   // Infinite-scroll: automatically load the next page of history when the
   // sentinel div at the bottom of the gallery scrolls into view, instead of
   // fetching the user's whole history up front.
@@ -378,7 +430,7 @@ export default function App() {
     }, { rootMargin: '400px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMoreHistory, isLoadingHistory, historyCursor, user]);
+  }, [hasMoreHistory, isLoadingHistory, historyCursor, user, galleryModeFilter, gallerySortDir]);
 
   const fetchWavespeedBalance = async (keyToUse: string) => {
     if (!keyToUse) return;
@@ -487,6 +539,28 @@ export default function App() {
     setResultUrl(null);
     setResultId(null);
     setError(null);
+  };
+
+  // Sends a finished result straight into another mode as the new primary
+  // image — no re-download/re-upload needed. Used for "Upscale this",
+  // "Animate this", and "Try another angle" on a completed result.
+  const chainResultAs = async (targetMode: AppMode) => {
+    if (!resultUrl || isChaining) return;
+    setIsChaining(targetMode);
+    try {
+      const blob = await urlToBlob(resultUrl);
+      const file = new File([blob], `arx-result-${Date.now()}.png`, { type: blob.type || 'image/png' });
+      setMode(targetMode);
+      handleFileProcess(file);
+      if (window.innerWidth < 1024) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (e) {
+      console.error('Failed to chain this result into a new mode', e);
+      setError('Could not reuse this result as a new input. Try downloading and re-uploading it instead.');
+    } finally {
+      setIsChaining(null);
+    }
   };
 
   const handleFile2Process = (file: File) => {
@@ -637,6 +711,58 @@ export default function App() {
         console.error('Failed to delete this generation from Firebase', err);
         setError('Could not delete this image from your account. Please try again.');
       }
+    }
+  };
+
+  const toggleGallerySelection = (id: string) => {
+    setSelectedGalleryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!user || selectedGalleryIds.size === 0 || isBulkActing) return;
+    const idsToDelete = Array.from(selectedGalleryIds);
+    setIsBulkActing(true);
+    try {
+      const itemsToDelete = history.filter(h => idsToDelete.includes(h.id));
+      await Promise.all(itemsToDelete.map(item =>
+        deleteHistoryDoc(user.uid, item.id, item.storagePath).catch(err => {
+          console.error(`Failed to delete ${item.id}`, err);
+        })
+      ));
+      itemsToDelete.forEach(item => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); });
+      setHistory(prev => prev.filter(item => !idsToDelete.includes(item.id)));
+      setSelectedGalleryIds(new Set());
+      setGallerySelectMode(false);
+    } catch (err) {
+      console.error('Bulk delete failed', err);
+      setError('Could not delete some of the selected images. Please try again.');
+    } finally {
+      setIsBulkActing(false);
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedGalleryIds.size === 0 || isBulkActing) return;
+    const idsToDownload = Array.from(selectedGalleryIds);
+    setIsBulkActing(true);
+    try {
+      const itemsToDownload = history.filter(h => idsToDownload.includes(h.id));
+      // Trigger downloads one at a time with a short gap — firing many
+      // simultaneous downloads at once gets silently blocked by some browsers.
+      for (const item of itemsToDownload) {
+        await downloadAsset(item.url, item.prompt);
+        await new Promise(r => setTimeout(r, 350));
+      }
+    } catch (err) {
+      console.error('Bulk download failed', err);
+      setError('Could not download some of the selected images. Please try again.');
+    } finally {
+      setIsBulkActing(false);
     }
   };
 
@@ -1050,12 +1176,38 @@ export default function App() {
     };
     
     setQueue(prev => [...prev, initialTask]);
+    setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
 
     if (window.innerWidth < 1024 && resultRef.current) {
       resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     const executeTask = async () => {
+      // Wraps the whole retry: clears the failed-task card, puts a fresh
+      // "uploading" bubble back in the active queue, then reruns this exact
+      // same request (same file(s), mode, and prompt captured when the user
+      // originally hit generate) — no need for them to redo any setup.
+      const retryThisTask = () => {
+        setFailedTasks(prev => prev.filter(f => f.id !== taskId));
+        setQueue(prev => [...prev, initialTask]);
+        setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
+        executeTask();
+      };
+
+      const markFailed = (message: string) => {
+        setFailedTasks(prev => [
+          ...prev.filter(f => f.id !== taskId),
+          {
+            id: taskId,
+            mode,
+            prompt: prompt || initialModelInfo,
+            modelInfo: initialModelInfo,
+            errorMessage: message,
+            retry: retryThisTask,
+          }
+        ]);
+      };
+
       try {
         let triggerResult;
         
@@ -1088,12 +1240,14 @@ export default function App() {
         };
 
         setQueue(prev => prev.map(t => t.id === taskId ? newTaskObj : t));
-        pollBackground(newTaskObj);
+        pollBackground(newTaskObj, markFailed);
 
       } catch (err: any) {
         console.error(err);
+        const message = err.message || 'An unexpected error occurred.';
         setQueue(prev => prev.filter(t => t.id !== taskId));
-        setError(`Task Failed: ${err.message || 'An unexpected error occurred.'}`);
+        setError(`Task Failed: ${message}`);
+        markFailed(message);
       }
     };
 
@@ -1101,7 +1255,7 @@ export default function App() {
     executeTask();
   };
 
-  const pollBackground = async (task: QueueTask) => {
+  const pollBackground = async (task: QueueTask, onFailure: (message: string) => void) => {
     let isCompleted = false;
     let pollCount = 0;
 
@@ -1155,7 +1309,7 @@ export default function App() {
                 finalImage = finalImage.url || finalImage.file?.url;
             }
             isCompleted = true;
-            await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo);
+            await handleFinalSuccess(finalImage, task.id, task.prompt, task.modelInfo, task.mode);
           } else {
             throw new Error("Generation succeeded but no output URL was found.");
           }
@@ -1169,10 +1323,11 @@ export default function App() {
       clearInterval(progressInterval);
       setQueue(prev => prev.filter(t => t.id !== task.id));
       setError(`Task Failed: ${err.message}`);
+      onFailure(err.message || 'An unexpected error occurred.');
     }
   };
 
-  const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string) => {
+  const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string, taskMode: AppMode) => {
     let displayUrl = finalDataUrl;
     let blob: Blob | null = null;
     const isVideo = finalDataUrl.startsWith('data:video') || isVideoUrl(finalDataUrl);
@@ -1208,7 +1363,8 @@ export default function App() {
       url: permanentUrl, 
       storagePath,
       date: new Date().toISOString(),
-      modelInfo: modelInfoStr 
+      modelInfo: modelInfoStr,
+      mode: taskMode
     };
     
     setHistory(prev => {
@@ -1233,8 +1389,7 @@ export default function App() {
     if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
   };
 
-  const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
-    e.stopPropagation(); 
+  const downloadAsset = async (url: string, promptText: string) => {
     try {
       let blobUrlToDownload = url;
       let blobToRevoke: string | null = null;
@@ -1269,6 +1424,11 @@ export default function App() {
     }
   };
 
+  const handleDownload = async (url: string, promptText: string, e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    await downloadAsset(url, promptText);
+  };
+
   const handleSliderMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!sliderContainerRef.current) return;
     const rect = sliderContainerRef.current.getBoundingClientRect();
@@ -1283,7 +1443,7 @@ export default function App() {
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 sm:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <TechApexIcon className="text-zinc-100 w-6 h-6 shrink-0" />
+          <BrandMark className="text-zinc-100 w-6 h-6 shrink-0" />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
@@ -1493,6 +1653,19 @@ export default function App() {
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
+                  {!prompt && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {VIDEO_PROMPT_STARTERS.map((starter) => (
+                        <button
+                          key={starter}
+                          onClick={() => setPrompt(starter)}
+                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-100 uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition-colors"
+                        >
+                          {starter}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && (
                     <div className="space-y-4 pt-4 border-t border-zinc-800/50">
@@ -1660,11 +1833,24 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  {!prompt && (
+                    <div className="flex flex-wrap gap-2 pt-3">
+                      {EDITOR_PROMPT_STARTERS.map((starter) => (
+                        <button
+                          key={starter}
+                          onClick={() => setPrompt(starter)}
+                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-100 uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition-colors"
+                        >
+                          {starter}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               <button onClick={generateEdit} disabled={isSubmitting} className="w-full py-5 rounded-2xl font-medium uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all bg-zinc-100 text-zinc-950 hover:bg-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                {isSubmitting ? <BrandLoader className="w-5 h-5" /> : (
                   <>
                     {mode === 'upscaler' && <Maximize className="w-5 h-5" />}
                     {mode === 'editor' && <Sparkles className="w-5 h-5" />}
@@ -1687,31 +1873,87 @@ export default function App() {
                         Active Queue
                       </h3>
                     </div>
-                    {queue.map(task => (
-                      <motion.div 
-                        key={task.id} 
+                    {(() => {
+                      // Show one consolidated indicator instead of a bubble
+                      // per queued item: "X/Y in queue" plus a single shared
+                      // progress bar tracking whichever item is furthest along.
+                      const activeTask = queue.reduce((best, t) => (t.progress > best.progress ? t : best), queue[0]);
+                      const total = Math.max(queueBatchTotal, queue.length);
+                      const completed = Math.max(total - queue.length, 0);
+                      const position = Math.min(completed + 1, total);
+                      return (
+                        <motion.div
+                          key="queue-summary"
+                          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                          className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-inner"
+                        >
+                          <div className="flex justify-between items-center mb-3">
+                             <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
+                               {position}/{total} in queue
+                             </span>
+                             <span className="text-[10px] font-medium text-zinc-100">
+                               {Math.round(activeTask.progress)}%
+                             </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                             <div className="h-full bg-zinc-300 transition-all duration-300" style={{ width: `${activeTask.progress}%` }} />
+                          </div>
+                          <div className="flex justify-between items-center gap-4">
+                            <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest truncate flex-1">
+                              {activeTask.prompt}
+                            </p>
+                            <p className="text-[9px] font-mono text-zinc-300 uppercase tracking-widest truncate">
+                              {activeTask.message}
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })()}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {failedTasks.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="mt-8 space-y-3"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      <h3 className="text-[10px] font-medium uppercase tracking-[0.2em] text-red-400/80 font-mono">
+                        Failed
+                      </h3>
+                    </div>
+                    {failedTasks.map(task => (
+                      <motion.div
+                        key={task.id}
                         initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-                        className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-inner"
+                        className="bg-red-950/20 border border-red-900/40 rounded-2xl p-4 shadow-inner"
                       >
-                        <div className="flex justify-between items-center mb-3">
-                           <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">
-                             {task.mode === 'angles' ? 'Multi-Angle' : task.mode === 'video' ? 'Video' : task.mode}
-                           </span>
-                           <span className="text-[10px] font-medium text-zinc-100">
-                             {Math.round(task.progress)}%
-                           </span>
+                        <div className="flex justify-between items-center gap-3 mb-2">
+                          <span className="text-[10px] font-medium text-red-300 uppercase tracking-widest truncate">
+                            {task.mode === 'angles' ? 'Multi-Angle' : task.mode}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={task.retry}
+                              className="flex items-center gap-1.5 text-[9px] font-medium uppercase tracking-widest text-zinc-950 bg-zinc-100 hover:bg-white px-3 py-1.5 rounded-full transition-colors"
+                            >
+                              <RefreshCw className="w-3 h-3" /> Retry
+                            </button>
+                            <button
+                              onClick={() => setFailedTasks(prev => prev.filter(f => f.id !== task.id))}
+                              className="p-1.5 text-red-400/70 hover:text-red-300 transition-colors"
+                              title="Dismiss"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
-                           <div className="h-full bg-zinc-300 transition-all duration-300" style={{ width: `${task.progress}%` }} />
-                        </div>
-                        <div className="flex justify-between items-center gap-4">
-                          <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest truncate flex-1">
-                            {task.prompt}
-                          </p>
-                          <p className="text-[9px] font-mono text-zinc-300 uppercase tracking-widest truncate">
-                            {task.message}
-                          </p>
-                        </div>
+                        <p className="text-[9px] font-mono text-red-400/70 uppercase tracking-widest truncate">
+                          {task.errorMessage}
+                        </p>
                       </motion.div>
                     ))}
                   </motion.div>
@@ -1754,8 +1996,57 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {resultUrl && !isVideoUrl(resultUrl) && (
+              <div className="flex items-center gap-2 mb-6 flex-wrap">
+                {mode !== 'upscaler' && (
+                  <button
+                    onClick={() => chainResultAs('upscaler')}
+                    disabled={isChaining !== null}
+                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 hover:text-zinc-100 transition-all bg-zinc-900/70 px-4 py-2 rounded-full border border-zinc-800 disabled:opacity-50"
+                  >
+                    {isChaining === 'upscaler' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Maximize className="w-3.5 h-3.5" />}
+                    Upscale This
+                  </button>
+                )}
+                {mode !== 'video' && (
+                  <button
+                    onClick={() => chainResultAs('video')}
+                    disabled={isChaining !== null}
+                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 hover:text-zinc-100 transition-all bg-zinc-900/70 px-4 py-2 rounded-full border border-zinc-800 disabled:opacity-50"
+                  >
+                    {isChaining === 'video' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Film className="w-3.5 h-3.5" />}
+                    Animate This
+                  </button>
+                )}
+                {mode !== 'angles' && (
+                  <button
+                    onClick={() => chainResultAs('angles')}
+                    disabled={isChaining !== null}
+                    className="text-[10px] font-medium uppercase tracking-widest text-zinc-300 flex items-center gap-2 hover:bg-zinc-800 hover:text-zinc-100 transition-all bg-zinc-900/70 px-4 py-2 rounded-full border border-zinc-800 disabled:opacity-50"
+                  >
+                    {isChaining === 'angles' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Box className="w-3.5 h-3.5" />}
+                    Try Another Angle
+                  </button>
+                )}
+              </div>
+            )}
             
-            <div className="relative aspect-square sm:aspect-[4/3] bg-zinc-900/30 rounded-[2.5rem] overflow-hidden border border-zinc-800 shadow-xl flex items-center justify-center">
+            {/* Ambient glow behind the output frame, matching the sign-in screen's accent instead of leaving the rest of the app flat black */}
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30 -z-10">
+                <div className="w-[85%] aspect-square rounded-full bg-cyan-500/10 blur-[100px]" />
+              </div>
+              <div className="relative aspect-square sm:aspect-[4/3] bg-zinc-900/30 rounded-[2.5rem] overflow-hidden border border-zinc-800 shadow-xl flex items-center justify-center">
+              {resultUrl && (
+                <motion.div
+                  key={`flash-${resultId}`}
+                  initial={{ opacity: 0.9 }}
+                  animate={{ opacity: 0 }}
+                  transition={{ duration: 1.4, ease: 'easeOut' }}
+                  className="pointer-events-none absolute inset-0 z-30 rounded-[2.5rem] ring-2 ring-zinc-100/70 shadow-[0_0_80px_15px_rgba(255,255,255,0.18)]"
+                />
+              )}
               <AnimatePresence mode="wait">
                 {resultUrl ? (
                   <motion.div 
@@ -1849,8 +2140,10 @@ export default function App() {
                   </motion.div>
                 ) : queue.length > 0 ? (
                   <div className="flex flex-col items-center text-center p-12">
-                    <Layers className="w-12 h-12 text-zinc-700 animate-pulse mb-4" />
-                    <p className="text-sm font-medium mb-2 uppercase tracking-widest text-zinc-300">Processing Tasks</p>
+                    <BrandLoader className="w-12 h-12 text-zinc-700 mb-4" />
+                    <p className="text-sm font-medium mb-2 uppercase tracking-widest text-zinc-300">
+                      {Math.min(Math.max(queueBatchTotal, queue.length) - queue.length + 1, Math.max(queueBatchTotal, queue.length))}/{Math.max(queueBatchTotal, queue.length)} In Queue
+                    </p>
                     <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
                       Your results will appear here shortly.
                     </p>
@@ -1860,65 +2153,183 @@ export default function App() {
                 )}
               </AnimatePresence>
             </div>
+            </div>
           </div>
         </div>
       </main>
 
       {/* History Grid */}
-      {history.length > 0 && (
+      {user && (history.length > 0 || (hasLoadedHistoryOnce && !isLoadingHistory)) && (
         <section className="max-w-[1800px] w-full mx-auto px-4 sm:px-8 xl:px-12 pt-16 border-t border-zinc-800/50 pb-12">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
             <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 font-mono">
               03 // Generation Log
             </h2>
             <History className="w-4 h-4 text-zinc-500 hidden sm:block" />
           </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
-            {history.map((item) => (
-              <div 
-                key={item.id} 
-                className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
-              >
-                {isVideoUrl(item.url) ? (
-                   <video 
-                     src={item.url} 
-                     preload="none"
-                     autoPlay loop muted playsInline
-                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
-                     onClick={() => { 
-                       setSelectedHistoryItem(item); 
-                       setIsFlipped(false); 
-                     }} 
-                   />
-                ) : (
-                   <img 
-                     src={item.url} 
-                     alt={item.prompt} 
-                     loading="lazy"
-                     decoding="async"
-                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100" 
-                     onClick={() => { 
-                       setSelectedHistoryItem(item); 
-                       setIsFlipped(false); 
-                     }} 
-                   />
-                )}
-                
-                <button 
-                  onClick={(e) => handleDeleteHistory(item.id, e)} 
-                  className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+
+          {(history.length > 0 || galleryModeFilter) && (
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([null, 'editor', 'video', 'angles', 'upscaler'] as (AppMode | null)[]).map((m) => (
+                  <button
+                    key={m ?? 'all'}
+                    onClick={() => setGalleryModeFilter(m)}
+                    className={`px-3.5 py-2 rounded-full text-[9px] font-medium uppercase tracking-widest border transition-colors ${
+                      galleryModeFilter === m
+                        ? 'bg-zinc-100 text-zinc-950 border-zinc-100'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    {m === null ? 'All' : m === 'angles' ? 'Angles' : m === 'upscaler' ? 'Upscale' : m === 'video' ? 'Video' : 'Editor'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setGallerySortDir(prev => (prev === 'desc' ? 'asc' : 'desc'))}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[9px] font-medium uppercase tracking-widest border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <ChevronRight className={`w-3 h-3 transition-transform ${gallerySortDir === 'desc' ? 'rotate-90' : '-rotate-90'}`} />
+                  {gallerySortDir === 'desc' ? 'Newest' : 'Oldest'}
+                </button>
+                <button
+                  onClick={() => {
+                    setGallerySelectMode(prev => !prev);
+                    setSelectedGalleryIds(new Set());
+                  }}
+                  className={`px-3.5 py-2 rounded-full text-[9px] font-medium uppercase tracking-widest border transition-colors ${
+                    gallerySelectMode
+                      ? 'bg-zinc-100 text-zinc-950 border-zinc-100'
+                      : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-700'
+                  }`}
+                >
+                  {gallerySelectMode ? 'Cancel' : 'Select'}
                 </button>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          <AnimatePresence>
+            {gallerySelectMode && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="flex items-center justify-between gap-3 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 mb-6 overflow-hidden"
+              >
+                <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">
+                  {selectedGalleryIds.size} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBulkDownload}
+                    disabled={selectedGalleryIds.size === 0 || isBulkActing}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[9px] font-medium uppercase tracking-widest bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition-colors disabled:opacity-40"
+                  >
+                    {isBulkActing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                    Download
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={selectedGalleryIds.size === 0 || isBulkActing}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[9px] font-medium uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"
+                  >
+                    {isBulkActing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Delete
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {history.length === 0 ? (
+            <div className="flex flex-col items-center text-center py-20 border border-dashed border-zinc-800 rounded-[2rem] bg-zinc-900/20">
+              <History className="w-10 h-10 text-zinc-700 mb-4" />
+              {galleryModeFilter ? (
+                <>
+                  <p className="text-sm font-medium mb-2 uppercase tracking-widest text-zinc-300">Nothing here yet</p>
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-5">
+                    No generations found for this filter.
+                  </p>
+                  <button
+                    onClick={() => setGalleryModeFilter(null)}
+                    className="text-[9px] font-medium uppercase tracking-widest text-zinc-950 bg-zinc-100 hover:bg-white px-4 py-2 rounded-full transition-colors"
+                  >
+                    Clear Filter
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium mb-2 uppercase tracking-widest text-zinc-300">Your generations will show up here</p>
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                    Run your first edit above to get started.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
+              {history.map((item) => {
+                const isSelected = selectedGalleryIds.has(item.id);
+                return (
+                  <div 
+                    key={item.id} 
+                    className="relative group rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/30 aspect-square"
+                  >
+                    {isVideoUrl(item.url) ? (
+                       <video 
+                         src={item.url} 
+                         preload="none"
+                         autoPlay loop muted playsInline
+                         className={`w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100 ${isSelected ? 'ring-2 ring-inset ring-zinc-100' : ''}`}
+                         onClick={() => {
+                           if (gallerySelectMode) { toggleGallerySelection(item.id); return; }
+                           setSelectedHistoryItem(item); 
+                           setIsFlipped(false); 
+                         }} 
+                       />
+                    ) : (
+                       <img 
+                         src={item.url} 
+                         alt={item.prompt} 
+                         loading="lazy"
+                         decoding="async"
+                         className={`w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-500 opacity-80 hover:opacity-100 ${isSelected ? 'ring-2 ring-inset ring-zinc-100' : ''}`}
+                         onClick={() => {
+                           if (gallerySelectMode) { toggleGallerySelection(item.id); return; }
+                           setSelectedHistoryItem(item); 
+                           setIsFlipped(false); 
+                         }} 
+                       />
+                    )}
+
+                    {gallerySelectMode ? (
+                      <div
+                        onClick={() => toggleGallerySelection(item.id)}
+                        className={`absolute top-2 left-2 w-5 h-5 rounded-md border flex items-center justify-center cursor-pointer transition-colors ${
+                          isSelected ? 'bg-zinc-100 border-zinc-100' : 'bg-zinc-950/70 border-zinc-600'
+                        }`}
+                      >
+                        {isSelected && <div className="w-2.5 h-2.5 rounded-sm bg-zinc-950" />}
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={(e) => handleDeleteHistory(item.id, e)} 
+                        className="absolute top-2 left-2 p-2 bg-zinc-950/80 rounded-lg text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Pagination sentinel: triggers loadMoreHistory() when scrolled
               into view, plus a manual fallback button for anyone with
               scroll-triggered fetches disabled/blocked. */}
-          {hasMoreHistory && (
+          {hasMoreHistory && history.length > 0 && (
             <div ref={loadMoreSentinelRef} className="flex items-center justify-center mt-8">
               <button
                 onClick={loadMoreHistory}
