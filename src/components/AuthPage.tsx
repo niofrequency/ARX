@@ -2,14 +2,7 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword } from '../lib/firebase';
-
-// Simple logo mark reused from the main app so the auth screen matches the brand.
-const TechApexIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2L2 20H22L12 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    <path d="M12 2V20" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-  </svg>
-);
+import { BrandMark } from './BrandMark';
 
 const GoogleIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
@@ -94,7 +87,7 @@ const AuthPage: React.FC = () => {
 
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-10">
-          <TechApexIcon className="text-zinc-100 w-8 h-8 mb-3" />
+          <BrandMark className="text-zinc-100 w-8 h-8 mb-3" />
           <h1 className="text-2xl font-bold tracking-tight">ARX</h1>
           <p className="text-zinc-500 text-sm mt-2">
             {mode === 'signup' ? 'Create an account to get started' : mode === 'reset' ? 'Reset your password' : 'Sign in to continue'}
