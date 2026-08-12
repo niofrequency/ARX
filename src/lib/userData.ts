@@ -8,12 +8,15 @@ import {
   orderBy,
   limit,
   startAfter,
+  where,
   type QueryDocumentSnapshot,
   type DocumentData,
 } from 'firebase/firestore';
 import { db, deleteFromFirebase } from './firebase';
 
 // --- Types (kept in sync with the ones in App.tsx) ---
+export type HistoryMode = 'editor' | 'upscaler' | 'angles' | 'video';
+
 export interface HistoryItem {
   id: string;
   prompt: string;
@@ -21,6 +24,7 @@ export interface HistoryItem {
   storagePath?: string;
   date: string;
   modelInfo?: string;
+  mode?: HistoryMode;
 }
 
 export interface SavedPrompt {
@@ -31,20 +35,36 @@ export interface SavedPrompt {
 
 export const HISTORY_PAGE_SIZE = 24;
 
+export interface HistoryFilter {
+  mode?: HistoryMode | null;
+  sortDir?: 'asc' | 'desc';
+}
+
 const historyCollection = (uid: string) => collection(db, 'users', uid, 'history');
 const savedPromptsCollection = (uid: string) => collection(db, 'users', uid, 'savedPrompts');
 
 /**
- * Fetches one page of a user's generation history, newest first. Pass the
- * last document snapshot from the previous page as `cursor` to get the next
- * page. This keeps the gallery from having to load a user's entire history
- * (which could be hundreds/thousands of images) all at once.
+ * Fetches one page of a user's generation history. Pass the last document
+ * snapshot from the previous page as `cursor` to get the next page. This
+ * keeps the gallery from having to load a user's entire history (which could
+ * be hundreds/thousands of images) all at once.
+ *
+ * Optionally filter to a single generation mode and/or flip sort direction —
+ * whenever either of those change, callers should pass cursor=null to
+ * restart pagination from the top of the new query.
  */
 export const fetchHistoryPage = async (
   uid: string,
-  cursor: QueryDocumentSnapshot<DocumentData> | null = null
+  cursor: QueryDocumentSnapshot<DocumentData> | null = null,
+  filter: HistoryFilter = {}
 ): Promise<{ items: HistoryItem[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null; hasMore: boolean }> => {
-  const constraints = [orderBy('date', 'desc'), ...(cursor ? [startAfter(cursor)] : []), limit(HISTORY_PAGE_SIZE)];
+  const { mode = null, sortDir = 'desc' } = filter;
+  const constraints = [
+    ...(mode ? [where('mode', '==', mode)] : []),
+    orderBy('date', sortDir),
+    ...(cursor ? [startAfter(cursor)] : []),
+    limit(HISTORY_PAGE_SIZE),
+  ];
   const snap = await getDocs(query(historyCollection(uid), ...constraints));
   const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<HistoryItem, 'id'>) }));
   return {
