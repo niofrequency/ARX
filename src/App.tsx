@@ -1,4 +1,4 @@
-/** 
+/**
  * @license 
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,7 +22,7 @@ import {
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers,
   Bookmark, BookmarkPlus, Plus, Dices, Camera,
-  UserCircle, Wand2, Film, LogOut, RefreshCw
+  UserCircle, Wand2, Film, LogOut, RefreshCw, Copy, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -259,6 +259,7 @@ export default function App() {
   const [failedTasks, setFailedTasks] = useState<FailedTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChaining, setIsChaining] = useState<AppMode | null>(null);
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultId, setResultId] = useState<string | null>(null);
@@ -525,6 +526,22 @@ export default function App() {
     }
   };
 
+  // Copies any prompt text to the clipboard and briefly shows a checkmark on
+  // whichever button triggered it. `id` distinguishes the main prompt field
+  // ('main') from individual gallery card prompts (their history item id) so
+  // only the button that was actually clicked shows the confirmation.
+  const copyPromptToClipboard = async (text: string, id: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPromptId(id);
+      setTimeout(() => setCopiedPromptId(prev => (prev === id ? null : prev)), 1500);
+    } catch (e) {
+      console.error('Failed to copy prompt', e);
+      setError('Could not copy to clipboard.');
+    }
+  };
+
   const handleFileProcess = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please provide a valid image file.');
@@ -541,27 +558,32 @@ export default function App() {
     setError(null);
   };
 
-  // Sends a finished result straight into another mode as the new primary
-  // image — no re-download/re-upload needed. Used for "Upscale this",
-  // "Animate this", and "Try another angle" on a completed result.
-  const chainResultAs = async (targetMode: AppMode) => {
-    if (!resultUrl || isChaining) return;
+  // Sends any finished image (from the main result panel, or a gallery item)
+  // straight into another mode as the new primary image — no re-download/
+  // re-upload needed. Used for "Upscale this", "Animate this", "Try another
+  // angle" on the result panel, and the equivalent actions on a gallery card.
+  const chainImageAs = async (targetMode: AppMode, sourceUrl: string) => {
+    if (!sourceUrl || isChaining) return;
     setIsChaining(targetMode);
     try {
-      const blob = await urlToBlob(resultUrl);
+      const blob = await urlToBlob(sourceUrl);
       const file = new File([blob], `arx-result-${Date.now()}.png`, { type: blob.type || 'image/png' });
       setMode(targetMode);
       handleFileProcess(file);
+      setSelectedHistoryItem(null);
+      setIsFlipped(false);
       if (window.innerWidth < 1024) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (e) {
-      console.error('Failed to chain this result into a new mode', e);
-      setError('Could not reuse this result as a new input. Try downloading and re-uploading it instead.');
+      console.error('Failed to chain this image into a new mode', e);
+      setError('Could not reuse this image as a new input. Try downloading and re-uploading it instead.');
     } finally {
       setIsChaining(null);
     }
   };
+
+  const chainResultAs = (targetMode: AppMode) => chainImageAs(targetMode, resultUrl || '');
 
   const handleFile2Process = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -640,23 +662,10 @@ export default function App() {
     }
   };
 
-  const handleAnimateFromHistory = async (url: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const file = new File([blob], "animate.png", { type: blob.type });
-      
-      setSelectedFile(file);
-      setPreviewUrl(url);
-      setMode('video');
-      setSelectedHistoryItem(null);
-      setIsFlipped(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) {
-      console.error("Could not extract file from history", e);
-      setError("Failed to extract that image to the video engine. (CORS or network error)");
-    }
-  };
+  // Kept as a thin wrapper so the existing call site below doesn't need to
+  // change — now routes through chainImageAs, which shows a proper loading
+  // state on the button instead of silently freezing while it fetches.
+  const handleAnimateFromHistory = (url: string) => chainImageAs('video', url);
 
   const handleSaveSettings = () => {
     setShowSettings(false);
@@ -1650,7 +1659,16 @@ export default function App() {
                     </div>
                   </div>
                   <div className="relative">
-                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
+                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 pr-14 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
+                    {prompt && (
+                      <button
+                        onClick={() => copyPromptToClipboard(prompt, 'main')}
+                        title="Copy prompt"
+                        className="absolute top-3 right-3 p-2 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
+                      >
+                        {copiedPromptId === 'main' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    )}
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
                   {!prompt && (
@@ -1827,6 +1845,15 @@ export default function App() {
                   <div className="relative">
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                      {prompt && (
+                        <button
+                          onClick={() => copyPromptToClipboard(prompt, 'main')}
+                          title="Copy prompt"
+                          className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
+                        >
+                          {copiedPromptId === 'main' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                       <button onClick={enhancePrompt} className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors" title="Magic Prompt Enhancer"><Wand2 className="w-3.5 h-3.5" /></button>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
                         {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : editorModel === 'seedream' ? 'Seedream V5.0 Editor' : editorModel === 'qwen-lora' ? 'Qwen LoRA Editor' : 'Wan-2.6 Editor'}
@@ -2500,10 +2527,17 @@ export default function App() {
                                 </p>
                             )}
                             
-                            <div className="w-full max-w-2xl mx-auto flex items-center justify-center overflow-hidden mb-6 flex-1">
+                            <div className="w-full max-w-2xl mx-auto flex items-start justify-center gap-2 overflow-hidden mb-6 flex-1">
                               <p className="text-sm sm:text-lg text-zinc-100 leading-relaxed px-4 font-light">
                                 {img.prompt}
                               </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); copyPromptToClipboard(img.prompt, img.id); }}
+                                title="Copy prompt"
+                                className="shrink-0 p-2 mt-0.5 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-900 rounded-lg transition-colors"
+                              >
+                                {copiedPromptId === img.id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                              </button>
                             </div>
                             
                             <div className="w-full max-w-md mx-auto space-y-3 shrink-0">
@@ -2518,17 +2552,41 @@ export default function App() {
                               
                               {!isVideoUrl(img.url) && (
                                 <>
-                                  {/* USE IMAGE IN VIDEO BUTTON */}
-                                  <button 
-                                    onClick={(e) => { 
-                                      e.stopPropagation();
-                                      handleAnimateFromHistory(img.url);
-                                    }} 
-                                    className="w-full py-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-[0.15em] text-[10px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                  >
-                                    <Film className="w-4 h-4" />
-                                    Use Image in Video
-                                  </button>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {img.mode !== 'upscaler' && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); chainImageAs('upscaler', img.url); }}
+                                        disabled={isChaining !== null}
+                                        className="py-3.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-widest text-[9px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
+                                      >
+                                        {isChaining === 'upscaler' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Maximize className="w-4 h-4" />}
+                                        Upscale
+                                      </button>
+                                    )}
+                                    {img.mode !== 'video' && (
+                                      <button 
+                                        onClick={(e) => { 
+                                          e.stopPropagation();
+                                          handleAnimateFromHistory(img.url);
+                                        }} 
+                                        disabled={isChaining !== null}
+                                        className="py-3.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl font-medium uppercase tracking-widest text-[9px] hover:bg-indigo-500/20 transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
+                                      >
+                                        {isChaining === 'video' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+                                        Animate
+                                      </button>
+                                    )}
+                                    {img.mode !== 'angles' && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); chainImageAs('angles', img.url); }}
+                                        disabled={isChaining !== null}
+                                        className="py-3.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-xl font-medium uppercase tracking-widest text-[9px] hover:bg-zinc-800 transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
+                                      >
+                                        {isChaining === 'angles' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Box className="w-4 h-4" />}
+                                        Angle
+                                      </button>
+                                    )}
+                                  </div>
 
                                   <button 
                                     onClick={(e) => { 
