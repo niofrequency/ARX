@@ -9,25 +9,19 @@
 // key out of the browser entirely.
 export const generateRandomIdea = async (
   idToken: string,
-  basePrompt: string = '',
-  bodyType: string = 'Random',
-  angle: string = 'Random',
-  shotType: string = 'Random'
+  basePrompt: string = ''
 ): Promise<string> => {
   if (!idToken) {
     throw new Error('You must be signed in to use the AI prompt architect.');
   }
 
   const systemInstruction = `You are an expert AI image prompt architect.
-Your job is to turn basic parameters into a highly detailed, cinematic, comma-separated prompt optimized for professional design, cinematic portraits, and high-end visual production models.
+Your job is to turn a basic idea into a highly detailed, cinematic, comma-separated prompt optimized for professional design, cinematic portraits, and high-end visual production models.
 Return ONLY the raw prompt. No explanations, no quotes, no markdown.`;
 
-  const userMessage = `Create a detailed, high-quality image prompt using these parameters:
+  const userMessage = `Create a detailed, high-quality image prompt based on this concept:
 
-Base concept: ${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'stunning cinematic portrait of a professional subject'}
-Body Type: ${bodyType !== 'Random' ? bodyType : 'balanced natural proportions'}
-Camera Angle: ${angle !== 'Random' ? angle : 'dynamic cinematic angle'}
-Shot Type: ${shotType !== 'Random' ? shotType : 'dramatic medium shot'}
+${basePrompt && basePrompt.trim() !== '' ? basePrompt : 'a stunning cinematic portrait of a professional subject, with a dynamic camera angle and dramatic shot composition'}
 
 Requirements:
 - Extremely detailed, photorealistic, cinematic lighting
