@@ -5,7 +5,7 @@ import { adminDb, adminStorage } from './_lib/firebaseAdmin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // This must run on Vercel's Node.js runtime (default when no `runtime: 'edge'`
-// is set) — firebase-admin and Node's crypto/Buffer APIs aren't Edge-compatible.
+// is set) — firebase-admin and Node's crypto/Buffer APIs aren't Edge-compatible. 
 // Body parsing is disabled so we can verify the signature against the exact
 // raw bytes Wavespeed signed; parsing-then-reserializing JSON can change
 // whitespace/field order and silently break verification.
