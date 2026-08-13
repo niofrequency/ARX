@@ -8,6 +8,12 @@ import { useAuth } from './lib/AuthContext';
 import { BrandMark, BrandLoader } from './components/BrandMark';
 import InstallAppButton from './components/InstallAppButton';
 import {
+  saveFailedTaskSnapshot,
+  deleteFailedTaskSnapshot,
+  loadFailedTaskSnapshots,
+  type FailedTaskSnapshot,
+} from './lib/failedTaskCache';
+import {
   fetchHistoryPage,
   addHistoryDoc,
   deleteHistoryDoc,
@@ -258,6 +264,7 @@ export default function App() {
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [queueBatchTotal, setQueueBatchTotal] = useState(0);
   const [failedTasks, setFailedTasks] = useState<FailedTask[]>([]);
+  const [pendingRetry, setPendingRetry] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChaining, setIsChaining] = useState<AppMode | null>(null);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
@@ -1140,6 +1147,85 @@ export default function App() {
     };
   };
 
+  // Restores a failed task's saved settings + source image(s) into the live
+  // form (from a local IndexedDB snapshot, not Firebase), then resubmits it
+  // — this is what makes "Retry" work even after the page has been reloaded,
+  // when the in-memory closure from the original attempt is long gone.
+  const restoreSnapshotAndRetry = (snapshot: FailedTaskSnapshot) => {
+    const primaryFile = new File([snapshot.primaryBlob], snapshot.primaryName, { type: snapshot.primaryBlob.type });
+    if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(primaryFile);
+    setPreviewUrl(URL.createObjectURL(primaryFile));
+
+    if (snapshot.ref2Blob) {
+      const f2 = new File([snapshot.ref2Blob], snapshot.ref2Name || 'reference2.png', { type: snapshot.ref2Blob.type });
+      if (previewUrl2 && previewUrl2.startsWith('blob:')) URL.revokeObjectURL(previewUrl2);
+      setSelectedFile2(f2);
+      setPreviewUrl2(URL.createObjectURL(f2));
+    }
+    if (snapshot.ref3Blob) {
+      const f3 = new File([snapshot.ref3Blob], snapshot.ref3Name || 'reference3.png', { type: snapshot.ref3Blob.type });
+      if (previewUrl3 && previewUrl3.startsWith('blob:')) URL.revokeObjectURL(previewUrl3);
+      setSelectedFile3(f3);
+      setPreviewUrl3(URL.createObjectURL(f3));
+    }
+
+    setMode(snapshot.mode as AppMode);
+    setEditorModel(snapshot.editorModel as EditorModel);
+    setVideoEngine(snapshot.videoEngine as VideoEngine);
+    setPrompt(snapshot.prompt);
+    setHorizontalAngle(snapshot.horizontalAngle);
+    setVerticalAngle(snapshot.verticalAngle);
+    setDistance(snapshot.distance);
+    setTargetResolution(snapshot.targetResolution as Resolution);
+    try {
+      setActiveLoras(JSON.parse(snapshot.activeLorasJson));
+    } catch {
+      // ignore malformed/missing LoRA snapshot data
+    }
+
+    setFailedTasks(prev => prev.filter(f => f.id !== snapshot.id));
+    deleteFailedTaskSnapshot(snapshot.id);
+
+    // generateEdit() reads component state, so it needs to run AFTER the
+    // state updates above have actually flushed/re-rendered — hence routing
+    // through pendingRetry + an effect, rather than calling it right here.
+    setPendingRetry(snapshot.id);
+  };
+
+  // Fires once the state restored by restoreSnapshotAndRetry above has
+  // actually committed, so generateEdit() sees the restored values instead
+  // of whatever was in the form before.
+  useEffect(() => {
+    if (!pendingRetry) return;
+    generateEdit();
+    setPendingRetry(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRetry]);
+
+  // On first load, pull in any failed generations left over from a previous
+  // session (stored locally, never in Firebase) so they can still be retried.
+  useEffect(() => {
+    loadFailedTaskSnapshots().then((snapshots) => {
+      if (snapshots.length === 0) return;
+      setFailedTasks(prev => {
+        const existingIds = new Set(prev.map(f => f.id));
+        const restored: FailedTask[] = snapshots
+          .filter(s => !existingIds.has(s.id))
+          .map(s => ({
+            id: s.id,
+            mode: s.mode as AppMode,
+            prompt: s.prompt,
+            modelInfo: s.modelInfo,
+            errorMessage: s.errorMessage,
+            retry: () => restoreSnapshotAndRetry(s),
+          }));
+        return [...prev, ...restored];
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const generateEdit = () => {
     if (!wavespeedKey) {
       setError('Still authenticating — please wait a second and try again.');
@@ -1199,6 +1285,7 @@ export default function App() {
       // originally hit generate) — no need for them to redo any setup.
       const retryThisTask = () => {
         setFailedTasks(prev => prev.filter(f => f.id !== taskId));
+        deleteFailedTaskSnapshot(taskId);
         setQueue(prev => [...prev, initialTask]);
         setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
         executeTask();
@@ -1216,6 +1303,32 @@ export default function App() {
             retry: retryThisTask,
           }
         ]);
+
+        // Persist locally (never to Firebase) so this is still retryable
+        // even if the user reloads the page before hitting Retry.
+        if (selectedFile) {
+          saveFailedTaskSnapshot({
+            id: taskId,
+            mode,
+            prompt,
+            modelInfo: initialModelInfo,
+            errorMessage: message,
+            editorModel,
+            videoEngine,
+            horizontalAngle,
+            verticalAngle,
+            distance,
+            targetResolution,
+            activeLorasJson: JSON.stringify(activeLoras),
+            primaryBlob: selectedFile,
+            primaryName: selectedFile.name || 'primary.png',
+            ref2Blob: selectedFile2 || undefined,
+            ref2Name: selectedFile2?.name,
+            ref3Blob: selectedFile3 || undefined,
+            ref3Name: selectedFile3?.name,
+            createdAt: Date.now(),
+          });
+        }
       };
 
       try {
@@ -1338,6 +1451,10 @@ export default function App() {
   };
 
   const handleFinalSuccess = async (finalDataUrl: string, taskId: string, taskPrompt: string, modelInfoStr: string, taskMode: AppMode) => {
+    // Clean up any local failed-task snapshot for this id — it succeeded now,
+    // so there's nothing left to retry.
+    deleteFailedTaskSnapshot(taskId);
+
     let displayUrl = finalDataUrl;
     let blob: Blob | null = null;
     const isVideo = finalDataUrl.startsWith('data:video') || isVideoUrl(finalDataUrl);
@@ -1971,7 +2088,7 @@ export default function App() {
                               <RefreshCw className="w-3 h-3" /> Retry
                             </button>
                             <button
-                              onClick={() => setFailedTasks(prev => prev.filter(f => f.id !== task.id))}
+                              onClick={() => { setFailedTasks(prev => prev.filter(f => f.id !== task.id)); deleteFailedTaskSnapshot(task.id); }}
                               className="p-1.5 text-red-400/70 hover:text-red-300 transition-colors"
                               title="Dismiss"
                             >
