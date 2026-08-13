@@ -6,6 +6,7 @@ export const config = { runtime: 'edge' };
 // server-side list rather than trusting a client-supplied amount, so
 // nobody can call this endpoint with a tampered price.
 const CREDIT_PACKS: Record<string, number> = {
+  tiny: 5,
   small: 10,
   medium: 25,
   large: 50,
