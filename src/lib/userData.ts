@@ -13,7 +13,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db, deleteFromFirebase } from './firebase';
- 
+   
 // --- Types (kept in sync with the ones in App.tsx) ---
 export type HistoryMode = 'editor' | 'upscaler' | 'angles' | 'video';
 
