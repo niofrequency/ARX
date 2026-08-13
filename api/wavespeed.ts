@@ -1,4 +1,4 @@
-import { verifyFirebaseToken, unauthorized } from './_lib/verifyAuth';
+import { verifyFirebaseToken, unauthorized } from './_lib/verifyAuth.js';
 
 // Runs on Vercel's Edge Runtime: fast cold starts, native fetch/Request/Response,
 // and streaming request/response bodies (important for image/video uploads).
