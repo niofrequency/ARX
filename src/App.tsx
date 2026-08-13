@@ -1,4 +1,4 @@
-/** 
+/**
  * @license 
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -29,7 +29,7 @@ import {
   Upload, Sparkles, Settings, Loader2, Download,
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers,
-  Bookmark, BookmarkPlus, Plus, Dices, Camera,
+  Bookmark, BookmarkPlus, Plus, Dices,
   UserCircle, Wand2, Film, LogOut, RefreshCw, Copy, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -179,10 +179,6 @@ const RATIO_OPTIONS = [
   { label: '21:9', qwen: '1280*720', seedream: '21:9' }
 ];
 
-const BODY_TYPES = ['Random', 'Petite', 'Slim', 'Athletic', 'Curvy', 'Thick', 'Plus-size', 'Hourglass'];
-const CAMERA_ANGLES = ['Random', 'Eye-level', 'High angle', 'Low angle', 'Three-quarter view', 'Side profile', 'From behind', 'Birds-eye view'];
-const SHOT_TYPES = ['Random', 'Close-up (Face focus)', 'Close-up (Body focus)', 'Medium shot', 'Full body far shot'];
-
 // One-tap starter prompts, shown while the prompt field is empty, to give
 // first-time users a fast on-ramp before they've learned what a good prompt
 // looks like for each mode.
@@ -255,9 +251,6 @@ export default function App() {
   
   const [prompt, setPrompt] = useState<string>('');
   const [isRandomizing, setIsRandomizing] = useState(false);
-  const [promptBodyType, setPromptBodyType] = useState('Random');
-  const [promptAngle, setPromptAngle] = useState('Random');
-  const [promptShotType, setPromptShotType] = useState('Random');
   
   const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
 
@@ -538,7 +531,7 @@ export default function App() {
     setError(null);
 
     try {
-      const generatedPrompt = await generateRandomIdea(grokKey, prompt, promptBodyType, promptAngle, promptShotType);
+      const generatedPrompt = await generateRandomIdea(grokKey, prompt);
       setPrompt(generatedPrompt);
     } catch (err: any) {
       setError(err.message || 'Failed to generate prompt from Grok.');
@@ -1784,28 +1777,6 @@ export default function App() {
                     <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2</button>
                   </div>
 
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><UserCircle className="w-3.5 h-3.5" /> Body Type</label>
-                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Angle</label>
-                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Shot Type</label>
-                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
                   <div className="relative">
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the motion and scene details..." className="w-full h-24 p-5 pr-14 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     {prompt && (
@@ -1903,29 +1874,6 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="pt-2 pb-4 mb-2 border-b border-zinc-800/50">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><UserCircle className="w-3.5 h-3.5" /> Body Type</label>
-                        <select value={promptBodyType} onChange={(e) => setPromptBodyType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {BODY_TYPES.map(bt => <option key={bt}>{bt}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Angle</label>
-                        <select value={promptAngle} onChange={(e) => setPromptAngle(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {CAMERA_ANGLES.map(a => <option key={a}>{a}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 mb-2"><Camera className="w-3.5 h-3.5" /> Shot Type</label>
-                        <select value={promptShotType} onChange={(e) => setPromptShotType(e.target.value)} className="w-full p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer">
-                          {SHOT_TYPES.map(st => <option key={st}>{st}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     <button onClick={() => setEditorModel('wan-2.6')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.6</button>
                     <button onClick={() => setEditorModel('wan-2.7')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.7' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.7</button>
