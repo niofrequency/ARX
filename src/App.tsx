@@ -164,6 +164,26 @@ const VIDEO_ENGINE_PRICES: Record<VideoEngine, number> = {
 const ANGLES_PRICE = 0.05;
 const UPSCALE_PRICE = 0.02;
 
+// Public-facing names — deliberately decoupled from the internal
+// editorModel/videoEngine values (which stay as-is everywhere else in the
+// code) so the underlying Wavespeed models we're wrapping aren't exposed
+// anywhere in the UI, copy, history, or saved data.
+const EDITOR_MODEL_DISPLAY_NAMES: Record<EditorModel, string> = {
+  'qwen-lora': 'Lumen',
+  'wan-2.7': 'Vero',
+  'qwen-2.0': 'Nova',
+  'wan-2.6': 'Aurum',
+  'seedream': 'Platinum',
+};
+const VIDEO_ENGINE_DISPLAY_NAMES: Record<VideoEngine, string> = {
+  'wavespeed-wan2i2v': 'Celer',
+  'wavespeed-wan': 'Motus',
+  'wavespeed-seedance': 'Fluxus',
+  'wavespeed-pruna': 'Magnum',
+};
+const ANGLES_DISPLAY_NAME = 'Prisma';
+const UPSCALE_DISPLAY_NAME = 'Amplus';
+
 interface HistoryItem { id: string; prompt: string; url: string; storagePath?: string; date: string; modelInfo?: string; mode?: AppMode; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
 interface QueueTask { 
@@ -186,15 +206,6 @@ interface FailedTask {
 }
 interface ActiveLora { id: string; name: string; strength: number; }
 
-const LORA_OPTIONS = [
-  { id: "yarn_qwen.safetensors", name: "YARN" },
-  { id: "BRAND_ENHANCER.safetensors", name: "BRAND_ENHANCER" },
-  { id: "JIB_SKIN.safetensors", name: "JIB_SKIN" },
-  { id: "NRDX_LIGHTING.safetensors", name: "NRDX_LIGHTING" },
-  { id: "ALCAITIFF.safetensors", name: "ALCAITIFF" },
-  { id: "NATURALSKIN.safetensors", name: "NATURALSKIN" }
-];
-
 const RATIO_OPTIONS = [
   { label: '1:1', qwen: '1024*1024', seedream: '1:1' },
   { label: '9:16', qwen: '720*1280', seedream: '9:16' },
@@ -203,23 +214,6 @@ const RATIO_OPTIONS = [
   { label: '3:4', qwen: '768*1024', seedream: '3:4' },
   { label: '21:9', qwen: '1280*720', seedream: '21:9' }
 ];
-
-// One-tap starter prompts, shown while the prompt field is empty, to give
-// first-time users a fast on-ramp before they've learned what a good prompt
-// looks like for each mode.
-const EDITOR_PROMPT_STARTERS = [
-  'Change the background to a neon-lit city at night',
-  'Add soft cinematic lighting and shallow depth of field',
-  'Turn this into a professional studio portrait',
-  'Replace the background with pure white, studio style',
-];
-const VIDEO_PROMPT_STARTERS = [
-  'Slow cinematic zoom in with gentle parallax',
-  'Camera slowly pans left to right',
-  'Subtle wind moving through hair and clothing',
-  'Gentle falling snow in the background',
-];
-
 
 const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
 const verticalOptions = [ { v: 0, l: 'Eye Level' }, { v: -30, l: 'Low Angle' }, { v: 30, l: 'High Angle' }];
@@ -289,7 +283,6 @@ export default function App() {
   const [selectedRatio, setSelectedRatio] = useState<string>('16:9');
 
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
-  const [customLoraUrl, setCustomLoraUrl] = useState<string>('');
   
   const [videoSeed, setVideoSeed] = useState<number>(-1);
   const [apiVideoDuration, setApiVideoDuration] = useState<number>(5);
@@ -474,7 +467,6 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    const savedLoras = localStorage.getItem('arx_runpod_loras'); // Keeping legacy key to not break local setups
     const savedMode = localStorage.getItem('arx_mode') as AppMode;
     const savedVidEngine = localStorage.getItem('arx_video_engine') as VideoEngine;
     
@@ -492,17 +484,15 @@ export default function App() {
     }
     
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
-    
-    if (savedLoras) {
-      try { setActiveLoras(JSON.parse(savedLoras)); } 
-      catch (e) { console.error("Failed to parse saved LoRAs", e); }
-    }
+    // No longer loading a saved LoRA chain from localStorage — there's no UI
+    // left to view/edit it, so silently resurrecting an old list would just
+    // be confusing. activeLoras now only ever comes from a failed-task retry
+    // snapshot, and is otherwise always empty.
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('arx_video_engine', videoEngine); }, [videoEngine]);
   useEffect(() => { localStorage.setItem('arx_editor_model', editorModel); }, [editorModel]);
-  useEffect(() => { localStorage.setItem('arx_runpod_loras', JSON.stringify(activeLoras)); }, [activeLoras]);
 
   // Reset the queue batch counter once every queued item has finished, so the
   // next round of generations starts a fresh "1/N" count instead of
@@ -897,36 +887,6 @@ export default function App() {
     }
   };
 
-  const addLora = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === 'none') return;
-    const opt = LORA_OPTIONS.find(l => l.id === val);
-    if (opt && !activeLoras.find(l => l.id === val)) {
-      setActiveLoras([...activeLoras, { id: opt.id, name: opt.name, strength: 0.8 }]);
-    }
-    e.target.value = 'none';
-  };
-
-  const addCustomLora = () => {
-    if (!customLoraUrl.trim()) return;
-    const url = customLoraUrl.trim();
-    let name = url.split('/').pop() || 'Custom LoRA';
-    if (name.length > 20) name = name.substring(0, 20) + '...';
-    
-    if (!activeLoras.find(l => l.id === url)) {
-      setActiveLoras([...activeLoras, { id: url, name: name, strength: 0.8 }]);
-    }
-    setCustomLoraUrl('');
-  };
-
-  const updateLoraStrength = (id: string, strength: number) => {
-    setActiveLoras(prev => prev.map(l => l.id === id ? { ...l, strength } : l));
-  };
-
-  const removeLora = (id: string) => {
-    setActiveLoras(prev => prev.filter(l => l.id !== id));
-  };
-
   const triggerWavespeedVideo = async (file: File, internalTaskId: string, priceUsd: number) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -954,24 +914,24 @@ export default function App() {
     };
 
     let endpoint = "/api/wavespeed/wavespeed-ai/wan-2.2/i2v-5b-720p";
-    let modelName = "Wan 2.2 I2V";
+    let modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan'];
 
     if (videoEngine === 'wavespeed-pruna') {
       endpoint = "/api/wavespeed/pruna-ai/p-video/image-to-video";
-      modelName = "Pruna AI P-Video";
+      modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-pruna'];
       payload.duration = apiVideoDuration;
       payload.resolution = apiVideoResolution === '480p' ? '720p' : apiVideoResolution;
       payload.save_audio = true;
     } else if (videoEngine === 'wavespeed-seedance') {
       endpoint = "/api/wavespeed/bytedance/seedance-v1-pro-fast/image-to-video";
-      modelName = "Seedance V1 Pro Fast";
+      modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-seedance'];
       payload.duration = apiVideoDuration > 12 ? 12 : apiVideoDuration < 2 ? 2 : apiVideoDuration;
       payload.resolution = apiVideoResolution;
       payload.aspect_ratio = selectedRatio;
       payload.camera_fixed = false;
     } else if (videoEngine === 'wavespeed-wan2i2v') {
       endpoint = "/api/wavespeed/wavespeed-ai/wan-2.2/i2v-480p-ultra-fast";
-      modelName = "Wan 2.2 Ultra Fast";
+      modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan2i2v'];
       payload.duration = apiVideoDuration >= 8 ? 8 : 5;
     }
 
@@ -1061,15 +1021,15 @@ export default function App() {
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
 
-    const angleHistoryPrompt = `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
-    if (user) createPendingJob(user.uid, id, 'angles', angleHistoryPrompt, 'Multi-Angle Generator', priceUsd, internalTaskId);
+    const angleHistoryPrompt = `${ANGLES_DISPLAY_NAME} | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
+    if (user) createPendingJob(user.uid, id, 'angles', angleHistoryPrompt, ANGLES_DISPLAY_NAME, priceUsd, internalTaskId);
 
     return {
       id,
       pollUrl,
       targetResultUrl,
       historyPrompt: angleHistoryPrompt,
-      modelInfo: "Multi-Angle Generator"
+      modelInfo: ANGLES_DISPLAY_NAME
     };
   };
 
@@ -1127,15 +1087,15 @@ export default function App() {
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
 
-    const upscaleHistoryPrompt = `Upscaled to ${targetResolution.toUpperCase()}`;
-    if (user) createPendingJob(user.uid, id, 'upscaler', upscaleHistoryPrompt, 'AI Upscaler', priceUsd, internalTaskId);
+    const upscaleHistoryPrompt = `${UPSCALE_DISPLAY_NAME} — Upscaled to ${targetResolution.toUpperCase()}`;
+    if (user) createPendingJob(user.uid, id, 'upscaler', upscaleHistoryPrompt, UPSCALE_DISPLAY_NAME, priceUsd, internalTaskId);
 
     return {
       id,
       pollUrl,
       targetResultUrl,
       historyPrompt: upscaleHistoryPrompt,
-      modelInfo: "AI Upscaler"
+      modelInfo: UPSCALE_DISPLAY_NAME
     };
   };
 
@@ -1221,13 +1181,9 @@ export default function App() {
       }
     }
     
-    let usedModelInfo = 'AI Editor';
-    if (editorModel === 'wan-2.6') usedModelInfo = 'Wan 2.6';
-    else if (editorModel === 'wan-2.7') usedModelInfo = 'Wan 2.7';
-    else if (editorModel === 'qwen-2.0') usedModelInfo = 'Qwen 2.0';
-    else if (editorModel === 'seedream') usedModelInfo = 'Seedream V5.0';
-    else if (editorModel === 'qwen-lora') {
-       usedModelInfo = activeLoras.length === 0 ? 'Qwen Edit (LoRA)' : `Qwen Edit + ` + activeLoras.map(l => `${l.name} (${l.strength.toFixed(1)})`).join(' + ');
+    let usedModelInfo = EDITOR_MODEL_DISPLAY_NAMES[editorModel] || 'AI Editor';
+    if (editorModel === 'qwen-lora' && activeLoras.length > 0) {
+       usedModelInfo = `${EDITOR_MODEL_DISPLAY_NAMES['qwen-lora']} + ${activeLoras.length} style layer${activeLoras.length > 1 ? 's' : ''}`;
     }
 
     pollUrl = toProxyUrl(pollUrl);
@@ -1361,15 +1317,10 @@ export default function App() {
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
-    let initialModelInfo = mode === 'upscaler' ? 'AI Upscaler' : 
-                           mode === 'angles' ? 'Multi-Angle' : 
-                           mode === 'video' ? (
-                              videoEngine === 'wavespeed-seedance' ? 'Seedance V1' :
-                              videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' :
-                              videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video' :
-                              'Wan 2.2 (Wavespeed)'
-                           ) : 
-                           editorModel;
+    let initialModelInfo = mode === 'upscaler' ? UPSCALE_DISPLAY_NAME : 
+                           mode === 'angles' ? ANGLES_DISPLAY_NAME : 
+                           mode === 'video' ? VIDEO_ENGINE_DISPLAY_NAMES[videoEngine] : 
+                           EDITOR_MODEL_DISPLAY_NAMES[editorModel];
 
     const initialTask: QueueTask = {
       id: taskId,
@@ -1828,7 +1779,10 @@ export default function App() {
             <div className="space-y-6">
               {mode === 'upscaler' && (
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
-                  <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">Target Output Resolution</label>
+                  <label className="flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-400 uppercase tracking-widest text-center mb-4">
+                    Target Output Resolution
+                    <span className="text-zinc-600">— ${UPSCALE_PRICE.toFixed(2)} / generation</span>
+                  </label>
                   <div className="grid grid-cols-3 gap-3">
                     {(['2k', '4k', '8k'] as Resolution[]).map((res) => (
                       <button key={res} onClick={() => setTargetResolution(res)} className={`py-4 rounded-xl text-xs font-medium uppercase tracking-widest transition-all ${targetResolution === res ? 'bg-zinc-100 text-zinc-900 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100'}`}>{res}</button>
@@ -1839,6 +1793,9 @@ export default function App() {
 
               {mode === 'angles' && (
                 <div className="space-y-6 bg-zinc-900/30 p-5 sm:p-6 border border-zinc-800/50 rounded-2xl">
+                  <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest text-center -mt-1">
+                    {ANGLES_DISPLAY_NAME} — ${ANGLES_PRICE.toFixed(2)} / generation
+                  </p>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-3 flex items-center justify-between">
                       <span>Horizontal Rotation (Azimuth)</span>
@@ -1881,10 +1838,7 @@ export default function App() {
                 <div className="space-y-4 bg-zinc-900/30 p-5 border border-zinc-800/50 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                      {videoEngine === 'wavespeed-seedance' ? 'Seedance V1 Video Engine' : 
-                       videoEngine === 'wavespeed-pruna' ? 'Pruna AI Video Engine' : 
-                       videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' :
-                       'Wan 2.2 Video Engine'}
+                      {VIDEO_ENGINE_DISPLAY_NAMES[videoEngine]} Engine
                     </label>
                     <div className="flex items-center gap-3">
                       <button onClick={handleRandomizePrompt} disabled={isRandomizing} className="text-[9px] flex items-center gap-1.5 text-rose-400 hover:text-rose-300 uppercase tracking-widest font-mono transition-colors disabled:opacity-50">
@@ -1897,10 +1851,22 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                    <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Seedance V1</button>
-                    <button onClick={() => setVideoEngine('wavespeed-pruna')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-pruna' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Pruna P-Video</button>
-                    <button onClick={() => setVideoEngine('wavespeed-wan2i2v')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan2i2v' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan2i2v (Fast)</button>
-                    <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.2</button>
+                    <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-seedance']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-seedance'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setVideoEngine('wavespeed-pruna')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-pruna' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-pruna']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-pruna'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan2i2v')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan2i2v' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan2i2v']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-wan2i2v'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-wan'].toFixed(2)}</span>
+                    </button>
                   </div>
 
                   <div className="relative">
@@ -1916,19 +1882,6 @@ export default function App() {
                     )}
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
-                  {!prompt && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {VIDEO_PROMPT_STARTERS.map((starter) => (
-                        <button
-                          key={starter}
-                          onClick={() => setPrompt(starter)}
-                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-100 uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition-colors"
-                        >
-                          {starter}
-                        </button>
-                      ))}
-                    </div>
-                  )}
 
                   {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && (
                     <div className="space-y-4 pt-4 border-t border-zinc-800/50">
@@ -2001,11 +1954,26 @@ export default function App() {
                   </div>
                   
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-                    <button onClick={() => setEditorModel('wan-2.6')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.6</button>
-                    <button onClick={() => setEditorModel('wan-2.7')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.7' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Wan 2.7</button>
-                    <button onClick={() => setEditorModel('qwen-2.0')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-2.0' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Qwen 2.0</button>
-                    <button onClick={() => setEditorModel('qwen-lora')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-lora' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Qwen LoRA</button>
-                    <button onClick={() => setEditorModel('seedream')} className={`py-3 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'seedream' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>Seedream V5</button>
+                    <button onClick={() => setEditorModel('wan-2.6')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{EDITOR_MODEL_DISPLAY_NAMES['wan-2.6']}</span>
+                      <span className={`block text-[8px] normal-case font-mono mt-0.5 text-zinc-600`}>${EDITOR_MODEL_PRICES['wan-2.6'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setEditorModel('wan-2.7')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.7' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{EDITOR_MODEL_DISPLAY_NAMES['wan-2.7']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${EDITOR_MODEL_PRICES['wan-2.7'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setEditorModel('qwen-2.0')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-2.0' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{EDITOR_MODEL_DISPLAY_NAMES['qwen-2.0']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${EDITOR_MODEL_PRICES['qwen-2.0'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setEditorModel('qwen-lora')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'qwen-lora' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{EDITOR_MODEL_DISPLAY_NAMES['qwen-lora']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${EDITOR_MODEL_PRICES['qwen-lora'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setEditorModel('seedream')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'seedream' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{EDITOR_MODEL_DISPLAY_NAMES['seedream']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${EDITOR_MODEL_PRICES['seedream'].toFixed(2)}</span>
+                    </button>
                   </div>
 
                   {(editorModel === 'qwen-2.0' || editorModel === 'seedream') && (
@@ -2031,39 +1999,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {editorModel === 'qwen-lora' && (
-                    <div className="mt-4 mb-6 pt-4 border-t border-zinc-800/50">
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center justify-between">
-                        <span>Active Style Injections (LoRAs)</span>
-                      </label>
-                      <div className="space-y-2 mb-3">
-                        {activeLoras.map(lora => (
-                          <div key={lora.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                            <span className="text-[9px] font-mono text-zinc-300 w-24 truncate" title={lora.name}>{lora.name}</span>
-                            <input type="range" min="0" max="2" step="0.05" value={lora.strength} onChange={(e) => updateLoraStrength(lora.id, Number(e.target.value))} className="flex-1 accent-zinc-500 h-1 cursor-pointer" />
-                            <span className="text-[9px] font-mono text-zinc-500 w-8 text-right">{lora.strength.toFixed(2)}</span>
-                            <button onClick={() => removeLora(lora.id)} className="text-zinc-600 hover:text-red-400 p-1 transition-colors"><X className="w-3 h-3" /></button>
-                          </div>
-                        ))}
-                        {activeLoras.length === 0 && <div className="text-[9px] font-mono text-zinc-600 italic text-center py-2">No LoRAs active</div>}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <select onChange={addLora} value="none" className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] uppercase tracking-widest outline-none focus:border-zinc-500 text-zinc-400 shadow-inner cursor-pointer">
-                            <option value="none">Add LoRA to Chain...</option>
-                            {LORA_OPTIONS.filter(opt => !activeLoras.find(l => l.id === opt.id)).map(opt => (
-                              <option key={opt.id} value={opt.id}>{opt.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex gap-2 mt-1">
-                          <input type="text" placeholder="Paste .safetensors URL here..." value={customLoraUrl} onChange={(e) => setCustomLoraUrl(e.target.value)} className="flex-1 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[10px] outline-none focus:border-zinc-500 text-zinc-300 shadow-inner" />
-                          <button onClick={addCustomLora} disabled={!customLoraUrl.trim()} className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Plus className="w-4 h-4" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="relative">
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
@@ -2078,23 +2013,10 @@ export default function App() {
                       )}
                       <button onClick={enhancePrompt} className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors" title="Magic Prompt Enhancer"><Wand2 className="w-3.5 h-3.5" /></button>
                       <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">
-                        {editorModel === 'wan-2.7' ? 'Wan-2.7 Editor' : editorModel === 'qwen-2.0' ? 'Qwen-2.0 Editor' : editorModel === 'seedream' ? 'Seedream V5.0 Editor' : editorModel === 'qwen-lora' ? 'Qwen LoRA Editor' : 'Wan-2.6 Editor'}
+                        {EDITOR_MODEL_DISPLAY_NAMES[editorModel]} Editor
                       </div>
                     </div>
                   </div>
-                  {!prompt && (
-                    <div className="flex flex-wrap gap-2 pt-3">
-                      {EDITOR_PROMPT_STARTERS.map((starter) => (
-                        <button
-                          key={starter}
-                          onClick={() => setPrompt(starter)}
-                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-100 uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition-colors"
-                        >
-                          {starter}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -2345,11 +2267,9 @@ export default function App() {
                         onClick={() => {
                           const match = history.find(h => h.id === resultId) || history.find(h => h.url === resultUrl);
                           
-                          let dynamicModelInfo = editorModel;
+                          let dynamicModelInfo = EDITOR_MODEL_DISPLAY_NAMES[editorModel];
                           if (mode === 'video') {
-                              dynamicModelInfo = videoEngine === 'wavespeed-pruna' ? 'Pruna AI P-Video' : 
-                                                 videoEngine === 'wavespeed-seedance' ? 'Seedance V1 Pro Fast' : 
-                                                 videoEngine === 'wavespeed-wan2i2v' ? 'Wan 2.2 Ultra Fast' : 'Wan 2.2 (Wavespeed)';
+                              dynamicModelInfo = VIDEO_ENGINE_DISPLAY_NAMES[videoEngine];
                           }
                           
                           setSelectedHistoryItem(match || { 
