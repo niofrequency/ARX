@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { randomUUID } from 'crypto';
 import { verifyWavespeedWebhookSignature } from './_lib/verifyWavespeedWebhook';
 import { adminDb, adminStorage } from './_lib/firebaseAdmin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // This must run on Vercel's Node.js runtime (default when no `runtime: 'edge'`
 // is set) — firebase-admin and Node's crypto/Buffer APIs aren't Edge-compatible.
@@ -94,11 +95,13 @@ export default async function handler(req: Req, res: ServerResponse) {
       return;
     }
 
-    const { uid, prompt, mode, modelInfo } = pendingSnap.data() as {
+    const { uid, prompt, mode, modelInfo, priceUsd, internalTaskId } = pendingSnap.data() as {
       uid: string;
       prompt: string;
       mode: string;
       modelInfo: string;
+      priceUsd?: number;
+      internalTaskId?: string;
     };
 
     if (status === 'completed' && Array.isArray(payload.outputs) && payload.outputs.length > 0) {
@@ -142,10 +145,30 @@ export default async function handler(req: Req, res: ServerResponse) {
           mode: mode || 'editor',
         });
     }
-    // status === 'failed' (or anything else): nothing to upload; just clean
-    // up below. The source image isn't available server-side to offer a
-    // retry from here — that's handled client-side, locally, when the
-    // browser is present at the time of failure.
+    // status === 'failed' (or anything else): nothing to upload. Refund the
+    // credit that was reserved for this generation — this is the case
+    // where the user's browser was gone when the job failed, so the
+    // client-side refund (in markFailed) never got a chance to run.
+    else if (status === 'failed' && priceUsd && internalTaskId) {
+      const walletRef = db.collection('users').doc(uid).collection('wallet').doc('main');
+      const txRef = db.collection('users').doc(uid).collection('transactions').doc(internalTaskId);
+
+      await db.runTransaction(async (t) => {
+        const txSnap = await t.get(txRef);
+        if (!txSnap.exists) return;
+        const txData = txSnap.data();
+        // Idempotent: only refund a charge that hasn't already been refunded
+        // (e.g. by the client noticing the failure first, if it was still open).
+        if (txData?.status !== 'completed') return;
+
+        t.set(
+          walletRef,
+          { balanceUsd: FieldValue.increment(priceUsd), updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+        t.set(txRef, { status: 'refunded', refundedAt: new Date().toISOString() }, { merge: true });
+      });
+    }
 
     await pendingRef.delete();
 
