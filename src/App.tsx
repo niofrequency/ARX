@@ -16,6 +16,8 @@ import {
 import {
   createPendingPayment,
   subscribeToWalletBalance,
+  reserveCredits,
+  refundCredits,
 } from './lib/payments';
 import {
   fetchHistoryPage,
@@ -142,6 +144,25 @@ type AppMode = 'editor' | 'upscaler' | 'angles' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream';
 type Resolution = '2k' | '4k' | '8k';
 type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
+
+// What we charge the user per generation — set at 2x Wavespeed's own cost
+// for every model, so margin scales correctly no matter what mix of
+// (cheap image edits vs. expensive video) a given user actually runs.
+const EDITOR_MODEL_PRICES: Record<EditorModel, number> = {
+  'wan-2.6': 0.07,
+  'wan-2.7': 0.06,
+  'qwen-2.0': 0.06,
+  'qwen-lora': 0.05,
+  'seedream': 0.09,
+};
+const VIDEO_ENGINE_PRICES: Record<VideoEngine, number> = {
+  'wavespeed-seedance': 0.12,
+  'wavespeed-pruna': 0.20,
+  'wavespeed-wan2i2v': 0.10,
+  'wavespeed-wan': 0.10,
+};
+const ANGLES_PRICE = 0.05;
+const UPSCALE_PRICE = 0.02;
 
 interface HistoryItem { id: string; prompt: string; url: string; storagePath?: string; date: string; modelInfo?: string; mode?: AppMode; }
 interface SavedPrompt { id: string; name: string; prompt: string; }
@@ -385,13 +406,13 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleTopUp = async (packId: 'small' | 'medium' | 'large') => {
+  const handleTopUp = async (packId: 'tiny' | 'small' | 'medium' | 'large') => {
     if (!user || creatingInvoicePack) return;
     setCreatingInvoicePack(packId);
     setError(null);
     try {
       const orderId = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      const amountUsd = packId === 'small' ? 10 : packId === 'medium' ? 25 : 50;
+      const amountUsd = packId === 'tiny' ? 5 : packId === 'small' ? 10 : packId === 'medium' ? 25 : 50;
 
       await createPendingPayment(user.uid, orderId, amountUsd);
 
@@ -906,7 +927,7 @@ export default function App() {
     setActiveLoras(prev => prev.filter(l => l.id !== id));
   };
 
-  const triggerWavespeedVideo = async (file: File) => {
+  const triggerWavespeedVideo = async (file: File, internalTaskId: string, priceUsd: number) => {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -972,7 +993,7 @@ export default function App() {
     let pollUrl = toProxyUrl(triggerData.urls?.get || triggerData.data?.urls?.get) || `/api/wavespeed/predictions/${id}`;
     let targetResultUrl = `/api/wavespeed/predictions/${id}/result`;
 
-    if (user) createPendingJob(user.uid, id, 'video', activePrompt, modelName);
+    if (user) createPendingJob(user.uid, id, 'video', activePrompt, modelName, priceUsd, internalTaskId);
 
     return {
       id,
@@ -983,7 +1004,7 @@ export default function App() {
     };
   };
 
-  const triggerWavespeedAngles = async (file: File) => {
+  const triggerWavespeedAngles = async (file: File, internalTaskId: string, priceUsd: number) => {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1041,7 +1062,7 @@ export default function App() {
     targetResultUrl = toProxyUrl(targetResultUrl);
 
     const angleHistoryPrompt = `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
-    if (user) createPendingJob(user.uid, id, 'angles', angleHistoryPrompt, 'Multi-Angle Generator');
+    if (user) createPendingJob(user.uid, id, 'angles', angleHistoryPrompt, 'Multi-Angle Generator', priceUsd, internalTaskId);
 
     return {
       id,
@@ -1052,7 +1073,7 @@ export default function App() {
     };
   };
 
-  const triggerWavespeedUpscale = async (file: File) => {
+  const triggerWavespeedUpscale = async (file: File, internalTaskId: string, priceUsd: number) => {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1107,7 +1128,7 @@ export default function App() {
     targetResultUrl = toProxyUrl(targetResultUrl);
 
     const upscaleHistoryPrompt = `Upscaled to ${targetResolution.toUpperCase()}`;
-    if (user) createPendingJob(user.uid, id, 'upscaler', upscaleHistoryPrompt, 'AI Upscaler');
+    if (user) createPendingJob(user.uid, id, 'upscaler', upscaleHistoryPrompt, 'AI Upscaler', priceUsd, internalTaskId);
 
     return {
       id,
@@ -1118,7 +1139,7 @@ export default function App() {
     };
   };
 
-  const triggerWavespeed = async (base64Image: string, base64Image2?: string | null, base64Image3?: string | null) => {
+  const triggerWavespeed = async (base64Image: string, base64Image2: string | null | undefined, base64Image3: string | null | undefined, internalTaskId: string, priceUsd: number) => {
     const safeBase64 = cleanAndPadBase64(base64Image);
     const payload: any = { 
         prompt: prompt, 
@@ -1212,7 +1233,7 @@ export default function App() {
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
 
-    if (user) createPendingJob(user.uid, id, 'editor', prompt, usedModelInfo);
+    if (user) createPendingJob(user.uid, id, 'editor', prompt, usedModelInfo, priceUsd, internalTaskId);
 
     return {
       id,
@@ -1318,6 +1339,20 @@ export default function App() {
       return;
     }
 
+    const priceUsd = mode === 'upscaler' ? UPSCALE_PRICE
+      : mode === 'angles' ? ANGLES_PRICE
+      : mode === 'video' ? VIDEO_ENGINE_PRICES[videoEngine]
+      : EDITOR_MODEL_PRICES[editorModel];
+
+    // Quick client-side check against the live-subscribed balance, purely
+    // to skip a round-trip for the common "obviously not enough" case — the
+    // real, race-condition-proof check happens server-side in reserveCredits.
+    if (creditBalance < priceUsd) {
+      setError(`This generation costs $${priceUsd.toFixed(2)} — top up to continue.`);
+      setShowTopUp(true);
+      return;
+    }
+
     setError(null); 
     
     // Quick visual feedback that generation started, without blocking the UI
@@ -1346,22 +1381,28 @@ export default function App() {
       targetResultUrl: '',
       modelInfo: initialModelInfo
     };
-    
-    setQueue(prev => [...prev, initialTask]);
-    setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
-
-    if (window.innerWidth < 1024 && resultRef.current) {
-      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
 
     const executeTask = async () => {
       // Wraps the whole retry: clears the failed-task card, puts a fresh
       // "uploading" bubble back in the active queue, then reruns this exact
       // same request (same file(s), mode, and prompt captured when the user
       // originally hit generate) — no need for them to redo any setup.
-      const retryThisTask = () => {
+      const retryThisTask = async () => {
         setFailedTasks(prev => prev.filter(f => f.id !== taskId));
         deleteFailedTaskSnapshot(taskId);
+
+        const idToken = await getFreshIdToken();
+        const reservation = await reserveCredits(idToken, taskId, priceUsd, initialModelInfo);
+        if (!reservation.ok) {
+          setError(
+            reservation.error === 'insufficient_balance'
+              ? `This generation costs $${priceUsd.toFixed(2)} — top up to continue.`
+              : 'Could not process this retry. Please try again.'
+          );
+          if (reservation.error === 'insufficient_balance') setShowTopUp(true);
+          return;
+        }
+
         setQueue(prev => [...prev, initialTask]);
         setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
         executeTask();
@@ -1379,6 +1420,11 @@ export default function App() {
             retry: retryThisTask,
           }
         ]);
+
+        // Give back the credit that was reserved for this attempt — it
+        // didn't produce a usable result. Safe to call even if the webhook
+        // already refunded this same taskId (server-side idempotency).
+        getFreshIdToken().then(idToken => refundCredits(idToken, taskId, priceUsd));
 
         // Persist locally (never to Firebase) so this is still retryable
         // even if the user reloads the page before hitting Retry.
@@ -1411,11 +1457,11 @@ export default function App() {
         let triggerResult;
         
         if (mode === 'upscaler') {
-          triggerResult = await triggerWavespeedUpscale(selectedFile);
+          triggerResult = await triggerWavespeedUpscale(selectedFile, taskId, priceUsd);
         } else if (mode === 'angles') {
-          triggerResult = await triggerWavespeedAngles(selectedFile);
+          triggerResult = await triggerWavespeedAngles(selectedFile, taskId, priceUsd);
         } else if (mode === 'video') {
-          triggerResult = await triggerWavespeedVideo(selectedFile);
+          triggerResult = await triggerWavespeedVideo(selectedFile, taskId, priceUsd);
         } else {
           const base64ImageRaw = await fileToBase64(selectedFile);
           let base64ImageRaw2 = null;
@@ -1424,7 +1470,7 @@ export default function App() {
               if (selectedFile2) base64ImageRaw2 = await fileToBase64(selectedFile2);
               if (selectedFile3) base64ImageRaw3 = await fileToBase64(selectedFile3);
           }
-          triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2, base64ImageRaw3);
+          triggerResult = await triggerWavespeed(base64ImageRaw, base64ImageRaw2, base64ImageRaw3, taskId, priceUsd);
         } 
 
         const newTaskObj: QueueTask = {
@@ -1450,8 +1496,34 @@ export default function App() {
       }
     };
 
-    // Fire and forget, runs seamlessly in the background
-    executeTask();
+    // Reserve the credit BEFORE ever contacting Wavespeed — this is a real,
+    // atomic, server-side balance check (not just trusting the locally
+    // cached number), so we never end up on the hook to Wavespeed for a
+    // generation the user couldn't actually pay for.
+    const startGeneration = async () => {
+      const idToken = await getFreshIdToken();
+      const reservation = await reserveCredits(idToken, taskId, priceUsd, initialModelInfo);
+      if (!reservation.ok) {
+        setError(
+          reservation.error === 'insufficient_balance'
+            ? `This generation costs $${priceUsd.toFixed(2)} — top up to continue.`
+            : 'Could not process this request. Please try again.'
+        );
+        if (reservation.error === 'insufficient_balance') setShowTopUp(true);
+        return;
+      }
+
+      setQueue(prev => [...prev, initialTask]);
+      setQueueBatchTotal(prev => (queue.length === 0 ? 1 : prev + 1));
+
+      if (window.innerWidth < 1024 && resultRef.current) {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      // Fire and forget, runs seamlessly in the background
+      executeTask();
+    };
+    startGeneration();
   };
 
   const pollBackground = async (task: QueueTask, onFailure: (message: string) => void) => {
@@ -2881,6 +2953,7 @@ export default function App() {
 
               <div className="space-y-3">
                 {([
+                  { id: 'tiny' as const, amount: 5 },
                   { id: 'small' as const, amount: 10 },
                   { id: 'medium' as const, amount: 25 },
                   { id: 'large' as const, amount: 50 },
