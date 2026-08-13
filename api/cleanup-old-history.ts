@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { adminDb, adminStorage } from './_lib/firebaseAdmin';
+import { adminDb, adminStorage } from './_lib/firebaseAdmin.js';
 
 // Node.js runtime (default) — needs firebase-admin. Triggered on a schedule
 // by Vercel Cron (see the "crons" entry in vercel.json), not by users.
