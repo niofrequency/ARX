@@ -2,7 +2,7 @@
   "id": "/",
   "name": "ARX — AI Image & Video Engine",
   "short_name": "ARX",
-  "description": "A sharp, minimalist AI platform for image editing, multi-angle generation, upscaling, and image-to-video, powered by Wan 2.6/2.7, Qwen, and Seedream.",
+  "description": "A sharp, minimalist AI platform for image editing, multi-angle generation, upscaling, and image-to-video.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
