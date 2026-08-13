@@ -13,6 +13,17 @@ type Req = IncomingMessage & {
   body?: any;
 };
 
+// Comma-separated list of emails that skip balance checks entirely — for
+// the site owner to use the app freely against the real Wavespeed balance,
+// without needing to "pay themselves" through the credit system. The email
+// comes from a verified Firebase ID token (checked below), so this can't be
+// spoofed by editing client-side code — only someone who actually controls
+// one of these accounts' real login can trigger the bypass.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
 export default async function handler(req: Req, res: ServerResponse) {
   if (req.method !== 'POST') {
     res.statusCode = 405;
@@ -27,6 +38,8 @@ export default async function handler(req: Req, res: ServerResponse) {
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
   }
+
+  const isAdmin = !!user.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
   const { action, taskId, amountUsd, modelInfo } = req.body || {};
   if (
@@ -48,6 +61,27 @@ export default async function handler(req: Req, res: ServerResponse) {
 
   try {
     if (action === 'reserve') {
+      // Admin accounts never touch the wallet balance at all — every
+      // generation is free for them, drawn straight against the real
+      // Wavespeed account balance. Still logged (status 'admin_free', not
+      // 'completed') purely for their own visibility into how much they've
+      // personally used — and specifically NOT 'completed' so the refund
+      // path below correctly treats it as nothing-to-refund.
+      if (isAdmin) {
+        await txRef.set({
+          id: taskId,
+          type: 'debit',
+          amountUsd,
+          status: 'admin_free',
+          modelInfo: modelInfo || '',
+          createdAt: new Date().toISOString(),
+        });
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, balance: null, admin: true }));
+        return;
+      }
+
       // This is the ONLY place a balance is ever decremented — atomic
       // check-then-decrement inside a Firestore transaction, so two
       // concurrent generations can never both succeed against a balance
@@ -90,6 +124,15 @@ export default async function handler(req: Req, res: ServerResponse) {
     }
 
     // action === 'refund'
+    if (isAdmin) {
+      // Nothing was ever deducted for an admin charge, so there's nothing
+      // to give back — just no-op successfully.
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     // Idempotent by design: only refunds a transaction that's currently
     // 'completed' (i.e. was actually charged and not already refunded), so
     // calling this twice for the same taskId — e.g. both the client's own
