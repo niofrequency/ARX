@@ -14,3 +14,13 @@ createRoot(document.getElementById('root')!).render(
     </AuthProvider>
   </StrictMode>,
 );
+
+// Register the service worker so Chrome/Edge/Android recognize ARX as a
+// real installable app (a manifest.json alone isn't always enough).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service worker registration failed', err);
+    });
+  });
+}
