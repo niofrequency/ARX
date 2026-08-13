@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Get ARX — Install the App</title>
+    <meta name="description" content="Install ARX on your phone or desktop for fast, one-tap access to AI image and video generation." />
+    <meta name="theme-color" content="#09090B" />
+
+    <!-- So this link itself looks good when shared on WhatsApp/iMessage/etc -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ARX" />
+    <meta property="og:title" content="Get ARX — Install the App" />
+    <meta property="og:description" content="Install ARX on your phone or desktop for fast, one-tap access to AI image and video generation." />
+    <meta property="og:image" content="https://arx-engine.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://arx-engine.vercel.app/install.html" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Get ARX — Install the App" />
+    <meta name="twitter:image" content="https://arx-engine.vercel.app/og-image.png" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192-maskable.PNG" />
+
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #09090B;
+        color: #f4f4f5;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 48px 20px 80px;
+        position: relative;
+        overflow-x: hidden;
+      }
+      .glow {
+        position: absolute;
+        top: -100px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        height: 600px;
+        border-radius: 999px;
+        background: rgba(34, 211, 238, 0.10);
+        filter: blur(120px);
+        pointer-events: none;
+      }
+      .mark { width: 44px; height: 44px; margin-bottom: 18px; position: relative; z-index: 1; }
+      h1 { font-size: 26px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; position: relative; z-index: 1; }
+      .sub {
+        color: #a1a1aa; font-size: 13px; text-align: center; max-width: 320px;
+        margin: 0 0 36px; line-height: 1.6; position: relative; z-index: 1;
+      }
+      .card {
+        width: 100%; max-width: 420px;
+        background: rgba(24,24,27,0.6);
+        border: 1px solid #27272a;
+        border-radius: 24px;
+        padding: 24px;
+        margin-bottom: 16px;
+        position: relative; z-index: 1;
+      }
+      .card-label {
+        font-family: 'SF Mono', 'Roboto Mono', monospace;
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em;
+        color: #71717a; margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+      }
+      .dot { width: 6px; height: 6px; border-radius: 999px; background: #71717a; }
+      .step {
+        display: flex; align-items: flex-start; gap: 12px;
+        font-size: 14px; color: #d4d4d8; margin-bottom: 12px; line-height: 1.5;
+      }
+      .step:last-child { margin-bottom: 0; }
+      .step-num {
+        flex-shrink: 0; width: 22px; height: 22px; border-radius: 999px;
+        background: #27272a; color: #f4f4f5; font-size: 11px; font-weight: 600;
+        display: flex; align-items: center; justify-content: center; margin-top: 1px;
+      }
+      button.install-btn {
+        width: 100%; padding: 16px; border-radius: 14px; border: none;
+        background: #f4f4f5; color: #09090b; font-weight: 600; font-size: 13px;
+        text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
+        margin-top: 4px;
+      }
+      button.install-btn:active { transform: scale(0.98); }
+      .continue-link {
+        margin-top: 20px; color: #71717a; font-size: 12px; text-decoration: none;
+        text-transform: uppercase; letter-spacing: 0.1em; position: relative; z-index: 1;
+      }
+      .continue-link:hover { color: #f4f4f5; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+
+    <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#f4f4f5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22L2 2h20L12 22z" />
+      <path d="M12 22V2" />
+      <path d="M2 2l10 10 10-10" />
+    </svg>
+    <h1>Get ARX on your device</h1>
+    <p class="sub">Install ARX for one-tap access, a full-screen app experience, and no browser bar in the way.</p>
+
+    <div class="card" id="card-ios">
+      <p class="card-label"><span class="dot"></span> iPhone / iPad — Safari</p>
+      <div class="step"><span class="step-num">1</span><span>Open this page in <strong>Safari</strong> (not Chrome — Apple requires Safari for this)</span></div>
+      <div class="step"><span class="step-num">2</span><span>Tap the <strong>Share</strong> icon in the toolbar</span></div>
+      <div class="step"><span class="step-num">3</span><span>Scroll down and tap <strong>Add to Home Screen</strong></span></div>
+    </div>
+
+    <div class="card" id="card-android">
+      <p class="card-label"><span class="dot"></span> Android</p>
+      <div class="step"><span class="step-num">1</span><span>Tap the button below, or use Chrome's menu → <strong>Install app</strong></span></div>
+      <button class="install-btn" id="install-btn-android">Install App</button>
+    </div>
+
+    <div class="card" id="card-desktop">
+      <p class="card-label"><span class="dot"></span> Desktop — Chrome / Edge</p>
+      <div class="step"><span class="step-num">1</span><span>Tap the button below, or click the install icon in your address bar</span></div>
+      <button class="install-btn" id="install-btn-desktop">Install App</button>
+    </div>
+
+    <a class="continue-link" href="/">Continue in browser instead →</a>
+
+    <script>
+      const ua = navigator.userAgent || '';
+      const isIOS = /iphone|ipad|ipod/i.test(ua);
+      const isAndroid = /android/i.test(ua);
+
+      // Show the visitor's own platform card first; keep the others visible
+      // below so this one link still works no matter who it's shared to.
+      const order = isIOS ? ['card-ios', 'card-android', 'card-desktop']
+                  : isAndroid ? ['card-android', 'card-ios', 'card-desktop']
+                  : ['card-desktop', 'card-android', 'card-ios'];
+      order.forEach((id) => document.getElementById(id).parentElement.appendChild(document.getElementById(id)));
+
+      let deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+      });
+      window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+      });
+
+      const triggerInstall = async () => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+          deferredPrompt = null;
+        } else {
+          alert('Your browser hasn\'t offered an install prompt yet. Try the menu in your browser\'s address bar, or reload this page.');
+        }
+      };
+
+      document.getElementById('install-btn-android').addEventListener('click', triggerInstall);
+      document.getElementById('install-btn-desktop').addEventListener('click', triggerInstall);
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
+  </body>
+</html>
