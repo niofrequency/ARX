@@ -1999,6 +1999,12 @@ export default function App() {
                     </div>
                   )}
 
+                  {(editorModel === 'wan-2.6' || editorModel === 'wan-2.7' || editorModel === 'qwen-lora') && (
+                    <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest text-center -mt-2 mb-2">
+                      Output matches your uploaded image's aspect ratio
+                    </p>
+                  )}
+
                   <div className="relative">
                     <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the modifications..." className="w-full h-32 p-5 bg-zinc-900/30 border border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-500 outline-none text-sm leading-relaxed resize-y text-zinc-100" />
                     <div className="absolute bottom-4 right-4 flex items-center gap-2">
