@@ -6,6 +6,7 @@ import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
 import { BrandMark, BrandLoader } from './components/BrandMark';
+import InstallAppButton from './components/InstallAppButton';
 import {
   fetchHistoryPage,
   addHistoryDoc,
@@ -2435,6 +2436,31 @@ export default function App() {
                       }}
                     >
                       <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                        {/* Close/Delete controls live OUTSIDE the rotating 3D card, in a
+                            stable non-transformed layer, so they behave identically and
+                            reliably whether the front or back face is showing — no more
+                            depending on 3D transform hit-testing to land on the right
+                            button after a flip. */}
+                        {isCenter && (
+                          <>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedHistoryItem(null); 
+                              }} 
+                              className="absolute top-4 right-4 z-20 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+
+                            <button 
+                              onClick={(e) => handleDeleteHistory(img.id, e)} 
+                              className="absolute top-4 left-4 z-20 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                         <motion.div 
                           className="relative w-full h-full shadow-2xl rounded-2xl cursor-pointer" 
                           style={{ transformStyle: 'preserve-3d' }} 
@@ -2470,27 +2496,6 @@ export default function App() {
                                   className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
                                 />
                             )}
-                            
-                            {isCenter && (
-                              <>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    setSelectedHistoryItem(null); 
-                                  }} 
-                                  className="absolute top-4 right-4 p-2.5 bg-zinc-900/80 backdrop-blur-md rounded-full text-zinc-400 hover:text-zinc-100 transition-colors border border-zinc-800 z-10"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-
-                                <button 
-                                  onClick={(e) => handleDeleteHistory(img.id, e)} 
-                                  className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-zinc-900/80 backdrop-blur-md rounded-full border border-zinc-800 transition-colors hover:bg-red-500/20 z-10"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
                           </div>
 
                           {/* --- BACK OF CARD --- */}
@@ -2498,23 +2503,6 @@ export default function App() {
                             className="absolute inset-0 w-full h-full rounded-[2rem] shadow-2xl bg-zinc-950 p-6 sm:p-8 flex flex-col items-center justify-center text-center overflow-y-auto" 
                             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                           >
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setSelectedHistoryItem(null); 
-                              }} 
-                              className="absolute top-4 right-4 p-2.5 text-zinc-500 hover:text-zinc-100 transition-colors bg-zinc-900 rounded-full"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                            
-                            <button 
-                              onClick={(e) => handleDeleteHistory(img.id, e)} 
-                              className="absolute top-4 left-4 p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-full transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                            
                             <History className="w-8 h-8 text-zinc-700 mb-6 shrink-0" />
                             
                             <h3 className="text-zinc-500 font-mono text-[10px] uppercase tracking-[0.2em] mb-2 shrink-0">
@@ -2676,6 +2664,11 @@ export default function App() {
                   <p className="text-[11px] leading-relaxed text-zinc-500">
                     API keys for Wavespeed and Grok are managed securely on the server and are never exposed to your browser or stored on this device.
                   </p>
+                </div>
+
+                <div className="pt-4 border-t border-zinc-800/50">
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">Get the App</p>
+                  <InstallAppButton className="w-full" variant="button" />
                 </div>
 
                 <div className="pt-4 border-t border-zinc-800/50">
