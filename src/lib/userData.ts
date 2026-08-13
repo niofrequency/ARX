@@ -13,7 +13,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db, deleteFromFirebase } from './firebase';
-   
+
 // --- Types (kept in sync with the ones in App.tsx) ---
 export type HistoryMode = 'editor' | 'upscaler' | 'angles' | 'video';
 
@@ -136,6 +136,11 @@ export const deleteSavedPromptDoc = async (uid: string, id: string): Promise<voi
  * whose Firestore/Storage to write the finished result into once the job
  * completes, even if that user's browser is closed or backgrounded.
  *
+ * Also carries `priceUsd` and `internalTaskId` (the id used for the credit
+ * reservation/transaction record) so that if Wavespeed reports this task as
+ * failed, the webhook can refund the right amount to the right transaction
+ * even when nobody's browser is around to notice the failure itself.
+ *
  * Best-effort / fire-and-forget: if this write fails, the generation still
  * proceeds normally via the existing client-side polling fallback — it just
  * means the webhook path won't have anywhere to deliver a background result.
@@ -145,7 +150,9 @@ export const createPendingJob = async (
   taskId: string,
   mode: string,
   prompt: string,
-  modelInfo: string
+  modelInfo: string,
+  priceUsd: number,
+  internalTaskId: string
 ): Promise<void> => {
   try {
     await setDoc(doc(db, 'pendingJobs', taskId), {
@@ -153,6 +160,8 @@ export const createPendingJob = async (
       mode,
       prompt,
       modelInfo,
+      priceUsd,
+      internalTaskId,
       createdAt: Date.now(),
     });
   } catch (e) {
