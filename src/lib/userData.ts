@@ -127,3 +127,35 @@ export const addSavedPromptDoc = async (uid: string, name: string, prompt: strin
 export const deleteSavedPromptDoc = async (uid: string, id: string): Promise<void> => {
   await deleteDoc(doc(savedPromptsCollection(uid), id));
 };
+
+/**
+ * Records "this Wavespeed task id belongs to this user" BEFORE the job is
+ * submitted, in a top-level (not per-user) pendingJobs collection. This is
+ * what lets the server-side webhook — which only ever hears from Wavespeed,
+ * with no idea which of your app's users triggered a given task — know
+ * whose Firestore/Storage to write the finished result into once the job
+ * completes, even if that user's browser is closed or backgrounded.
+ *
+ * Best-effort / fire-and-forget: if this write fails, the generation still
+ * proceeds normally via the existing client-side polling fallback — it just
+ * means the webhook path won't have anywhere to deliver a background result.
+ */
+export const createPendingJob = async (
+  uid: string,
+  taskId: string,
+  mode: string,
+  prompt: string,
+  modelInfo: string
+): Promise<void> => {
+  try {
+    await setDoc(doc(db, 'pendingJobs', taskId), {
+      uid,
+      mode,
+      prompt,
+      modelInfo,
+      createdAt: Date.now(),
+    });
+  } catch (e) {
+    console.warn('Failed to record pending job for webhook delivery', e);
+  }
+};
