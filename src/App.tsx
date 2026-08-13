@@ -1,8 +1,7 @@
 /**
- * @license
+ * @license 
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import { generateRandomIdea } from './lib/grok';
 import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
