@@ -9,7 +9,7 @@ export interface Transaction {
   createdAt: string;
 }
 
-/**
+/** 
  * Writes the "this order belongs to this user, for this amount" record
  * BEFORE creating the actual NOWPayments invoice, so that when the webhook
  * fires later (server-side, with no user auth context of its own) it knows
