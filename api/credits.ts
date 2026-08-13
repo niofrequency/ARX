@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { verifyFirebaseTokenNode } from './_lib/verifyAuthNode';
-import { adminDb } from './_lib/firebaseAdmin';
+import { verifyFirebaseTokenNode } from './_lib/verifyAuthNode.js';
+import { adminDb } from './_lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // Node.js runtime (default) — needs firebase-admin. Vercel auto-parses JSON
