@@ -9,7 +9,7 @@ export interface Transaction {
   createdAt: string;
 }
 
-/** 
+/**
  * Writes the "this order belongs to this user, for this amount" record
  * BEFORE creating the actual NOWPayments invoice, so that when the webhook
  * fires later (server-side, with no user auth context of its own) it knows
@@ -52,4 +52,54 @@ export const fetchRecentTransactions = async (uid: string, max = 20): Promise<Tr
     query(collection(db, 'users', uid, 'transactions'), orderBy('createdAt', 'desc'), limit(max))
   );
   return snap.docs.map((d) => d.data() as Transaction);
+};
+
+export interface ReserveResult {
+  ok: boolean;
+  balance?: number;
+  error?: string;
+}
+
+/**
+ * Atomically reserves (deducts) credits for a generation BEFORE it's
+ * submitted to Wavespeed — this is a real server-side check, not just
+ * trusting the locally-cached balance, so two generations started at nearly
+ * the same moment can never both succeed against a balance that only
+ * covers one of them.
+ */
+export const reserveCredits = async (
+  idToken: string,
+  taskId: string,
+  amountUsd: number,
+  modelInfo: string
+): Promise<ReserveResult> => {
+  try {
+    const res = await fetch('/api/credits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'reserve', taskId, amountUsd, modelInfo }),
+    });
+    const data = await res.json();
+    return { ok: res.ok && data.ok, balance: data.balance, error: data.error };
+  } catch (e) {
+    console.error('Failed to reserve credits', e);
+    return { ok: false, error: 'network_error' };
+  }
+};
+
+/**
+ * Refunds a previously-reserved charge — used when a generation ultimately
+ * fails. Safe to call more than once for the same taskId (the server only
+ * refunds a charge that's still in the 'completed'/charged state).
+ */
+export const refundCredits = async (idToken: string, taskId: string, amountUsd: number): Promise<void> => {
+  try {
+    await fetch('/api/credits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'refund', taskId, amountUsd }),
+    });
+  } catch (e) {
+    console.error('Failed to refund credits', e);
+  }
 };
