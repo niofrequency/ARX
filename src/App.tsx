@@ -1684,10 +1684,10 @@ export default function App() {
         </div>
         <div className="flex items-center gap-4">
           {isAdminUser ? (
-            <div className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+            <div className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full" title="Real-time Wavespeed account balance">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
               <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">
-                Unlimited
+                {wavespeedBalance ?? '—'}
               </span>
             </div>
           ) : (
