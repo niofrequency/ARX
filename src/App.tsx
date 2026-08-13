@@ -21,6 +21,7 @@ import {
   fetchSavedPrompts,
   addSavedPromptDoc,
   deleteSavedPromptDoc,
+  createPendingJob,
 } from './lib/userData';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import React, { useState, useRef, useEffect } from 'react';
@@ -40,6 +41,25 @@ const WAVESPEED_ORIGIN = 'https://api.wavespeed.ai/api/v3/';
 const toProxyUrl = (url: string): string => {
   if (!url) return url;
   return url.replace(WAVESPEED_ORIGIN, '/api/wavespeed/');
+};
+
+// Lets Wavespeed notify our server directly when a job finishes, instead of
+// relying solely on the browser tab staying open/foregrounded to poll for
+// it — background/locked phones would otherwise silently lose track of
+// in-flight generations. Falls back to empty locally where there's no
+// publicly-reachable HTTPS URL for Wavespeed to call (client-side polling
+// still works fine there as the only path).
+const getWebhookUrl = (): string => {
+  if (typeof window === 'undefined') return '';
+  if (!window.location.origin.startsWith('https://')) return '';
+  return `${window.location.origin}/api/wavespeed-webhook`;
+};
+
+const attachWebhook = (endpoint: string): string => {
+  const webhookUrl = getWebhookUrl();
+  if (!webhookUrl) return endpoint;
+  const separator = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${separator}webhook=${encodeURIComponent(webhookUrl)}`;
 };
 
 // --- Utilities: convert a generated result (base64 data URI or a hosted
@@ -888,7 +908,7 @@ export default function App() {
       payload.duration = apiVideoDuration >= 8 ? 8 : 5;
     }
 
-    const triggerResponse = await fetch(endpoint, {
+    const triggerResponse = await fetch(attachWebhook(endpoint), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -905,6 +925,8 @@ export default function App() {
 
     let pollUrl = toProxyUrl(triggerData.urls?.get || triggerData.data?.urls?.get) || `/api/wavespeed/predictions/${id}`;
     let targetResultUrl = `/api/wavespeed/predictions/${id}/result`;
+
+    if (user) createPendingJob(user.uid, id, 'video', activePrompt, modelName);
 
     return {
       id,
@@ -941,7 +963,7 @@ export default function App() {
       vertical_angle: verticalAngle
     };
 
-    const triggerResponse = await fetch("/api/wavespeed/wavespeed-ai/qwen-image/edit-multiple-angles", {
+    const triggerResponse = await fetch(attachWebhook("/api/wavespeed/wavespeed-ai/qwen-image/edit-multiple-angles"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -972,11 +994,14 @@ export default function App() {
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
 
+    const angleHistoryPrompt = `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`;
+    if (user) createPendingJob(user.uid, id, 'angles', angleHistoryPrompt, 'Multi-Angle Generator');
+
     return {
       id,
       pollUrl,
       targetResultUrl,
-      historyPrompt: `Multi-Angle | H:${horizontalAngle}° V:${verticalAngle}° D:${distance}`,
+      historyPrompt: angleHistoryPrompt,
       modelInfo: "Multi-Angle Generator"
     };
   };
@@ -1004,7 +1029,7 @@ export default function App() {
       target_resolution: targetResolution
     };
 
-    const triggerResponse = await fetch("/api/wavespeed/wavespeed-ai/image-upscaler", {
+    const triggerResponse = await fetch(attachWebhook("/api/wavespeed/wavespeed-ai/image-upscaler"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1035,11 +1060,14 @@ export default function App() {
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
 
+    const upscaleHistoryPrompt = `Upscaled to ${targetResolution.toUpperCase()}`;
+    if (user) createPendingJob(user.uid, id, 'upscaler', upscaleHistoryPrompt, 'AI Upscaler');
+
     return {
       id,
       pollUrl,
       targetResultUrl,
-      historyPrompt: `Upscaled to ${targetResolution.toUpperCase()}`,
+      historyPrompt: upscaleHistoryPrompt,
       modelInfo: "AI Upscaler"
     };
   };
@@ -1101,7 +1129,7 @@ export default function App() {
         basePath = `alibaba/${editorModel}/image-edit`;
     }
 
-    const triggerResponse = await fetch(endpoint, {
+    const triggerResponse = await fetch(attachWebhook(endpoint), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wavespeedKey}` },
       body: JSON.stringify(payload)
@@ -1137,6 +1165,8 @@ export default function App() {
 
     pollUrl = toProxyUrl(pollUrl);
     targetResultUrl = toProxyUrl(targetResultUrl);
+
+    if (user) createPendingJob(user.uid, id, 'editor', prompt, usedModelInfo);
 
     return {
       id,
