@@ -1,4 +1,4 @@
-import { verifyFirebaseToken, unauthorized } from './_lib/verifyAuth';
+import { verifyFirebaseToken, unauthorized } from './_lib/verifyAuth.js';
 
 export const config = { runtime: 'edge' };
 
