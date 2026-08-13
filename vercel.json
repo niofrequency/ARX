@@ -2,6 +2,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/wavespeed/:path*", "destination": "/api/wavespeed?path=:path*" }
+    { "source": "/api/wavespeed/:path*", "destination": "/api/wavespeed?path=:path*" },
+    { "source": "/install", "destination": "/install.html" }
+  ],
+  "crons": [
+    { "path": "/api/cleanup-old-history", "schedule": "0 3 * * *" }
   ]
 }
