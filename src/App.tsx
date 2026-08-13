@@ -256,6 +256,15 @@ const cleanAndPadBase64 = (base64Str: string) => {
 
 export default function App() {
   const { user, signOut } = useAuth();
+
+  // Cosmetic-only client-side flag (shows "Unlimited" instead of a dollar
+  // balance, skips the pre-flight balance check below) — this changes
+  // nothing security-relevant, since the actual bypass is enforced
+  // server-side in api/credits.ts against the verified Firebase ID token's
+  // email. Someone editing this list in devtools gains nothing; the server
+  // independently checks the real, authenticated email on every request.
+  const ADMIN_EMAILS = ['mpigome44@gmail.com'];
+  const isAdminUser = !!user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
   const [mode, setMode] = useState<AppMode>('editor');
   const [editorModel, setEditorModel] = useState<EditorModel>('wan-2.7');
   const [videoEngine, setVideoEngine] = useState<VideoEngine>('wavespeed-seedance');
@@ -1303,7 +1312,8 @@ export default function App() {
     // Quick client-side check against the live-subscribed balance, purely
     // to skip a round-trip for the common "obviously not enough" case — the
     // real, race-condition-proof check happens server-side in reserveCredits.
-    if (creditBalance < priceUsd) {
+    // Admins skip this entirely since their wallet balance is never touched.
+    if (!isAdminUser && creditBalance < priceUsd) {
       setError(`This generation costs $${priceUsd.toFixed(2)} — top up to continue.`);
       setShowTopUp(true);
       return;
@@ -1673,18 +1683,27 @@ export default function App() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowTopUp(true)}
-            className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-full transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
-            <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest">
-              ${creditBalance.toFixed(2)}
-            </span>
-            <span className="text-[9px] font-medium uppercase tracking-widest bg-yellow-500 text-zinc-950 px-2 py-1 rounded-full">
-              Top Up
-            </span>
-          </button>
+          {isAdminUser ? (
+            <div className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">
+                Unlimited
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowTopUp(true)}
+              className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-full transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
+              <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest">
+                ${creditBalance.toFixed(2)}
+              </span>
+              <span className="text-[9px] font-medium uppercase tracking-widest bg-yellow-500 text-zinc-950 px-2 py-1 rounded-full">
+                Top Up
+              </span>
+            </button>
+          )}
           {queue.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-full">
               <Layers className="w-3.5 h-3.5 text-zinc-100 animate-pulse" />
