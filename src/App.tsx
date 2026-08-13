@@ -1,4 +1,4 @@
-/**   
+/**
  * @license 
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,10 @@ import {
   loadFailedTaskSnapshots,
   type FailedTaskSnapshot,
 } from './lib/failedTaskCache';
+import {
+  createPendingPayment,
+  subscribeToWalletBalance,
+} from './lib/payments';
 import {
   fetchHistoryPage,
   addHistoryDoc,
@@ -253,6 +257,9 @@ export default function App() {
   const [isRandomizing, setIsRandomizing] = useState(false);
   
   const [wavespeedBalance, setWavespeedBalance] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [showTopUp, setShowTopUp] = useState(false);
+  const [creatingInvoicePack, setCreatingInvoicePack] = useState<string | null>(null);
 
   const [targetResolution, setTargetResolution] = useState<Resolution>('4k');
   const [horizontalAngle, setHorizontalAngle] = useState<number>(0);
@@ -366,6 +373,52 @@ export default function App() {
     loadInitialHistory(user.uid, { mode: galleryModeFilter, sortDir: gallerySortDir });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, galleryModeFilter, gallerySortDir]);
+
+  // Live credit balance — updates automatically the instant the NOWPayments
+  // webhook credits a completed top-up, no manual refresh needed.
+  useEffect(() => {
+    if (!user) {
+      setCreditBalance(0);
+      return;
+    }
+    const unsubscribe = subscribeToWalletBalance(user.uid, setCreditBalance);
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleTopUp = async (packId: 'small' | 'medium' | 'large') => {
+    if (!user || creatingInvoicePack) return;
+    setCreatingInvoicePack(packId);
+    setError(null);
+    try {
+      const orderId = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const amountUsd = packId === 'small' ? 10 : packId === 'medium' ? 25 : 50;
+
+      await createPendingPayment(user.uid, orderId, amountUsd);
+
+      const idToken = await getFreshIdToken();
+      const res = await fetch('/api/nowpayments-create-invoice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ packId, orderId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.invoiceUrl) {
+        throw new Error(data.error || 'Failed to create payment invoice.');
+      }
+
+      window.open(data.invoiceUrl, '_blank');
+      setShowTopUp(false);
+    } catch (e: any) {
+      console.error('Failed to start top-up', e);
+      setError(e.message || 'Could not start checkout. Please try again.');
+    } finally {
+      setCreatingInvoicePack(null);
+    }
+  };
 
   // Keep a fresh Firebase ID token in state at all times while signed in, and
   // use it to kick off the initial Wavespeed cloud sync / balance fetch, and
@@ -1597,17 +1650,18 @@ export default function App() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">ARX</h1>
         </div>
         <div className="flex items-center gap-4">
-          {wavespeedBalance && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
-              <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest hidden sm:inline">
-                Wavespeed: {wavespeedBalance}
-              </span>
-              <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest sm:hidden">
-                {wavespeedBalance}
-              </span>
-            </div>
-          )}
+          <button
+            onClick={() => setShowTopUp(true)}
+            className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-full transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
+            <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-widest">
+              ${creditBalance.toFixed(2)}
+            </span>
+            <span className="text-[9px] font-medium uppercase tracking-widest bg-yellow-500 text-zinc-950 px-2 py-1 rounded-full">
+              Top Up
+            </span>
+          </button>
           {queue.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-full">
               <Layers className="w-3.5 h-3.5 text-zinc-100 animate-pulse" />
@@ -2797,6 +2851,61 @@ export default function App() {
               >
                 <LogOut className="w-4 h-4" /> Sign Out
               </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Top Up Modal */}
+      <AnimatePresence>
+        {showTopUp && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowTopUp(false)}
+              className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[90]"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="fixed inset-x-4 top-1/2 -translate-y-1/2 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 max-w-sm mx-auto bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 z-[95] shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-medium tracking-tight text-zinc-100">Top Up</h2>
+                <button onClick={() => setShowTopUp(false)} className="p-2 bg-zinc-900 text-zinc-400 hover:text-zinc-100 rounded-md transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
+                Pay with any crypto wallet — pick a coin on the next screen. Your balance updates automatically once payment confirms.
+              </p>
+
+              <div className="space-y-3">
+                {([
+                  { id: 'small' as const, amount: 10 },
+                  { id: 'medium' as const, amount: 25 },
+                  { id: 'large' as const, amount: 50 },
+                ]).map((pack) => (
+                  <button
+                    key={pack.id}
+                    onClick={() => handleTopUp(pack.id)}
+                    disabled={creatingInvoicePack !== null}
+                    className="w-full flex items-center justify-between p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-2xl transition-all disabled:opacity-50"
+                  >
+                    <span className="text-sm font-medium text-zinc-100">${pack.amount.toFixed(2)} Credits</span>
+                    {creatingInvoicePack === pack.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                    ) : (
+                      <span className="text-[9px] font-medium uppercase tracking-widest text-zinc-950 bg-zinc-100 px-3 py-1.5 rounded-full">
+                        Buy
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-zinc-600 mt-6 text-center uppercase tracking-widest">
+                Current balance: ${creditBalance.toFixed(2)}
+              </p>
             </motion.div>
           </>
         )}
