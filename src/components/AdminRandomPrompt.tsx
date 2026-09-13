@@ -10,7 +10,7 @@ import { setCanvasRefsHidden, setReference1File, setReference2File } from '../li
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
 import {
-  deleteLibraryRef, listLibraryCards, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
+  deleteLibraryRef, listLibraryCards, listPoseRefFamilies, loadLibraryFile, loadPoseRef,
   renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
 } from '../lib/poseRefStore';
 
@@ -85,7 +85,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
     const fromLib = poses.find((item) => item.family === nextFamily);
     if (fromLib) {
-      const file = await loadLibraryRef(fromLib.id);
+      const file = await loadLibraryFile(fromLib as LibraryRefMeta);
       if (file) { setImage2(file); setRefNote(`Image 2 → ${fromLib.name}`); return; }
     }
     const file = await loadPoseRef(nextFamily);
@@ -138,7 +138,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const loadLibItem = async (item: LibraryRefMeta) => {
     setUsingId(item.id);
     try {
-      const file = await loadLibraryRef(item.id);
+      const file = await loadLibraryFile(item);
       if (!file) throw new Error('Could not download that reference.');
       if ((item.slot || 'pose') === 'face') { setImage1(file); setRefNote(`Using ${item.name || 'face'} as Image 1`); }
       else { setImage2(file); setFamily(item.family); setRefNote(`Using ${item.name || 'pose'} as Image 2`); }

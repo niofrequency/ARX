@@ -133,6 +133,30 @@ export async function loadLibraryRef(id: string): Promise<File | null> {
   return fileFromStorage(row.storagePath, row.name || `${row.detectedLabel}.jpg`, row.type || 'image/jpeg');
 }
 
+/**
+ * Turns an already-loaded library card straight into a File by fetching its
+ * known download URL directly — the same URL the card's thumbnail already
+ * used, so this is typically a single (often browser-cached) request. Skips
+ * the extra Firestore read and the authenticated /api/ref-file relay that
+ * loadLibraryRef() needs when all it has is an id. Falls back to that
+ * slower, fully-authenticated path only if the card has no direct URL (an
+ * older record) or the direct fetch fails.
+ */
+export async function loadLibraryFile(item: LibraryRefMeta): Promise<File | null> {
+  if (item.url) {
+    try {
+      const res = await fetch(item.url);
+      if (res.ok) {
+        const blob = await res.blob();
+        return new File([blob], item.name || `${item.detectedLabel || 'ref'}.jpg`, { type: item.type || blob.type || 'image/jpeg' });
+      }
+    } catch {
+      // Direct fetch failed (CORS, expired token, offline …) — fall back below.
+    }
+  }
+  return loadLibraryRef(item.id);
+}
+
 export async function deleteLibraryRef(id: string): Promise<void> {
   const userId = uid();
   const refDoc = doc(libraryCol(userId), id);
