@@ -6,8 +6,7 @@ import {
   getDocs,
   setDoc,
 } from 'firebase/firestore';
-import { getBlob, ref as storageRef } from 'firebase/storage';
-import { auth, db, deleteFromFirebase, storage, uploadToFirebase } from './firebase';
+import { auth, db, deleteFromFirebase, getFreshIdToken, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
 
 export type RefSlot = 'face' | 'pose';
@@ -39,13 +38,17 @@ const familyCol = (userId: string) => collection(db, 'users', userId, 'refFamili
 
 async function fileFromStorage(path: string | undefined, name: string, type: string): Promise<File | null> {
   if (!path) return null;
-  try {
-    const blob = await getBlob(storageRef(storage, path));
-    return new File([blob], name, { type: type || blob.type || 'image/jpeg' });
-  } catch (err) {
-    console.error('Storage download failed', err);
-    return null;
+  const token = await getFreshIdToken();
+  if (!token) throw new Error('Sign in to use a saved reference.');
+  const res = await fetch(`/api/ref-file?path=${encodeURIComponent(path)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || 'Could not download that reference.');
   }
+  const blob = await res.blob();
+  return new File([blob], name, { type: type || blob.type || 'image/jpeg' });
 }
 
 export async function savePoseRef(family: PoseFamily, file: File): Promise<void> {
