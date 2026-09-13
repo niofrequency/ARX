@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { getBodySegmentMask, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
+import { getBodySegmentMask, imagePointFromClient, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
 
 function findPreviewImg(): HTMLImageElement | null {
   const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
@@ -49,9 +49,8 @@ export default function RegionEditRoot() {
       canvas.style.top = `${rect.top}px`;
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
-      const nx = (e.clientX - rect.left) / rect.width;
-      const ny = (e.clientY - rect.top) / rect.height;
-      if (nx < 0 || ny < 0 || nx > 1 || ny > 1) {
+      const point = imagePointFromClient(img, e.clientX, e.clientY);
+      if (!point) {
         setHovered(null);
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
@@ -64,9 +63,9 @@ export default function RegionEditRoot() {
         srcRef.current = url;
       }
       if (!mask) return;
-      const slot = slotAt(mask, nx, ny);
+      const slot = slotAt(mask, point.nx, point.ny);
       setHovered(slot);
-      paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
+      paintSlot(canvas, mask, slot, img);
     };
     const onClick = (e: PointerEvent) => {
       if (open) return;
@@ -93,20 +92,18 @@ export default function RegionEditRoot() {
     const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
     const canvas = workRef.current;
     if (!wrap || !canvas) return;
-    const rect = wrap.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width;
-    const ny = (e.clientY - rect.top) / rect.height;
-    if (nx < 0 || ny < 0 || nx > 1 || ny > 1) return;
+    const point = imagePointFromClient(wrap, e.clientX, e.clientY);
+    if (!point) return;
     let mask = maskRef.current;
     if (!mask) {
       mask = await maskFor(src);
       maskRef.current = mask;
     }
     if (!mask) return;
-    const slot = slotAt(mask, nx, ny);
+    const slot = slotAt(mask, point.nx, point.ny);
     setLocked(slot);
     setHovered(slot);
-    paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
+    paintSlot(canvas, mask, slot, wrap);
   };
 
   const applyPrompt = () => {
