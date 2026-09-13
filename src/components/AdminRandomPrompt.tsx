@@ -8,6 +8,7 @@ import { expandCustomCharacter, expandCustomPose } from '../lib/grok';
 import { getFreshIdToken } from '../lib/firebase';
 import { setCanvasRefsHidden, setReference1File, setReference2File } from '../lib/setRef2';
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
+import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
 import {
   deleteLibraryRef, listLibraryCards, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
   renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
@@ -26,7 +27,7 @@ function prettyPoseName(label?: string, fallback?: string) {
 }
 interface Props { onApply: (prompt: string) => void; onApplyImage1?: (file: File) => void; onApplyImage2?: (file: File) => void; currentImage2?: File | null; }
 const pill = (active: boolean) =>
-  `px-3 py-2 rounded-lg text-[10px] font-medium uppercase tracking-widest border min-h-[40px] ${
+  `px-3 py-2 rounded-lg text-[10px] font-medium uppercase tracking-widest border min-h-[44px] ${
     active ? 'bg-zinc-100 border-zinc-100 text-zinc-950' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400'
   }`;
 
@@ -63,10 +64,10 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [filling, setFilling] = useState<'char' | 'pose' | null>(null);
   const [fillError, setFillError] = useState<string | null>(null);
   const [usingId, setUsingId] = useState<string | null>(null);
+  const [libQuery, setLibQuery] = useState('');
   const familyPoses = POSES.filter((p) => p.family === family);
-  const faces = library.filter((item) => (item.slot || 'pose') === 'face');
-  const poses = library.filter((item) => (item.slot || 'pose') !== 'face');
-
+  const faces = filterLibrary(library.filter((item) => (item.slot || 'pose') === 'face'), libQuery);
+  const poses = filterLibrary(library.filter((item) => (item.slot || 'pose') !== 'face'), libQuery);
   const setImage2 = (file: File) => { onApplyImage2?.(file); setReference2File(file); };
   const setImage1 = (file: File) => { onApplyImage1?.(file); setReference1File(file); };
 
@@ -113,10 +114,12 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     await savePoseRef(tagged.family, file); await refreshBounds(); setPoseName(''); setRefNote(`Saved ${name}`);
   };
   const addFilesToLibrary = async (files: FileList | File[]) => {
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      setImage2(file);
-      await saveToLibrary(file, await runDetect(file));
+    for (const raw of Array.from(files)) {
+      if (!raw.type.startsWith('image/')) continue;
+      const prepared = await prepareRefImage(raw);
+      setImage2(prepared.file);
+      await saveToLibrary(prepared.file, await runDetect(prepared.file));
+      setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
     }
   };
   const saveFace = async (file: File) => {
@@ -125,9 +128,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     setImage1(file); await refreshBounds(); setFaceName(''); setRefNote(`Saved face ${name}`);
   };
   const addFaces = async (files: FileList | File[]) => {
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      await saveFace(file);
+    for (const raw of Array.from(files)) {
+      if (!raw.type.startsWith('image/')) continue;
+      const prepared = await prepareRefImage(raw);
+      await saveFace(prepared.file);
+      setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
     }
   };
   const loadLibItem = async (item: LibraryRefMeta) => {
@@ -135,19 +140,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     try {
       const file = await loadLibraryRef(item.id);
       if (!file) throw new Error('Could not download that reference.');
-      if ((item.slot || 'pose') === 'face') {
-        setImage1(file);
-        setRefNote(`Using ${item.name || 'face'} as Image 1`);
-      } else {
-        setImage2(file);
-        setFamily(item.family);
-        setRefNote(`Using ${item.name || 'pose'} as Image 2`);
-      }
+      if ((item.slot || 'pose') === 'face') { setImage1(file); setRefNote(`Using ${item.name || 'face'} as Image 1`); }
+      else { setImage2(file); setFamily(item.family); setRefNote(`Using ${item.name || 'pose'} as Image 2`); }
     } catch (err: any) {
       setRefNote(err.message || 'Could not use that image.');
-    } finally {
-      setUsingId(null);
-    }
+    } finally { setUsingId(null); }
   };
   const commitRename = async (id: string) => {
     const next = editingName.trim(); setEditingId(null);
@@ -220,6 +217,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
           </div>
           {tab === 'library' && (
             <div className="space-y-4">
+              <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Search faces and poses" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
                 <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1</p>
                 <input value={faceName} onChange={(e) => setFaceName(e.target.value)} placeholder="Name this face" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
