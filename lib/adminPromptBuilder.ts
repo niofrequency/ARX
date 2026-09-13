@@ -8,7 +8,7 @@ export interface CharacterDef {
   costume: string;
   hair: string;
 }
-
+ 
 export interface ShotDef {
   id: ShotType;
   label: string;
