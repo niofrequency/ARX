@@ -19,10 +19,10 @@ function findPreviewImg(): HTMLImageElement | null {
 
 const cache = new Map<string, BodySegmentMask | null>();
 
-async function maskFor(src: string) {
-  if (cache.has(src)) return cache.get(src) || null;
-  const m = await getBodySegmentMask(src);
-  cache.set(src, m);
+async function maskFor(url: string) {
+  if (cache.has(url)) return cache.get(url) || null;
+  const m = await getBodySegmentMask(url);
+  cache.set(url, m);
   return m;
 }
 
@@ -36,6 +36,7 @@ export default function RegionEditRoot() {
   const [portrait, setPortrait] = useState(true);
   const [locked, setLocked] = useState<SegmentSlot>('clothes');
   const maskRef = useRef<BodySegmentMask | null>(null);
+  const srcRef = useRef('');
 
   useEffect(() => {
     const onMove = async (e: PointerEvent) => {
@@ -55,10 +56,14 @@ export default function RegionEditRoot() {
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
       }
-      const srcUrl = img.currentSrc || img.src;
-      const mask = maskRef.current?. && src === srcUrl ? maskRef.current : await maskFor(srcUrl);
+      const url = img.currentSrc || img.src;
+      let mask = maskRef.current;
+      if (!mask || srcRef.current !== url) {
+        mask = await maskFor(url);
+        maskRef.current = mask;
+        srcRef.current = url;
+      }
       if (!mask) return;
-      maskRef.current = mask;
       const slot = slotAt(mask, nx, ny);
       setHovered(slot);
       paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
@@ -82,7 +87,7 @@ export default function RegionEditRoot() {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onClick);
     };
-  }, [open, hovered, src]);
+  }, [open, hovered]);
 
   const onWorkMove = async (e: React.PointerEvent<HTMLDivElement>) => {
     const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
@@ -92,9 +97,12 @@ export default function RegionEditRoot() {
     const nx = (e.clientX - rect.left) / rect.width;
     const ny = (e.clientY - rect.top) / rect.height;
     if (nx < 0 || ny < 0 || nx > 1 || ny > 1) return;
-    const mask = maskRef.current || (await maskFor(src));
+    let mask = maskRef.current;
+    if (!mask) {
+      mask = await maskFor(src);
+      maskRef.current = mask;
+    }
     if (!mask) return;
-    maskRef.current = mask;
     const slot = slotAt(mask, nx, ny);
     setLocked(slot);
     setHovered(slot);
