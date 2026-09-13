@@ -1,4 +1,4 @@
-import type { PoseFamily } from './adminPromptBuilder';
+export type PoseFamily = 'front' | 'rear' | 'face' | 'tits' | 'other' | 'custom';
 
 const DB_NAME = 'arx-pose-refs';
 const STORE = 'refs';
