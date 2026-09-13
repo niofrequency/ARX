@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { getBodySegmentMask, imagePointFromClient, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
+import { createCoalescedRunner, paintHit, segmentAt } from '../lib/interactiveSegment';
 
 function findPreviewImg(): HTMLImageElement | null {
   const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
@@ -34,7 +35,14 @@ export default function RegionEditRoot() {
   const [src, setSrc] = useState('');
   const [note, setNote] = useState('');
   const [portrait, setPortrait] = useState(true);
-  const [locked, setLocked] = useState<SegmentSlot>('clothes');
+  // Free-text label for the locked selection. MediaPipe's body segmenter
+  // only knows 6 broad buckets (background/hair/body/face/clothes/other),
+  // so it seeds this as a starting guess, but the actual selectable region
+  // — painted via the class-agnostic interactive point segmenter below —
+  // can be anything: an eye, the nose, a single clothing item, a prop, etc.
+  // The name is editable so the user can call it what it actually is.
+  const [regionName, setRegionName] = useState('clothes');
+  const [guess, setGuess] = useState<SegmentSlot | null>(null);
   const maskRef = useRef<BodySegmentMask | null>(null);
   const srcRef = useRef('');
 
@@ -77,7 +85,8 @@ export default function RegionEditRoot() {
       if (!inside) return;
       setSrc(img.currentSrc || img.src);
       setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
-      setLocked(hovered);
+      setRegionName(hovered);
+      setGuess(hovered);
       setOpen(true);
     };
     window.addEventListener('pointermove', onMove, { passive: true });
@@ -87,6 +96,22 @@ export default function RegionEditRoot() {
       window.removeEventListener('pointerdown', onClick);
     };
   }, [open, hovered]);
+
+  // Runs the class-agnostic interactive segmenter on the hovered point,
+  // coalesced so a fast-moving pointer never queues up overlapping model
+  // calls — it always converges on the latest position. Falls back to the
+  // coarse body-segmenter silhouette if the interactive model isn't
+  // available (e.g. offline / still loading).
+  const workSegmentRunner = useRef(
+    createCoalescedRunner(async (arg: { img: HTMLImageElement; canvas: HTMLCanvasElement; nx: number; ny: number; mask: BodySegmentMask | null }) => {
+      const hit = await segmentAt(arg.img, arg.nx, arg.ny);
+      if (hit) {
+        paintHit(arg.canvas, hit, arg.img);
+      } else if (arg.mask) {
+        paintSlot(arg.canvas, arg.mask, slotAt(arg.mask, arg.nx, arg.ny), arg.img);
+      }
+    }),
+  ).current;
 
   const onWorkMove = async (e: React.PointerEvent<HTMLDivElement>) => {
     const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
@@ -99,22 +124,20 @@ export default function RegionEditRoot() {
       mask = await maskFor(src);
       maskRef.current = mask;
     }
-    if (!mask) return;
-    const slot = slotAt(mask, point.nx, point.ny);
-    setLocked(slot);
-    setHovered(slot);
-    paintSlot(canvas, mask, slot, wrap);
+    if (mask) setGuess(slotAt(mask, point.nx, point.ny));
+    workSegmentRunner({ img: wrap, canvas, nx: point.nx, ny: point.ny, mask });
   };
 
   const applyPrompt = () => {
     if (!note.trim()) return;
-    const prompt = `Only edit the ${locked} region of the subject. Follow the segmented ${locked} silhouette. Do not change any other region. ${note.trim()}`;
+    const label = regionName.trim() || guess || 'selected';
+    const prompt = `Only edit the highlighted ${label} region of the subject. Follow the exact segmented outline shown. Do not change any other region. ${note.trim()}`;
     const box = document.querySelector('textarea') as HTMLTextAreaElement | null;
     if (box) {
       box.value = prompt;
       box.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    toast.success(`Editing ${locked}`);
+    toast.success(`Editing ${label}`);
     setOpen(false);
   };
 
@@ -134,9 +157,18 @@ export default function RegionEditRoot() {
               <canvas ref={workRef} className="pointer-events-none absolute inset-0" />
             </div>
             <div className={`${portrait ? 'w-[340px] max-w-[42vw] border-l' : 'w-full border-t'} border-zinc-800 bg-zinc-950 p-4 space-y-3`}>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Selected: {locked}</p>
-              <p className="text-[11px] text-zinc-400">Hover paints the real MediaPipe class silhouette (hair, face, body skin, clothes, other, background). Not a circle.</p>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={`What to change on ${locked}`} rows={5} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none" />
+              <p className="text-[11px] text-zinc-400">Hover paints a precise silhouette of whatever's under the cursor — an eye, the nose, a strand of hair, a single clothing item, or any other object. Not a fixed category or a circle.</p>
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Selected region</label>
+                <input
+                  value={regionName}
+                  onChange={(e) => setRegionName(e.target.value)}
+                  placeholder="Name this region (eyes, nose, jacket, necklace…)"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none"
+                />
+                {guess && <p className="text-[10px] text-zinc-500">Looks like: {guess}</p>}
+              </div>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={`What to change on ${regionName || 'this region'}`} rows={5} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none" />
               <div className="flex gap-2">
                 <button type="button" onClick={() => setOpen(false)} className="flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-[10px] uppercase tracking-widest text-zinc-400">Close</button>
                 <button type="button" onClick={applyPrompt} className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">Paste region prompt</button>
