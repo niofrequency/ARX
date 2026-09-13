@@ -14,7 +14,7 @@ import {
 interface Props {
   onApply: (prompt: string) => void;
 }
-
+ 
 const pill = (active: boolean) =>
   `px-2.5 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest border transition-all ${
     active
