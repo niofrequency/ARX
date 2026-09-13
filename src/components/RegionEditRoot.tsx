@@ -50,13 +50,29 @@ export default function RegionEditRoot() {
   const maskRef = useRef<BodySegmentMask | null>(null);
   const srcRef = useRef('');
 
+  // Remembers the last image + mask the pre-open hover highlighted, so a
+  // window resize (e.g. a phone rotation) can reposition and repaint the
+  // overlay against the new layout even though the pointer itself hasn't
+  // moved — otherwise the highlight would sit stranded at its old screen
+  // position until the next pointermove.
+  const lastHoverImgRef = useRef<HTMLImageElement | null>(null);
+
   useEffect(() => {
+    const paintHover = (img: HTMLImageElement, canvas: HTMLCanvasElement, mask: BodySegmentMask, slot: SegmentSlot) => {
+      const rect = img.getBoundingClientRect();
+      canvas.style.left = `${rect.left}px`;
+      canvas.style.top = `${rect.top}px`;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      paintSlot(canvas, mask, slot, img);
+    };
     const onMove = async (e: PointerEvent) => {
       if (open) return;
       const canvas = hoverRef.current;
       if (!canvas) return;
       const img = imgAtPoint(e.clientX, e.clientY);
       if (!img) {
+        lastHoverImgRef.current = null;
         setHovered(null);
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
@@ -68,6 +84,7 @@ export default function RegionEditRoot() {
       canvas.style.height = `${rect.height}px`;
       const point = imagePointFromClient(img, e.clientX, e.clientY);
       if (!point) {
+        lastHoverImgRef.current = null;
         setHovered(null);
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
@@ -81,8 +98,9 @@ export default function RegionEditRoot() {
       }
       if (!mask) return;
       const slot = slotAt(mask, point.nx, point.ny);
+      lastHoverImgRef.current = img;
       setHovered(slot);
-      paintSlot(canvas, mask, slot, img);
+      paintHover(img, canvas, mask, slot);
     };
     const onClick = (e: PointerEvent) => {
       if (open) return;
@@ -96,11 +114,25 @@ export default function RegionEditRoot() {
       setGuess(hovered);
       setOpen(true);
     };
+    // A layout reflow (window resize, or a phone rotation) can move/resize
+    // the hovered image without any pointer event to trigger a repaint —
+    // re-derive the overlay's position from the image's new rect using the
+    // same already-resolved slot, rather than leaving it stranded at its
+    // old screen position (or requiring the user to nudge the pointer).
+    const onResize = () => {
+      const canvas = hoverRef.current;
+      const img = lastHoverImgRef.current;
+      const mask = maskRef.current;
+      if (open || !canvas || !img || !img.isConnected || !mask || !hovered) return;
+      paintHover(img, canvas, mask, hovered);
+    };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onClick);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onClick);
+      window.removeEventListener('resize', onResize);
     };
   }, [open, hovered]);
 
@@ -119,6 +151,22 @@ export default function RegionEditRoot() {
       }
     }),
   ).current;
+
+  // While the editor is open, a resize (e.g. a phone rotation) invalidates
+  // the work canvas's size/position relative to its <img>. There's no
+  // cached "last precise hit" to redraw against the new layout the way the
+  // pre-open hover overlay does, so just clear it — safer than leaving a
+  // highlight sized/positioned for a layout that no longer exists. The
+  // next hover repaints it against the current one.
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => {
+      const canvas = workRef.current;
+      canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [open]);
 
   const onWorkMove = async (e: React.PointerEvent<HTMLDivElement>) => {
     const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
