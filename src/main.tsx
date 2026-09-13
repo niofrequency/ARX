@@ -5,11 +5,13 @@ import './index.css';
 import { AuthProvider } from './lib/AuthContext';
 import AuthGate from './components/AuthGate';
 import RegionEditRoot from './components/RegionEditRoot';
+import UiSkin from './components/UiSkin';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
       <AuthGate>
+        <UiSkin />
         <App />
         <RegionEditRoot />
       </AuthGate>

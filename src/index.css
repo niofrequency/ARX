@@ -4,7 +4,7 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --color-bg: #09090B;
+  --color-bg: #07070a;
   --color-accent: #00F2FF;
   --color-accent-glow: rgba(0, 242, 255, 0.3);
   --color-border: #27272A;
@@ -12,18 +12,62 @@
   --color-text-secondary: #A1A1AA;
 }
 
-html, body {
-  background-color: #09090B;
+html, body, #root {
+  background-color: #07070a;
   color: #FAFAFA;
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100%;
+  min-height: 100%;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(0, 242, 255, 0.08), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(168, 85, 247, 0.07), transparent 50%),
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+  background-attachment: fixed;
+}
+
+body::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.35) 0px,
+    rgba(255,255,255,0.35) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+#arx-spot {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: radial-gradient(500px circle at var(--spot-x, 50%) var(--spot-y, 20%), rgba(0,242,255,0.08), transparent 40%);
+}
+
+button, [role="button"] {
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+button:hover, [role="button"]:hover {
+  box-shadow: 0 0 0 1px rgba(0, 242, 255, 0.25), 0 0 18px rgba(0, 242, 255, 0.08);
+}
+
+input, textarea, select {
+  backdrop-filter: blur(10px);
 }
 
 img {
-  transition: box-shadow 180ms ease, filter 180ms ease;
+  transition: box-shadow 180ms ease, filter 180ms ease, transform 180ms ease;
 }
 img:hover {
-  box-shadow: 0 0 0 1px rgba(0, 242, 255, 0.35), 0 0 24px rgba(0, 242, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(0, 242, 255, 0.4), 0 0 28px rgba(0, 242, 255, 0.16);
 }
