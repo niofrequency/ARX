@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Dices, Copy, Check } from 'lucide-react';
+import { Dices } from 'lucide-react';
 import {
   CHARACTERS, POSES, POSE_FAMILIES, assembleAdminPrompt, pickRandomCharacter, pickRandomPose,
   type ShotType, type AngleType, type TitSize, type FaceMess, type CharacterDef, type PoseDef, type PoseFamily,
@@ -24,18 +24,13 @@ function prettyPoseName(label?: string, fallback?: string) {
   if (!label || label === 'unknown') return '';
   return POSE_NAMES[label] || label.replace(/_/g, ' ');
 }
-interface Props { onApply: (prompt: string) => void; onApplyImage2?: (file: File) => void; currentImage2?: File | null; }
+interface Props { onApply: (prompt: string) => void; onApplyImage1?: (file: File) => void; onApplyImage2?: (file: File) => void; currentImage2?: File | null; }
 const pill = (active: boolean) =>
   `px-3 py-2 rounded-lg text-[10px] font-medium uppercase tracking-widest border min-h-[40px] ${
     active ? 'bg-zinc-100 border-zinc-100 text-zinc-950' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400'
   }`;
 
-export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage2 }: Props) {
-  const [heldImage1, setHeldImage1] = useState<File | null>(null);
-  const [heldImage2, setHeldImage2] = useState<File | null>(null);
-  const activeImage2 = currentImage2 || heldImage2;
-  const setImage2 = (file: File) => { setHeldImage2(file); onApplyImage2?.(file); setReference2File(file); };
-  const setImage1 = (file: File) => { setHeldImage1(file); setReference1File(file); };
+export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage2 }: Props) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<'scene' | 'library'>('library');
   const [hideRefs, setHideRefs] = useState(false);
@@ -65,19 +60,23 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [last, setLast] = useState<ReturnType<typeof assembleAdminPrompt> | null>(null);
-  const [copied, setCopied] = useState(false);
   const [filling, setFilling] = useState<'char' | 'pose' | null>(null);
   const [fillError, setFillError] = useState<string | null>(null);
+  const [usingId, setUsingId] = useState<string | null>(null);
   const familyPoses = POSES.filter((p) => p.family === family);
   const faces = library.filter((item) => (item.slot || 'pose') === 'face');
   const poses = library.filter((item) => (item.slot || 'pose') !== 'face');
 
+  const setImage2 = (file: File) => { onApplyImage2?.(file); setReference2File(file); };
+  const setImage1 = (file: File) => { onApplyImage1?.(file); setReference1File(file); };
+
   const refreshBounds = async () => {
     try {
       await listPoseRefFamilies();
-      const cards = await listLibraryCards();
-      setLibrary((prev) => { prev.forEach((item) => { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); }); return cards; });
-    } catch { /* ignore */ }
+      setLibrary(await listLibraryCards());
+    } catch (err: any) {
+      setRefNote(err.message || 'Could not load library. Sign in first.');
+    }
   };
   useEffect(() => { refreshBounds(); }, []);
   useEffect(() => { setCanvasRefsHidden(hideRefs); }, [hideRefs]);
@@ -109,8 +108,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   };
   const saveToLibrary = async (file: File, detected?: PoseGuess | null) => {
     const tagged = detected || guess || { family, label: pose.id, confidence: 0, reason: 'manual' };
-    const label = prettyPoseName(tagged.label, poseName) || prettyPoseName(tagged.label) || `Pose ${poses.length + 1}`;
-    const name = poseName.trim() || label;
+    const name = poseName.trim() || prettyPoseName(tagged.label) || `Pose ${poses.length + 1}`;
     await saveLibraryRef({ name, slot: 'pose', family: tagged.family, detectedLabel: tagged.label === 'unknown' ? name : tagged.label, type: file.type || 'image/jpeg', blob: file });
     await savePoseRef(tagged.family, file); await refreshBounds(); setPoseName(''); setRefNote(`Saved ${name}`);
   };
@@ -133,10 +131,23 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
     }
   };
   const loadLibItem = async (item: LibraryRefMeta) => {
-    const file = await loadLibraryRef(item.id);
-    if (!file) return;
-    if ((item.slot || 'pose') === 'face') { setImage1(file); setRefNote(`Image 1 ← ${item.name}`); return; }
-    setImage2(file); setFamily(item.family); setRefNote(`Image 2 ← ${item.name}`);
+    setUsingId(item.id);
+    try {
+      const file = await loadLibraryRef(item.id);
+      if (!file) throw new Error('Could not download that reference.');
+      if ((item.slot || 'pose') === 'face') {
+        setImage1(file);
+        setRefNote(`Using ${item.name || 'face'} as Image 1`);
+      } else {
+        setImage2(file);
+        setFamily(item.family);
+        setRefNote(`Using ${item.name || 'pose'} as Image 2`);
+      }
+    } catch (err: any) {
+      setRefNote(err.message || 'Could not use that image.');
+    } finally {
+      setUsingId(null);
+    }
   };
   const commitRename = async (id: string) => {
     const next = editingName.trim(); setEditingId(null);
@@ -170,21 +181,27 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
     const built = assembleAdminPrompt({ character: nextChar, poseId: nextPose.id, customPose, shot, angle, titSize, thickCellulite, plumpStomach, hairyPussy, faceMess, pussyCumPuddle });
     setLast(built); onApply(built.prompt);
   };
-  const card = (item: LibraryRefMeta & { previewUrl?: string }, square?: boolean) => (
-    <div key={item.id} className="rounded-xl border border-zinc-800 overflow-hidden">
-      <button type="button" onClick={() => loadLibItem(item)} className="block w-full">
-        {item.previewUrl ? <img src={item.previewUrl} alt={item.name} className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} object-cover bg-zinc-950`} /> : <div className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} bg-zinc-950`} />}
-      </button>
-      <div className="p-2 space-y-1.5">
-        {editingId === item.id ? (
-          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)} onBlur={() => commitRename(item.id)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(item.id); }} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg text-[11px] text-zinc-100 px-2 py-1 outline-none" />
-        ) : (
-          <button type="button" onClick={() => { setEditingId(item.id); setEditingName(item.name || 'Untitled'); }} className="w-full text-left text-[11px] text-zinc-100 truncate">{item.name || prettyPoseName(item.detectedLabel) || 'Untitled'}</button>
-        )}
-        <button type="button" onClick={() => deleteLibraryRef(item.id).then(refreshBounds)} className="text-[10px] text-zinc-500">Delete</button>
+  const card = (item: LibraryRefMeta & { previewUrl?: string }, square?: boolean) => {
+    const isFace = (item.slot || 'pose') === 'face';
+    return (
+      <div key={item.id} className={`rounded-xl border overflow-hidden ${usingId === item.id ? 'border-emerald-400' : 'border-zinc-800'}`}>
+        <button type="button" onClick={() => loadLibItem(item)} className="block w-full relative min-h-[44px] touch-manipulation">
+          {item.previewUrl ? <img src={item.previewUrl} alt={item.name} draggable={false} className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} object-cover bg-zinc-950 pointer-events-none`} /> : <div className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} bg-zinc-950`} />}
+          <span className="absolute bottom-2 left-2 right-2 py-2 rounded-lg bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">
+            {usingId === item.id ? 'Loading…' : isFace ? 'Use as Image 1' : 'Use as Image 2'}
+          </span>
+        </button>
+        <div className="p-2 space-y-1.5">
+          {editingId === item.id ? (
+            <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)} onBlur={() => commitRename(item.id)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(item.id); }} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg text-[11px] text-zinc-100 px-2 py-1 outline-none" />
+          ) : (
+            <button type="button" onClick={() => { setEditingId(item.id); setEditingName(item.name || 'Untitled'); }} className="w-full text-left text-[11px] text-zinc-100 truncate min-h-[32px]">{item.name || prettyPoseName(item.detectedLabel) || 'Untitled'}</button>
+          )}
+          <button type="button" onClick={() => deleteLibraryRef(item.id).then(refreshBounds)} className="text-[10px] text-zinc-500 min-h-[32px]">Delete</button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-3 bg-emerald-500/5 p-3 sm:p-4 border border-emerald-500/20 rounded-2xl">
@@ -206,40 +223,34 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
                 <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1</p>
                 <input value={faceName} onChange={(e) => setFaceName(e.target.value)} placeholder="Name this face" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
-                <label className={`${pill(false)} cursor-pointer text-center block`}>Add faces<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFaces(e.target.files); e.target.value = ''; }} /></label>
-                <div className="grid grid-cols-2 gap-2">{faces.map((item) => card(item, true))}</div>
+                <label className={`${pill(false)} cursor-pointer text-center block`}>Add faces<input type="file" accept="image/*" multiple data-arx-lib="true" className="hidden" onChange={(e) => { if (e.target.files?.length) addFaces(e.target.files); e.target.value = ''; }} /></label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{faces.map((item) => card(item, true))}</div>
               </div>
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
                 <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Poses · Image 2</p>
                 <input value={poseName} onChange={(e) => setPoseName(e.target.value)} placeholder="Name this pose" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
-                <label className={`${pill(false)} cursor-pointer text-center block`}>Add poses<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
+                <label className={`${pill(false)} cursor-pointer text-center block`}>Add poses<input type="file" accept="image/*" multiple data-arx-lib="true" className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
                 {guess && <p className="text-[10px] text-zinc-300">Guess: {prettyPoseName(guess.label) || guess.label}</p>}
                 {refNote && <p className="text-[10px] text-emerald-400 break-words">{refNote}</p>}
-                <div className="grid grid-cols-2 gap-2">{poses.map((item) => card(item))}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{poses.map((item) => card(item))}</div>
               </div>
             </div>
           )}
           {tab === 'scene' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {POSE_FAMILIES.map((f) => (<button key={f.id} type="button" onClick={() => selectFamily(f.id)} className={pill(family === f.id)}>{f.label}</button>))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {familyPoses.map((p) => (<button key={p.id} type="button" onClick={() => selectPose(p)} className={pill(pose.id === p.id)}>{p.label}</button>))}
-              </div>
+              <div className="flex flex-wrap gap-2">{POSE_FAMILIES.map((f) => (<button key={f.id} type="button" onClick={() => selectFamily(f.id)} className={pill(family === f.id)}>{f.label}</button>))}</div>
+              <div className="flex flex-wrap gap-2">{familyPoses.map((p) => (<button key={p.id} type="button" onClick={() => selectPose(p)} className={pill(pose.id === p.id)}>{p.label}</button>))}</div>
               {pose.id === 'custom' && (
                 <div className="space-y-2">
                   <textarea value={customPose} onChange={(e) => setCustomPose(e.target.value)} placeholder="Custom pose" rows={2} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
                   <button type="button" onClick={fillPose} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'pose' ? 'Grok…' : 'Expand pose with Grok'}</button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-wrap gap-2">{(['closeup', 'medium', 'far'] as ShotType[]).map((s) => (<button key={s} type="button" onClick={() => setShot(s)} className={pill(shot === s)}>{s}</button>))}</div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setAngle('low')} className={pill(angle === 'low')}>Low</button>
-                  <button type="button" onClick={() => setAngle('eye')} className={pill(angle === 'eye')}>Eye</button>
-                  <button type="button" onClick={() => setAngle('high')} className={pill(angle === 'high')}>High</button>
-                </div>
+              <div className="flex flex-wrap gap-2">{(['closeup', 'medium', 'far'] as ShotType[]).map((s) => (<button key={s} type="button" onClick={() => setShot(s)} className={pill(shot === s)}>{s}</button>))}</div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setAngle('low')} className={pill(angle === 'low')}>Low</button>
+                <button type="button" onClick={() => setAngle('eye')} className={pill(angle === 'eye')}>Eye</button>
+                <button type="button" onClick={() => setAngle('high')} className={pill(angle === 'high')}>High</button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {(['small', 'medium', 'big', 'huge'] as TitSize[]).map((t) => (<button key={t} type="button" onClick={() => setTitSize(t)} className={pill(titSize === t)}>{t}</button>))}
