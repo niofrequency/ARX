@@ -6,7 +6,11 @@ import {
 } from '../lib/adminPromptBuilder';
 import { expandCustomCharacter, expandCustomPose } from '../lib/grok';
 import { getFreshIdToken } from '../lib/firebase';
-import { deletePoseRef, listPoseRefFamilies, loadPoseRef, savePoseRef } from '../lib/poseRefStore';
+import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
+import {
+  deleteLibraryRef, deletePoseRef, listLibraryRefs, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
+  saveLibraryRef, savePoseRef, type LibraryRefMeta,
+} from '../lib/poseRefStore';
 
 interface Props {
   onApply: (prompt: string) => void;
@@ -40,17 +44,31 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const [family, setFamily] = useState<PoseFamily>('front');
   const [customPose, setCustomPose] = useState('');
   const [boundFamilies, setBoundFamilies] = useState<PoseFamily[]>([]);
+  const [library, setLibrary] = useState<LibraryRefMeta[]>([]);
+  const [guess, setGuess] = useState<PoseGuess | null>(null);
+  const [detecting, setDetecting] = useState(false);
   const [refNote, setRefNote] = useState('');
   const [last, setLast] = useState<ReturnType<typeof assembleAdminPrompt> | null>(null);
   const [copied, setCopied] = useState(false);
   const [filling, setFilling] = useState<'char' | 'pose' | null>(null);
   const [fillError, setFillError] = useState<string | null>(null);
   const familyPoses = POSES.filter((p) => p.family === family);
-  const refreshBounds = async () => { try { setBoundFamilies(await listPoseRefFamilies()); } catch { /* ignore */ } };
+
+  const refreshBounds = async () => {
+    try {
+      setBoundFamilies(await listPoseRefFamilies());
+      setLibrary(await listLibraryRefs());
+    } catch { /* ignore */ }
+  };
   useEffect(() => { refreshBounds(); }, []);
 
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
     if (!onApplyImage2) return;
+    const fromLib = library.find((item) => item.family === nextFamily);
+    if (fromLib) {
+      const file = await loadLibraryRef(fromLib.id);
+      if (file) { onApplyImage2(file); setRefNote(`Image 2 → library ${fromLib.detectedLabel}`); return; }
+    }
     const file = await loadPoseRef(nextFamily);
     if (file) { onApplyImage2(file); setRefNote(`Image 2 → ${nextFamily} ref`); }
     else setRefNote(`No saved ${nextFamily} ref yet`);
@@ -66,11 +84,47 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
     if (!currentImage2) { setRefNote('Put a photo in Reference 2 first, then save it.'); return; }
     await savePoseRef(family, currentImage2); await refreshBounds(); setRefNote(`Saved current Reference 2 as ${family}`);
   };
-  const uploadFamilyRef = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    await savePoseRef(family, file); await refreshBounds(); onApplyImage2?.(file); setRefNote(`Saved and loaded ${family} ref`);
-  };
   const clearFamilyRef = async () => { await deletePoseRef(family); await refreshBounds(); setRefNote(`Cleared ${family} ref`); };
+
+  const runDetect = async (file: File) => {
+    setDetecting(true);
+    try {
+      const next = await detectPoseFromFile(file);
+      setGuess(next);
+      setFamily(next.family);
+      const match = POSES.find((p) => p.id === next.label || p.family === next.family);
+      if (match) { setPose(match); setLockPose(true); }
+      setRefNote(`Detected ${next.label} (${next.family}) · ${next.reason}`);
+      return next;
+    } catch (err: any) {
+      setRefNote(err.message || 'Pose detect failed');
+      return null;
+    } finally { setDetecting(false); }
+  };
+  const saveToLibrary = async (file: File, detected?: PoseGuess | null) => {
+    const tagged = detected || guess || { family, label: pose.id, confidence: 0, reason: 'manual' };
+    await saveLibraryRef({ name: file.name || tagged.label, family: tagged.family, detectedLabel: tagged.label, type: file.type || 'image/jpeg', blob: file });
+    await savePoseRef(tagged.family, file);
+    await refreshBounds();
+    setRefNote(`Saved ${tagged.label} to library`);
+  };
+  const addFilesToLibrary = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      onApplyImage2?.(file);
+      const tagged = await runDetect(file);
+      await saveToLibrary(file, tagged);
+    }
+  };
+  const loadLibItem = async (id: string, itemFamily: PoseFamily, label: string) => {
+    const file = await loadLibraryRef(id);
+    if (!file) return;
+    onApplyImage2?.(file);
+    setFamily(itemFamily);
+    const match = POSES.find((p) => p.id === label) || POSES.find((p) => p.family === itemFamily);
+    if (match) { setPose(match); setLockPose(true); }
+    setRefNote(`Image 2 ← ${label}`);
+  };
 
   const fillChar = async () => {
     if (!customName.trim()) { setFillError('Type a character name first.'); return; }
@@ -130,14 +184,25 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
               </div>
             )}
             <div className="mt-3 space-y-2 rounded-xl border border-zinc-800 p-3">
-              <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Image 2 for {family}</p>
+              <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Pose library · Image 2</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={saveCurrentAsFamily} className={pill(false)}>Save current Ref 2</button>
-                <label className={`${pill(false)} cursor-pointer`}>Upload family ref<input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFamilyRef(f); e.target.value = ''; }} /></label>
-                <button type="button" onClick={clearFamilyRef} className={pill(false)}>Clear</button>
+                <label className={`${pill(false)} cursor-pointer`}>Add pose photos<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
+                <button type="button" onClick={() => currentImage2 && runDetect(currentImage2)} className={pill(false)}>{detecting ? 'Detecting…' : 'Detect current Ref 2'}</button>
+                <button type="button" onClick={() => currentImage2 && saveToLibrary(currentImage2)} className={pill(false)}>Save current to library</button>
+                <button type="button" onClick={saveCurrentAsFamily} className={pill(false)}>Bind family default</button>
+                <button type="button" onClick={clearFamilyRef} className={pill(false)}>Clear family default</button>
               </div>
+              {guess && <p className="text-[10px] text-zinc-300">Guess: {guess.label} · {guess.family} · {Math.round(guess.confidence * 100)}% · {guess.reason}</p>}
               {refNote && <p className="text-[10px] text-emerald-400">{refNote}</p>}
-              <p className="text-[10px] text-zinc-500">Dot on a family means a photo is saved. Clicking a pose loads that photo into Reference 2.</p>
+              <div className="flex flex-wrap gap-2">
+                {library.map((item) => (
+                  <button key={item.id} type="button" onClick={() => loadLibItem(item.id, item.family, item.detectedLabel)} className={pill(family === item.family)}>
+                    {item.detectedLabel}
+                    <span className="ml-1 opacity-50" onClick={(e) => { e.stopPropagation(); deleteLibraryRef(item.id).then(refreshBounds); }}>×</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-zinc-500">Upload many pose photos. Click a name to load it as Reference 2. MediaPipe tags the pose on upload.</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
