@@ -8,7 +8,7 @@ import { expandCustomCharacter, expandCustomPose } from '../lib/grok';
 import { getFreshIdToken } from '../lib/firebase';
 import { setCanvasRefsHidden, setReference1File, setReference2File } from '../lib/setRef2';
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
-import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
+import { filterLibrary, formatBytes, ingestRefImage } from '../lib/prepareRefImage';
 import {
   deleteLibraryRef, listLibraryCards, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
   renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
@@ -116,10 +116,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const addFilesToLibrary = async (files: FileList | File[]) => {
     for (const raw of Array.from(files)) {
       if (!raw.type.startsWith('image/')) continue;
-      const prepared = await prepareRefImage(raw);
+      const prepared = await ingestRefImage(raw, 'pose');
+      if (prepared.duplicateOf) { setRefNote('Skipped duplicate pose (aHash match)'); continue; }
       setImage2(prepared.file);
       await saveToLibrary(prepared.file, await runDetect(prepared.file));
-      setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
+      setRefNote(`Saved pose · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)} · ${prepared.exifNote}`);
     }
   };
   const saveFace = async (file: File) => {
@@ -130,9 +131,10 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const addFaces = async (files: FileList | File[]) => {
     for (const raw of Array.from(files)) {
       if (!raw.type.startsWith('image/')) continue;
-      const prepared = await prepareRefImage(raw);
+      const prepared = await ingestRefImage(raw, 'face');
+      if (prepared.duplicateOf) { setRefNote('Skipped duplicate face (aHash match)'); continue; }
       await saveFace(prepared.file);
-      setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
+      setRefNote(`Saved face · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)} · ${prepared.exifNote}`);
     }
   };
   const loadLibItem = async (item: LibraryRefMeta) => {
