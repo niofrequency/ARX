@@ -135,3 +135,39 @@ export async function deleteLibraryRef(id: string): Promise<void> {
   });
   db.close();
 }
+
+export async function renameLibraryRef(id: string, name: string): Promise<void> {
+  const db = await openDb();
+  const row = await new Promise<LibraryRef | undefined>((resolve, reject) => {
+    const tx = db.transaction(LIBRARY_STORE, 'readwrite');
+    const store = tx.objectStore(LIBRARY_STORE);
+    const req = store.get(id);
+    req.onsuccess = () => {
+      const current = req.result as LibraryRef | undefined;
+      if (!current) { resolve(undefined); return; }
+      current.name = name.trim() || current.name;
+      store.put(current);
+      resolve(current);
+    };
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  if (!row) throw new Error('Pose not found');
+}
+
+export async function listLibraryCards(): Promise<(LibraryRefMeta & { previewUrl: string })[]> {
+  const db = await openDb();
+  const rows = await new Promise<LibraryRef[]>((resolve, reject) => {
+    const tx = db.transaction(LIBRARY_STORE, 'readonly');
+    const req = tx.objectStore(LIBRARY_STORE).getAll();
+    req.onsuccess = () => resolve((req.result || []) as LibraryRef[]);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return rows
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(({ blob, ...meta }) => ({
+      ...meta,
+      previewUrl: blob ? URL.createObjectURL(blob) : '',
+    }));
+}
