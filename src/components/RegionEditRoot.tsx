@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { getBodySegmentMask, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
+import { paintHit, segmentAt, type SegmentHit } from '../lib/interactiveSegment';
 
 function findPreviewImg(): HTMLImageElement | null {
   const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
@@ -17,132 +17,119 @@ function findPreviewImg(): HTMLImageElement | null {
   return visible[0] || null;
 }
 
-const cache = new Map<string, BodySegmentMask | null>();
-
-async function maskFor(url: string) {
-  if (cache.has(url)) return cache.get(url) || null;
-  const m = await getBodySegmentMask(url);
-  cache.set(url, m);
-  return m;
+function contain(maxW: number, maxH: number, natW: number, natH: number) {
+  const s = Math.min(maxW / Math.max(natW, 1), maxH / Math.max(natH, 1));
+  return { w: Math.max(1, natW * s), h: Math.max(1, natH * s) };
 }
 
 export default function RegionEditRoot() {
-  const hoverRef = useRef<HTMLCanvasElement | null>(null);
-  const workRef = useRef<HTMLCanvasElement | null>(null);
-  const [hovered, setHovered] = useState<SegmentSlot | null>(null);
+  const workCanvas = useRef<HTMLCanvasElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  const lastT = useRef(0);
   const [open, setOpen] = useState(false);
   const [src, setSrc] = useState('');
   const [note, setNote] = useState('');
   const [portrait, setPortrait] = useState(true);
-  const [locked, setLocked] = useState<SegmentSlot>('clothes');
-  const maskRef = useRef<BodySegmentMask | null>(null);
-  const srcRef = useRef('');
+  const [box, setBox] = useState({ w: 400, h: 600 });
+  const [hit, setHit] = useState<SegmentHit | null>(null);
+
+  const layout = () => {
+    const pane = paneRef.current;
+    const img = imgRef.current;
+    if (!pane || !img) return;
+    const pr = pane.getBoundingClientRect();
+    const natW = img.naturalWidth || 1;
+    const natH = img.naturalHeight || 1;
+    setBox(contain(pr.width, pr.height, natW, natH));
+    setPortrait(natH >= natW);
+  };
 
   useEffect(() => {
-    const onMove = async (e: PointerEvent) => {
-      if (open) return;
-      const img = findPreviewImg();
-      const canvas = hoverRef.current;
-      if (!img || !canvas) return;
-      const rect = img.getBoundingClientRect();
-      canvas.style.left = `${rect.left}px`;
-      canvas.style.top = `${rect.top}px`;
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      const nx = (e.clientX - rect.left) / rect.width;
-      const ny = (e.clientY - rect.top) / rect.height;
-      if (nx < 0 || ny < 0 || nx > 1 || ny > 1) {
-        setHovered(null);
-        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-      const url = img.currentSrc || img.src;
-      let mask = maskRef.current;
-      if (!mask || srcRef.current !== url) {
-        mask = await maskFor(url);
-        maskRef.current = mask;
-        srcRef.current = url;
-      }
-      if (!mask) return;
-      const slot = slotAt(mask, nx, ny);
-      setHovered(slot);
-      paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
-    };
+    if (!open) return;
+    layout();
+    window.addEventListener('resize', layout);
+    return () => window.removeEventListener('resize', layout);
+  }, [open, src]);
+
+  useEffect(() => {
     const onClick = (e: PointerEvent) => {
       if (open) return;
       if ((e.target as HTMLElement).closest('[data-arx-region-ui]')) return;
       const img = findPreviewImg();
-      if (!img || !hovered) return;
+      if (!img) return;
       const rect = img.getBoundingClientRect();
       const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
       if (!inside) return;
       setSrc(img.currentSrc || img.src);
-      setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
-      setLocked(hovered);
+      setPortrait((img.naturalHeight || 1) >= (img.naturalWidth || 1));
       setOpen(true);
     };
-    window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onClick);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerdown', onClick);
-    };
-  }, [open, hovered]);
+    return () => window.removeEventListener('pointerdown', onClick);
+  }, [open]);
 
-  const onWorkMove = async (e: React.PointerEvent<HTMLDivElement>) => {
-    const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
-    const canvas = workRef.current;
-    if (!wrap || !canvas) return;
-    const rect = wrap.getBoundingClientRect();
+  const onWorkMove = async (e: React.PointerEvent) => {
+    const img = imgRef.current;
+    const canvas = workCanvas.current;
+    if (!img || !canvas) return;
+    const now = Date.now();
+    if (now - lastT.current < 90) return;
+    lastT.current = now;
+    const rect = img.getBoundingClientRect();
     const nx = (e.clientX - rect.left) / rect.width;
     const ny = (e.clientY - rect.top) / rect.height;
     if (nx < 0 || ny < 0 || nx > 1 || ny > 1) return;
-    let mask = maskRef.current;
-    if (!mask) {
-      mask = await maskFor(src);
-      maskRef.current = mask;
+    try {
+      const next = await segmentAt(img, nx, ny);
+      if (!next) return;
+      setHit(next);
+      paintHit(canvas, next, Math.round(rect.width), Math.round(rect.height));
+    } catch {
+      /* model loading */
     }
-    if (!mask) return;
-    const slot = slotAt(mask, nx, ny);
-    setLocked(slot);
-    setHovered(slot);
-    paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
   };
 
   const applyPrompt = () => {
     if (!note.trim()) return;
-    const prompt = `Only edit the ${locked} region of the subject. Follow the segmented ${locked} silhouette. Do not change any other region. ${note.trim()}`;
-    const box = document.querySelector('textarea') as HTMLTextAreaElement | null;
-    if (box) {
-      box.value = prompt;
-      box.dispatchEvent(new Event('input', { bubbles: true }));
+    const prompt = `Only edit the highlighted segmented region under the cursor. Do not change pixels outside that mask. ${note.trim()}`;
+    const boxEl = document.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (boxEl) {
+      boxEl.value = prompt;
+      boxEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    toast.success(`Editing ${locked}`);
+    toast.success('Region prompt pasted');
     setOpen(false);
   };
 
   return (
     <>
-      <canvas ref={hoverRef} className="pointer-events-none fixed z-[80]" />
-      {hovered && !open && (
-        <div className="fixed z-[90] left-1/2 -translate-x-1/2 top-3 px-3 py-1 rounded-md bg-zinc-950/90 border border-emerald-500/40 text-[10px] font-bold uppercase tracking-widest text-emerald-400 pointer-events-none">
-          {hovered}
-        </div>
-      )}
       {open && (
-        <div data-arx-region-ui className="fixed inset-0 z-[10050] bg-black/90 flex">
+        <div data-arx-region-ui className="fixed inset-0 z-[10050] bg-black/92 flex">
           <div className={`flex w-full h-full ${portrait ? 'flex-row' : 'flex-col'}`}>
-            <div className={`relative bg-black flex items-center justify-center ${portrait ? 'flex-1 min-w-0' : 'flex-[1.4] min-h-0'}`} onPointerMove={onWorkMove}>
-              {src && <img src={src} alt="" className="max-h-full max-w-full object-contain" />}
-              <canvas ref={workRef} className="pointer-events-none absolute inset-0" />
+            <div ref={paneRef} className={`relative bg-black flex items-center justify-center overflow-hidden ${portrait ? 'flex-1 min-w-0' : 'flex-[1.4] min-h-0'}`}>
+              <div className="relative" style={{ width: box.w, height: box.h }} onPointerMove={onWorkMove}>
+                {src && (
+                  <img
+                    ref={imgRef}
+                    src={src}
+                    alt=""
+                    crossOrigin="anonymous"
+                    onLoad={layout}
+                    className="block w-full h-full"
+                    style={{ objectFit: 'fill' }}
+                  />
+                )}
+                <canvas ref={workCanvas} className="pointer-events-none absolute inset-0 w-full h-full" />
+              </div>
             </div>
             <div className={`${portrait ? 'w-[340px] max-w-[42vw] border-l' : 'w-full border-t'} border-zinc-800 bg-zinc-950 p-4 space-y-3`}>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Selected: {locked}</p>
-              <p className="text-[11px] text-zinc-400">Hover paints the real MediaPipe class silhouette (hair, face, body skin, clothes, other, background). Not a circle.</p>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={`What to change on ${locked}`} rows={5} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none" />
+              <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Click-to-segment</p>
+              <p className="text-[11px] text-zinc-400">Hover the photo. Green fill is the Interactive Segmenter mask for that object or body part — aligned to the image, not the black bars.</p>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What to change in this region only" rows={5} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none" />
               <div className="flex gap-2">
                 <button type="button" onClick={() => setOpen(false)} className="flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-[10px] uppercase tracking-widest text-zinc-400">Close</button>
-                <button type="button" onClick={applyPrompt} className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">Paste region prompt</button>
+                <button type="button" onClick={applyPrompt} disabled={!hit} className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest disabled:opacity-40">Paste region prompt</button>
               </div>
             </div>
           </div>

@@ -30,52 +30,58 @@ export interface SegmentHit {
   height: number;
 }
 
+function loadCors(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('cors image load'));
+    img.src = src;
+  });
+}
+
 export async function segmentAt(
   image: HTMLImageElement,
   nx: number,
   ny: number,
 ): Promise<SegmentHit | null> {
   const model = await getSegmenter();
-  const result = model.segment(image, {
-    keypoint: { x: nx, y: ny },
-  });
-  const confidence = result.confidenceMasks?.[0];
-  const category = result.categoryMask;
-  const src = confidence || category;
+  let input: HTMLImageElement = image;
+  try {
+    if (image.currentSrc || image.src) input = await loadCors(image.currentSrc || image.src);
+  } catch {
+    input = image;
+  }
+  const result = model.segment(input, { keypoint: { x: nx, y: ny } });
+  const src = result.confidenceMasks?.[0] || result.categoryMask;
   if (!src) return null;
-  const canvas = document.createElement('canvas');
-  canvas.width = src.width;
-  canvas.height = src.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  const out = ctx.createImageData(src.width, src.height);
   const data = src.getAsUint8Array();
+  const out = new ImageData(src.width, src.height);
   for (let i = 0; i < data.length; i++) {
-    const v = data[i];
-    const on = v > 20;
-    out.data[i * 4] = 0;
-    out.data[i * 4 + 1] = 242;
-    out.data[i * 4 + 2] = 255;
-    out.data[i * 4 + 3] = on ? 140 : 0;
+    const on = data[i] > 24;
+    out.data[i * 4] = 34;
+    out.data[i * 4 + 1] = 197;
+    out.data[i * 4 + 2] = 94;
+    out.data[i * 4 + 3] = on ? 120 : 0;
+  }
+  try {
+    src.close();
+  } catch {
+    /* older wasm */
   }
   return { mask: out, width: src.width, height: src.height };
 }
 
-export function maskToPng(hit: SegmentHit): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = hit.width;
-  canvas.height = hit.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-  ctx.putImageData(hit.mask, 0, 0);
-  return canvas.toDataURL('image/png');
-}
-
-export function paintMask(canvas: HTMLCanvasElement, hit: SegmentHit) {
-  canvas.width = hit.width;
-  canvas.height = hit.height;
+export function paintHit(canvas: HTMLCanvasElement, hit: SegmentHit, w: number, h: number) {
+  const off = document.createElement('canvas');
+  off.width = hit.width;
+  off.height = hit.height;
+  off.getContext('2d')?.putImageData(hit.mask, 0, 0);
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.putImageData(hit.mask, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(off, 0, 0, hit.width, hit.height, 0, 0, w, h);
 }
