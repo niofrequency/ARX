@@ -3,19 +3,23 @@ import { toast } from 'sonner';
 import { getBodySegmentMask, imagePointFromClient, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
 import { createCoalescedRunner, paintHit, segmentAt } from '../lib/interactiveSegment';
 
-function findPreviewImg(): HTMLImageElement | null {
-  const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
-  const visible = imgs.filter((img) => {
-    if (img.closest('[data-arx-lib],[data-arx-region-ui]')) return false;
-    const r = img.getBoundingClientRect();
-    return r.width > 180 && r.height > 180 && r.bottom > 40 && r.top < window.innerHeight - 40;
-  });
-  visible.sort((a, b) => {
-    const aa = a.getBoundingClientRect();
-    const bb = b.getBoundingClientRect();
-    return bb.width * bb.height - aa.width * aa.height;
-  });
-  return visible[0] || null;
+// Finds the actual <img> under a client point via elementFromPoint, rather
+// than guessing "the biggest visible image on the page" up front. That
+// matters on screens like the history lightbox, which keeps several
+// neighboring carousel slides' <img> elements mounted at once (rotated
+// off to the side, faded out, pointer-events: none) around the centered
+// one — a size-based global scan can lock onto one of those occluded,
+// non-interactive neighbors instead of the image actually under the
+// cursor. elementFromPoint naturally skips pointer-events: none elements,
+// so it always resolves to whatever the user could actually click.
+function imgAtPoint(clientX: number, clientY: number): HTMLImageElement | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  const img = el?.closest('img') as HTMLImageElement | null;
+  if (!img) return null;
+  if (img.closest('[data-arx-lib],[data-arx-region-ui]')) return null;
+  const r = img.getBoundingClientRect();
+  if (r.width < 180 || r.height < 180) return null;
+  return img;
 }
 
 const cache = new Map<string, BodySegmentMask | null>();
@@ -49,9 +53,14 @@ export default function RegionEditRoot() {
   useEffect(() => {
     const onMove = async (e: PointerEvent) => {
       if (open) return;
-      const img = findPreviewImg();
       const canvas = hoverRef.current;
-      if (!img || !canvas) return;
+      if (!canvas) return;
+      const img = imgAtPoint(e.clientX, e.clientY);
+      if (!img) {
+        setHovered(null);
+        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
       const rect = img.getBoundingClientRect();
       canvas.style.left = `${rect.left}px`;
       canvas.style.top = `${rect.top}px`;
@@ -78,11 +87,9 @@ export default function RegionEditRoot() {
     const onClick = (e: PointerEvent) => {
       if (open) return;
       if ((e.target as HTMLElement).closest('[data-arx-region-ui]')) return;
-      const img = findPreviewImg();
+      const img = imgAtPoint(e.clientX, e.clientY);
       if (!img || !hovered) return;
       const rect = img.getBoundingClientRect();
-      const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
-      if (!inside) return;
       setSrc(img.currentSrc || img.src);
       setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
       setRegionName(hovered);
