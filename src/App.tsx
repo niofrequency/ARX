@@ -30,6 +30,8 @@ import {
   deleteSavedPromptDoc,
   createPendingJob,
 } from './lib/userData';
+import { checkHandQuality } from './lib/handQuality';
+import { normalizeUploadedImage } from './lib/imagePrep';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -37,7 +39,7 @@ import {
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
   Trash2, Maximize, SlidersHorizontal, Box, Layers,
   Bookmark, BookmarkPlus, Plus, Dices,
-  UserCircle, Wand2, Film, LogOut, RefreshCw, Copy, Check
+  UserCircle, Wand2, Film, LogOut, RefreshCw, Copy, Check, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -320,6 +322,17 @@ export default function App() {
   // shape (portrait, landscape, square, ultra-wide, …) instead of forcing
   // it into a fixed box and cropping it.
   const [resultAspect, setResultAspect] = useState<number | null>(null);
+  // Purely informational — see handQuality.ts. Set only when a finished
+  // (non-video) result's hand geometry looks confidently off; never blocks
+  // anything or triggers an automatic regenerate, and never touches
+  // billing. Cleared whenever the result changes so a stale warning can
+  // never linger on a different image.
+  const [handWarning, setHandWarning] = useState<string | null>(null);
+  // Guards the async hand-quality check below against a race: if a newer
+  // generation finishes before an older one's check resolves, the stale
+  // result is dropped instead of clobbering the new one's (lack of a)
+  // warning.
+  const latestResultIdRef = useRef<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -658,10 +671,11 @@ export default function App() {
       URL.revokeObjectURL(previewUrl);
     }
     const url = URL.createObjectURL(file);
-    setSelectedFile(file); 
-    setPreviewUrl(url); 
+    setSelectedFile(file);
+    setPreviewUrl(url);
     setResultUrl(null);
     setResultId(null);
+    setHandWarning(null);
     setError(null);
   };
 
@@ -718,55 +732,21 @@ export default function App() {
     setPreviewUrl3(url); 
   };
 
-  const optimizeImageForUpload = (file: File, maxSize: number = 1536): Promise<string> => {
+  // Normalizes (EXIF-orientation-corrected, resized, recompressed — see
+  // imagePrep.ts) then reads the result as a data URL for the API payload.
+  // Every upload goes through the same path now, regardless of size: the
+  // old code only did this for files over 500KB, leaving smaller ones
+  // exactly as picked — including whatever EXIF orientation tag they
+  // carried, unapplied to the raw pixels, which a downstream (non-browser)
+  // decoder isn't guaranteed to respect the same way an <img> tag does.
+  const fileToBase64 = async (file: File): Promise<string> => {
+    const normalized = await normalizeUploadedImage(file);
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxSize) {
-              height = Math.round((height * maxSize) / width);
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = Math.round((width * maxSize) / height);
-              height = maxSize;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return reject(new Error('Failed to get canvas context'));
-          
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
-        };
-        img.onerror = (error) => reject(error);
-      };
+      reader.readAsDataURL(normalized);
+      reader.onload = () => resolve(reader.result as string);
       reader.onerror = (error) => reject(error);
     });
-  };
-
-  const fileToBase64 = async (file: File): Promise<string> => {
-    if (file.size < 500 * 1024) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-      });
-    } else {
-      return optimizeImageForUpload(file);
-    }
   };
 
   // Kept as a thin wrapper so the existing call site below doesn't need to
@@ -1631,10 +1611,24 @@ export default function App() {
     }
 
     setQueue(prev => prev.filter(t => t.id !== taskId));
-    
+
     setResultUrl(displayUrl);
     setResultId(taskId);
-    
+    setHandWarning(null);
+    latestResultIdRef.current = taskId;
+
+    // Purely informational hand-geometry check — see handQuality.ts. Runs
+    // after the result is already shown; never blocks display, never
+    // auto-regenerates, never touches billing. Dropped if a newer
+    // generation has already replaced this one by the time it resolves.
+    if (!isVideo) {
+      checkHandQuality(displayUrl).then((res) => {
+        if (res.status === 'flagged' && latestResultIdRef.current === taskId) {
+          setHandWarning(res.reason || 'Hand geometry looks off');
+        }
+      });
+    }
+
     if (wavespeedKey) fetchWavespeedBalance(wavespeedKey);
   };
 
@@ -2209,6 +2203,13 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {handWarning && resultUrl && !isVideoUrl(resultUrl) && (
+              <div className="flex items-center gap-2 mb-3 px-4 py-2.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-medium uppercase tracking-widest w-fit">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Check the hands — geometry looks off. Purely a heads-up, nothing was blocked.
+              </div>
+            )}
 
             {resultUrl && !isVideoUrl(resultUrl) && (
               <div className="flex items-center gap-2 mb-6 flex-wrap">

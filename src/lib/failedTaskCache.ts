@@ -2,10 +2,23 @@
 // working even after a page reload — without ever touching Firebase. A
 // failed job's source image(s) and settings are transient/local by nature;
 // there's no reason to sync them to the cloud.
+//
+// Backed by idb-keyval (Apache-2.0, ~600 bytes) instead of hand-rolled
+// indexedDB.open()/transaction() calls — same underlying storage, far less
+// boilerplate for a plain key -> snapshot cache like this one.
 
-const DB_NAME = 'ARX_FAILED_TASKS';
-const STORE_NAME = 'failedTasks';
-const DB_VERSION = 1;
+import { createStore, del, set, values } from 'idb-keyval';
+
+// A new database name, not the original hand-rolled store's — that one was
+// created with an in-line `keyPath: 'id'`, which idb-keyval's out-of-line
+// set(key, value) calls are incompatible with (IndexedDB fixes a store's
+// key strategy at creation and won't renegotiate it without a version-
+// bumped upgrade). Reusing the name would need a migration for what is, by
+// design, a short-lived (see MAX_AGE_MS below), locally-cached, best-effort
+// "retry" convenience — not permanent data, so anything already sitting in
+// the old store at the time of this change is simply left behind rather
+// than migrated.
+const store = createStore('ARX_FAILED_TASKS_KV', 'failedTasks');
 
 // How long a failed-task snapshot (and its stored image blobs) is kept
 // around before being pruned automatically, so this cache doesn't grow
@@ -34,30 +47,10 @@ export interface FailedTaskSnapshot {
   createdAt: number;
 }
 
-const openDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (e) => {
-      const db = (e.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-  });
-};
-
 /** Saves (or overwrites) a failed task's full snapshot locally. */
 export const saveFailedTaskSnapshot = async (snapshot: FailedTaskSnapshot): Promise<void> => {
   try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(snapshot);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    await set(snapshot.id, snapshot, store);
   } catch (e) {
     console.warn('Failed to save failed-task snapshot locally', e);
   }
@@ -66,13 +59,7 @@ export const saveFailedTaskSnapshot = async (snapshot: FailedTaskSnapshot): Prom
 /** Deletes a snapshot — called once a task is retried successfully, or dismissed. */
 export const deleteFailedTaskSnapshot = async (id: string): Promise<void> => {
   try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).delete(id);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    await del(id, store);
   } catch (e) {
     console.warn('Failed to delete failed-task snapshot', e);
   }
@@ -85,13 +72,7 @@ export const deleteFailedTaskSnapshot = async (id: string): Promise<void> => {
  */
 export const loadFailedTaskSnapshots = async (): Promise<FailedTaskSnapshot[]> => {
   try {
-    const db = await openDB();
-    const all: FailedTaskSnapshot[] = await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const request = tx.objectStore(STORE_NAME).getAll();
-      request.onsuccess = () => resolve(request.result as FailedTaskSnapshot[]);
-      request.onerror = () => reject(request.error);
-    });
+    const all = await values<FailedTaskSnapshot>(store);
 
     const now = Date.now();
     const fresh = all.filter((s) => now - s.createdAt < MAX_AGE_MS);
