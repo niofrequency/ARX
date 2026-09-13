@@ -66,29 +66,20 @@ export default function RegionEditRoot() {
       canvas.style.height = `${rect.height}px`;
       paintSlot(canvas, mask, slot, img);
     };
-    const onMove = async (e: PointerEvent) => {
-      if (open) return;
-      const canvas = hoverRef.current;
-      if (!canvas) return;
-      const img = imgAtPoint(e.clientX, e.clientY);
-      if (!img) {
-        lastHoverImgRef.current = null;
-        setHovered(null);
-        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-      const rect = img.getBoundingClientRect();
-      canvas.style.left = `${rect.left}px`;
-      canvas.style.top = `${rect.top}px`;
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      const point = imagePointFromClient(img, e.clientX, e.clientY);
-      if (!point) {
-        lastHoverImgRef.current = null;
-        setHovered(null);
-        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
+    // Fully resolves an image + slot at a client point from scratch —
+    // deliberately never reads the `hovered` state. A click doesn't need a
+    // preceding pointermove over the same element: touch taps have no
+    // hover phase at all, and even with a mouse, clicking "Expand Data"
+    // opens the lightbox at the cursor's current (unmoved) position, so an
+    // immediate follow-up click could otherwise pair a freshly-found
+    // lightbox image with `hovered`'s stale value from whatever was under
+    // the cursor *before* the lightbox existed — a real mismatch, not a
+    // coordinate bug. Resolving independently here closes that gap.
+    const resolveAt = async (clientX: number, clientY: number): Promise<{ img: HTMLImageElement; mask: BodySegmentMask; slot: SegmentSlot } | null> => {
+      const img = imgAtPoint(clientX, clientY);
+      if (!img) return null;
+      const point = imagePointFromClient(img, clientX, clientY);
+      if (!point) return null;
       const url = img.currentSrc || img.src;
       let mask = maskRef.current;
       if (!mask || srcRef.current !== url) {
@@ -96,22 +87,35 @@ export default function RegionEditRoot() {
         maskRef.current = mask;
         srcRef.current = url;
       }
-      if (!mask) return;
-      const slot = slotAt(mask, point.nx, point.ny);
-      lastHoverImgRef.current = img;
-      setHovered(slot);
-      paintHover(img, canvas, mask, slot);
+      if (!mask) return null;
+      return { img, mask, slot: slotAt(mask, point.nx, point.ny) };
     };
-    const onClick = (e: PointerEvent) => {
+    const onMove = async (e: PointerEvent) => {
+      if (open) return;
+      const canvas = hoverRef.current;
+      if (!canvas) return;
+      const resolved = await resolveAt(e.clientX, e.clientY);
+      if (!resolved) {
+        lastHoverImgRef.current = null;
+        setHovered(null);
+        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      lastHoverImgRef.current = resolved.img;
+      setHovered(resolved.slot);
+      paintHover(resolved.img, canvas, resolved.mask, resolved.slot);
+    };
+    const onClick = async (e: PointerEvent) => {
       if (open) return;
       if ((e.target as HTMLElement).closest('[data-arx-region-ui]')) return;
-      const img = imgAtPoint(e.clientX, e.clientY);
-      if (!img || !hovered) return;
+      const resolved = await resolveAt(e.clientX, e.clientY);
+      if (!resolved) return;
+      const { img, slot } = resolved;
       const rect = img.getBoundingClientRect();
       setSrc(img.currentSrc || img.src);
       setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
-      setRegionName(hovered);
-      setGuess(hovered);
+      setRegionName(slot);
+      setGuess(slot);
       setOpen(true);
     };
     // A layout reflow (window resize, or a phone rotation) can move/resize
