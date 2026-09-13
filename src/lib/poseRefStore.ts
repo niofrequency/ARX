@@ -1,9 +1,13 @@
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+} from 'firebase/firestore';
+import { auth, db, deleteFromFirebase, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
-
-const DB_NAME = 'arx-pose-refs';
-const DB_VERSION = 2;
-const FAMILY_STORE = 'refs';
-const LIBRARY_STORE = 'library';
 
 export type RefSlot = 'face' | 'pose';
 
@@ -15,162 +19,131 @@ export interface LibraryRefMeta {
   detectedLabel: string;
   createdAt: number;
   type: string;
+  url?: string;
+  storagePath?: string;
 }
 
 export interface LibraryRef extends LibraryRefMeta {
-  blob: Blob;
+  blob?: Blob;
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(FAMILY_STORE)) db.createObjectStore(FAMILY_STORE, { keyPath: 'family' });
-      if (!db.objectStoreNames.contains(LIBRARY_STORE)) db.createObjectStore(LIBRARY_STORE, { keyPath: 'id' });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function uid(): string {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in to save reference photos.');
+  return user.uid;
+}
+
+const libraryCol = (userId: string) => collection(db, 'users', userId, 'refLibrary');
+const familyCol = (userId: string) => collection(db, 'users', userId, 'refFamilies');
+
+async function fileFromUrl(url: string, name: string, type: string): Promise<File | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new File([blob], name, { type: type || blob.type || 'image/jpeg' });
+  } catch {
+    return null;
+  }
 }
 
 export async function savePoseRef(family: PoseFamily, file: File): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(FAMILY_STORE, 'readwrite');
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore(FAMILY_STORE).put({ family, name: file.name, type: file.type || 'image/jpeg', blob: file });
+  const userId = uid();
+  const id = family;
+  const storagePath = `users/${userId}/refFamilies/${id}`;
+  const url = await uploadToFirebase(file, storagePath);
+  await setDoc(doc(familyCol(userId), id), {
+    family,
+    name: file.name,
+    type: file.type || 'image/jpeg',
+    url,
+    storagePath,
+    createdAt: Date.now(),
   });
-  db.close();
 }
 
 export async function loadPoseRef(family: PoseFamily): Promise<File | null> {
-  const db = await openDb();
-  const row = await new Promise<any>((resolve, reject) => {
-    const tx = db.transaction(FAMILY_STORE, 'readonly');
-    const req = tx.objectStore(FAMILY_STORE).get(family);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  if (!row?.blob) return null;
-  return new File([row.blob], row.name || `${family}.jpg`, { type: row.type || 'image/jpeg' });
+  const userId = uid();
+  const snap = await getDoc(doc(familyCol(userId), family));
+  if (!snap.exists()) return null;
+  const row = snap.data() as { url?: string; name?: string; type?: string };
+  if (!row.url) return null;
+  return fileFromUrl(row.url, row.name || `${family}.jpg`, row.type || 'image/jpeg');
 }
 
 export async function listPoseRefFamilies(): Promise<PoseFamily[]> {
-  const db = await openDb();
-  const keys = await new Promise<PoseFamily[]>((resolve, reject) => {
-    const tx = db.transaction(FAMILY_STORE, 'readonly');
-    const req = tx.objectStore(FAMILY_STORE).getAllKeys();
-    req.onsuccess = () => resolve((req.result || []) as PoseFamily[]);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return keys;
+  const userId = uid();
+  const snap = await getDocs(familyCol(userId));
+  return snap.docs.map((d) => d.id as PoseFamily);
 }
 
 export async function deletePoseRef(family: PoseFamily): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(FAMILY_STORE, 'readwrite');
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore(FAMILY_STORE).delete(family);
-  });
-  db.close();
+  const userId = uid();
+  const refDoc = doc(familyCol(userId), family);
+  const snap = await getDoc(refDoc);
+  const path = snap.data()?.storagePath as string | undefined;
+  if (path) await deleteFromFirebase(path);
+  await deleteDoc(refDoc);
 }
 
 export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> & { id?: string; slot?: RefSlot }): Promise<LibraryRefMeta> {
-  const row: LibraryRef = {
-    id: item.id || crypto.randomUUID(),
+  const userId = uid();
+  const id = item.id || crypto.randomUUID();
+  const ext = (item.type || 'image/jpeg').includes('png') ? 'png' : 'jpg';
+  const storagePath = `users/${userId}/refLibrary/${id}.${ext}`;
+  const blob = item.blob;
+  if (!blob) throw new Error('Missing image file.');
+  const url = await uploadToFirebase(blob, storagePath);
+  const meta: LibraryRefMeta = {
+    id,
     name: item.name,
     slot: item.slot || 'pose',
     family: item.family,
     detectedLabel: item.detectedLabel,
     createdAt: Date.now(),
     type: item.type || 'image/jpeg',
-    blob: item.blob,
+    url,
+    storagePath,
   };
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readwrite');
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore(LIBRARY_STORE).put(row);
-  });
-  db.close();
-  const { blob, ...meta } = row;
+  await setDoc(doc(libraryCol(userId), id), meta);
   return meta;
 }
 
 export async function listLibraryRefs(): Promise<LibraryRefMeta[]> {
-  const db = await openDb();
-  const rows = await new Promise<LibraryRef[]>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readonly');
-    const req = tx.objectStore(LIBRARY_STORE).getAll();
-    req.onsuccess = () => resolve((req.result || []) as LibraryRef[]);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return rows.map(({ blob, ...meta }) => ({ ...meta, slot: meta.slot || 'pose' })).sort((a, b) => b.createdAt - a.createdAt);
-}
-
-export async function loadLibraryRef(id: string): Promise<File | null> {
-  const db = await openDb();
-  const row = await new Promise<LibraryRef | undefined>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readonly');
-    const req = tx.objectStore(LIBRARY_STORE).get(id);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  if (!row?.blob) return null;
-  return new File([row.blob], row.name || `${row.detectedLabel}.jpg`, { type: row.type || 'image/jpeg' });
-}
-
-export async function deleteLibraryRef(id: string): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readwrite');
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore(LIBRARY_STORE).delete(id);
-  });
-  db.close();
-}
-
-export async function renameLibraryRef(id: string, name: string): Promise<void> {
-  const db = await openDb();
-  const row = await new Promise<LibraryRef | undefined>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readwrite');
-    const store = tx.objectStore(LIBRARY_STORE);
-    const req = store.get(id);
-    req.onsuccess = () => {
-      const current = req.result as LibraryRef | undefined;
-      if (!current) { resolve(undefined); return; }
-      current.name = name.trim() || current.name;
-      store.put(current);
-      resolve(current);
-    };
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  if (!row) throw new Error('Pose not found');
+  const userId = uid();
+  const snap = await getDocs(libraryCol(userId));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) }))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 export async function listLibraryCards(): Promise<(LibraryRefMeta & { previewUrl: string })[]> {
-  const db = await openDb();
-  const rows = await new Promise<LibraryRef[]>((resolve, reject) => {
-    const tx = db.transaction(LIBRARY_STORE, 'readonly');
-    const req = tx.objectStore(LIBRARY_STORE).getAll();
-    req.onsuccess = () => resolve((req.result || []) as LibraryRef[]);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return rows.sort((a, b) => b.createdAt - a.createdAt).map(({ blob, ...meta }) => ({
-    ...meta,
-    slot: meta.slot || 'pose',
-    previewUrl: blob ? URL.createObjectURL(blob) : '',
-  }));
+  const rows = await listLibraryRefs();
+  return rows.map((meta) => ({ ...meta, previewUrl: meta.url || '' }));
+}
+
+export async function loadLibraryRef(id: string): Promise<File | null> {
+  const userId = uid();
+  const snap = await getDoc(doc(libraryCol(userId), id));
+  if (!snap.exists()) return null;
+  const row = { id: snap.id, ...(snap.data() as Omit<LibraryRefMeta, 'id'>) };
+  if (!row.url) return null;
+  return fileFromUrl(row.url, row.name || `${row.detectedLabel}.jpg`, row.type || 'image/jpeg');
+}
+
+export async function deleteLibraryRef(id: string): Promise<void> {
+  const userId = uid();
+  const refDoc = doc(libraryCol(userId), id);
+  const snap = await getDoc(refDoc);
+  const path = snap.data()?.storagePath as string | undefined;
+  if (path) await deleteFromFirebase(path);
+  await deleteDoc(refDoc);
+}
+
+export async function renameLibraryRef(id: string, name: string): Promise<void> {
+  const userId = uid();
+  const refDoc = doc(libraryCol(userId), id);
+  const snap = await getDoc(refDoc);
+  if (!snap.exists()) throw new Error('Pose not found');
+  await setDoc(refDoc, { ...snap.data(), name: name.trim() || snap.data()?.name }, { merge: true });
 }
