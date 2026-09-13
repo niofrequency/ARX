@@ -1,7 +1,8 @@
 export function setReferenceFile(file: File, slot: 1 | 2 = 2) {
   window.dispatchEvent(new CustomEvent(slot === 1 ? 'arx-set-ref1' : 'arx-set-ref2', { detail: file }));
-  const inputs = Array.from(document.querySelectorAll('input[type="file"][accept="image/*"]')) as HTMLInputElement[];
-  const target = inputs[slot - 1] || inputs[0];
+  const slotted = document.querySelector(`input[type="file"][data-arx-slot="${slot}"]`) as HTMLInputElement | null;
+  const inputs = Array.from(document.querySelectorAll('input[type="file"][accept="image/*"]:not([data-arx-lib])')) as HTMLInputElement[];
+  const target = slotted || inputs[slot - 1];
   if (!target) return;
   const dt = new DataTransfer();
   dt.items.add(file);
@@ -26,6 +27,6 @@ export function setCanvasRefsHidden(hidden: boolean) {
     document.head.appendChild(style);
   }
   style.textContent = hidden
-    ? 'body.arx-hide-refs img.absolute.inset-0 { opacity: 0; }'
+    ? 'body.arx-hide-refs img.absolute.inset-0 { opacity: 0; pointer-events: none; }'
     : '';
 }
