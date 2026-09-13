@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { getBodySegmentMask, imagePointFromClient, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
 import { createCoalescedRunner, paintHit, segmentAt } from '../lib/interactiveSegment';
+import { FACE_REGION_LABELS, faceRegionAt, getFaceRegions, paintFaceRegion, type FaceRegionSet } from '../lib/faceRegions';
 
 // Finds the actual <img> under a client point via elementFromPoint, rather
 // than guessing "the biggest visible image on the page" up front. That
@@ -22,113 +23,154 @@ function imgAtPoint(clientX: number, clientY: number): HTMLImageElement | null {
   return img;
 }
 
-const cache = new Map<string, BodySegmentMask | null>();
-
+const maskCache = new Map<string, BodySegmentMask | null>();
 async function maskFor(url: string) {
-  if (cache.has(url)) return cache.get(url) || null;
+  if (maskCache.has(url)) return maskCache.get(url) || null;
   const m = await getBodySegmentMask(url);
-  cache.set(url, m);
+  maskCache.set(url, m);
   return m;
+}
+
+const faceCache = new Map<string, FaceRegionSet | null>();
+async function facesFor(url: string) {
+  if (faceCache.has(url)) return faceCache.get(url) || null;
+  const f = await getFaceRegions(url);
+  faceCache.set(url, f);
+  return f;
+}
+
+/**
+ * A resolved hover/click point, in priority order (most specific first):
+ *  1. A named facial feature (left eye, lips, ...) from faceRegions.ts —
+ *     paints its exact landmark polygon and carries a real name.
+ *  2. Otherwise the coarse body-segmenter bucket (hair/body/face/clothes/
+ *     other/background) — paints that class's silhouette. The in-editor
+ *     work canvas additionally refines this with the class-agnostic
+ *     interactive point segmenter (see workSegmentRunner below); the
+ *     pre-open hover overlay does not, to keep page-wide hover cheap.
+ */
+interface Resolved {
+  img: HTMLImageElement;
+  label: string;
+  mask: BodySegmentMask | null;
+  paint: (canvas: HTMLCanvasElement) => void;
+}
+
+async function resolveAt(clientX: number, clientY: number, maskRef: React.MutableRefObject<BodySegmentMask | null>, srcRef: React.MutableRefObject<string>): Promise<Resolved | null> {
+  const img = imgAtPoint(clientX, clientY);
+  if (!img) return null;
+  const point = imagePointFromClient(img, clientX, clientY);
+  if (!point) return null;
+  const url = img.currentSrc || img.src;
+
+  let mask = maskRef.current;
+  let faces: FaceRegionSet | null;
+  if (!mask || srcRef.current !== url) {
+    const [m, f] = await Promise.all([maskFor(url), facesFor(url)]);
+    mask = m;
+    faces = f;
+    maskRef.current = m;
+    srcRef.current = url;
+  } else {
+    faces = await facesFor(url); // already resolved/cached — this awaits instantly
+  }
+
+  const faceHit = faces ? faceRegionAt(faces, point.nx, point.ny) : null;
+  if (faceHit) {
+    return {
+      img,
+      label: FACE_REGION_LABELS[faceHit.name],
+      mask,
+      paint: (canvas) => paintFaceRegion(canvas, faceHit.polygon, img),
+    };
+  }
+  if (!mask) return null;
+  const slot = slotAt(mask, point.nx, point.ny);
+  return { img, label: slot, mask, paint: (canvas) => paintSlot(canvas, mask!, slot, img) };
 }
 
 export default function RegionEditRoot() {
   const hoverRef = useRef<HTMLCanvasElement | null>(null);
   const workRef = useRef<HTMLCanvasElement | null>(null);
-  const [hovered, setHovered] = useState<SegmentSlot | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [src, setSrc] = useState('');
   const [note, setNote] = useState('');
   const [portrait, setPortrait] = useState(true);
-  // Free-text label for the locked selection. MediaPipe's body segmenter
-  // only knows 6 broad buckets (background/hair/body/face/clothes/other),
-  // so it seeds this as a starting guess, but the actual selectable region
-  // — painted via the class-agnostic interactive point segmenter below —
-  // can be anything: an eye, the nose, a single clothing item, a prop, etc.
-  // The name is editable so the user can call it what it actually is.
+  // Free-text label for the locked selection. Seeded from whatever
+  // resolveAt found (a named facial feature when there's a match, else the
+  // coarse body-segmenter bucket), but the actual selectable region can be
+  // anything a precise mask covers — an eye, a single clothing item, a
+  // prop, etc. — so the name is editable to match.
   const [regionName, setRegionName] = useState('clothes');
-  const [guess, setGuess] = useState<SegmentSlot | null>(null);
+  const [guess, setGuess] = useState<string | null>(null);
   const maskRef = useRef<BodySegmentMask | null>(null);
   const srcRef = useRef('');
 
-  // Remembers the last image + mask the pre-open hover highlighted, so a
-  // window resize (e.g. a phone rotation) can reposition and repaint the
-  // overlay against the new layout even though the pointer itself hasn't
-  // moved — otherwise the highlight would sit stranded at its old screen
-  // position until the next pointermove.
-  const lastHoverImgRef = useRef<HTMLImageElement | null>(null);
+  // Remembers the last resolved hit, so a window resize (e.g. a phone
+  // rotation) can reposition and repaint the overlay against the new
+  // layout even though the pointer itself hasn't moved — otherwise the
+  // highlight would sit stranded at its old screen position.
+  const lastHoverRef = useRef<Resolved | null>(null);
 
   useEffect(() => {
-    const paintHover = (img: HTMLImageElement, canvas: HTMLCanvasElement, mask: BodySegmentMask, slot: SegmentSlot) => {
-      const rect = img.getBoundingClientRect();
+    const paintHover = (resolved: Resolved, canvas: HTMLCanvasElement) => {
+      const rect = resolved.img.getBoundingClientRect();
       canvas.style.left = `${rect.left}px`;
       canvas.style.top = `${rect.top}px`;
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
-      paintSlot(canvas, mask, slot, img);
-    };
-    // Fully resolves an image + slot at a client point from scratch —
-    // deliberately never reads the `hovered` state. A click doesn't need a
-    // preceding pointermove over the same element: touch taps have no
-    // hover phase at all, and even with a mouse, clicking "Expand Data"
-    // opens the lightbox at the cursor's current (unmoved) position, so an
-    // immediate follow-up click could otherwise pair a freshly-found
-    // lightbox image with `hovered`'s stale value from whatever was under
-    // the cursor *before* the lightbox existed — a real mismatch, not a
-    // coordinate bug. Resolving independently here closes that gap.
-    const resolveAt = async (clientX: number, clientY: number): Promise<{ img: HTMLImageElement; mask: BodySegmentMask; slot: SegmentSlot } | null> => {
-      const img = imgAtPoint(clientX, clientY);
-      if (!img) return null;
-      const point = imagePointFromClient(img, clientX, clientY);
-      if (!point) return null;
-      const url = img.currentSrc || img.src;
-      let mask = maskRef.current;
-      if (!mask || srcRef.current !== url) {
-        mask = await maskFor(url);
-        maskRef.current = mask;
-        srcRef.current = url;
-      }
-      if (!mask) return null;
-      return { img, mask, slot: slotAt(mask, point.nx, point.ny) };
+      resolved.paint(canvas);
     };
     const onMove = async (e: PointerEvent) => {
       if (open) return;
       const canvas = hoverRef.current;
       if (!canvas) return;
-      const resolved = await resolveAt(e.clientX, e.clientY);
+      // resolveAt deliberately never reads `hovered` — see onClick below.
+      const resolved = await resolveAt(e.clientX, e.clientY, maskRef, srcRef);
       if (!resolved) {
-        lastHoverImgRef.current = null;
+        lastHoverRef.current = null;
         setHovered(null);
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
       }
-      lastHoverImgRef.current = resolved.img;
-      setHovered(resolved.slot);
-      paintHover(resolved.img, canvas, resolved.mask, resolved.slot);
+      lastHoverRef.current = resolved;
+      setHovered(resolved.label);
+      paintHover(resolved, canvas);
     };
+    // Fully resolves an image + region at the click's own point, from
+    // scratch — deliberately never reads the `hovered` state. A click
+    // doesn't need a preceding pointermove over the same element: touch
+    // taps have no hover phase at all, and even with a mouse, clicking
+    // "Expand Data" opens the lightbox at the cursor's current (unmoved)
+    // position, so an immediate follow-up click could otherwise pair a
+    // freshly-found lightbox image with `hovered`'s stale value from
+    // whatever was under the cursor *before* the lightbox existed — a real
+    // mismatch, not a coordinate bug. Resolving independently here closes
+    // that gap.
     const onClick = async (e: PointerEvent) => {
       if (open) return;
       if ((e.target as HTMLElement).closest('[data-arx-region-ui]')) return;
-      const resolved = await resolveAt(e.clientX, e.clientY);
+      const resolved = await resolveAt(e.clientX, e.clientY, maskRef, srcRef);
       if (!resolved) return;
-      const { img, slot } = resolved;
+      const { img, label } = resolved;
       const rect = img.getBoundingClientRect();
       setSrc(img.currentSrc || img.src);
       setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
-      setRegionName(slot);
-      setGuess(slot);
+      setRegionName(label);
+      setGuess(label);
       setOpen(true);
     };
     // A layout reflow (window resize, or a phone rotation) can move/resize
     // the hovered image without any pointer event to trigger a repaint —
     // re-derive the overlay's position from the image's new rect using the
-    // same already-resolved slot, rather than leaving it stranded at its
+    // same already-resolved hit, rather than leaving it stranded at its
     // old screen position (or requiring the user to nudge the pointer).
     const onResize = () => {
       const canvas = hoverRef.current;
-      const img = lastHoverImgRef.current;
-      const mask = maskRef.current;
-      if (open || !canvas || !img || !img.isConnected || !mask || !hovered) return;
-      paintHover(img, canvas, mask, hovered);
+      const resolved = lastHoverRef.current;
+      if (open || !canvas || !resolved || !resolved.img.isConnected) return;
+      paintHover(resolved, canvas);
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onClick);
@@ -138,7 +180,7 @@ export default function RegionEditRoot() {
       window.removeEventListener('pointerdown', onClick);
       window.removeEventListener('resize', onResize);
     };
-  }, [open, hovered]);
+  }, [open]);
 
   // Runs the class-agnostic interactive segmenter on the hovered point,
   // coalesced so a fast-moving pointer never queues up overlapping model
@@ -178,10 +220,19 @@ export default function RegionEditRoot() {
     if (!wrap || !canvas) return;
     const point = imagePointFromClient(wrap, e.clientX, e.clientY);
     if (!point) return;
+
     let mask = maskRef.current;
     if (!mask) {
       mask = await maskFor(src);
       maskRef.current = mask;
+    }
+    const faces = await facesFor(src);
+    const faceHit = faces ? faceRegionAt(faces, point.nx, point.ny) : null;
+
+    if (faceHit) {
+      setGuess(FACE_REGION_LABELS[faceHit.name]);
+      paintFaceRegion(canvas, faceHit.polygon, wrap);
+      return; // already maximally precise + named — skip the point segmenter
     }
     if (mask) setGuess(slotAt(mask, point.nx, point.ny));
     workSegmentRunner({ img: wrap, canvas, nx: point.nx, ny: point.ny, mask });
@@ -216,13 +267,13 @@ export default function RegionEditRoot() {
               <canvas ref={workRef} className="pointer-events-none absolute inset-0" />
             </div>
             <div className={`${portrait ? 'w-[340px] max-w-[42vw] border-l' : 'w-full border-t'} border-zinc-800 bg-zinc-950 p-4 space-y-3`}>
-              <p className="text-[11px] text-zinc-400">Hover paints a precise silhouette of whatever's under the cursor — an eye, the nose, a strand of hair, a single clothing item, or any other object. Not a fixed category or a circle.</p>
+              <p className="text-[11px] text-zinc-400">Hover paints a precise silhouette of whatever's under the cursor — a named facial feature (eye, eyebrow, lips), a strand of hair, a single clothing item, or any other object. Not a fixed category or a circle.</p>
               <div className="space-y-1">
                 <label className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Selected region</label>
                 <input
                   value={regionName}
                   onChange={(e) => setRegionName(e.target.value)}
-                  placeholder="Name this region (eyes, nose, jacket, necklace…)"
+                  placeholder="Name this region (nose, jacket, necklace…)"
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none"
                 />
                 {guess && <p className="text-[10px] text-zinc-500">Looks like: {guess}</p>}
