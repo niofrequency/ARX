@@ -315,6 +315,11 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultId, setResultId] = useState<string | null>(null);
+  // Natural width/height of the current result media, once known, so the
+  // output frame's border can match the actual generated image/video's
+  // shape (portrait, landscape, square, ultra-wide, …) instead of forcing
+  // it into a fixed box and cropping it.
+  const [resultAspect, setResultAspect] = useState<number | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -397,6 +402,13 @@ export default function App() {
     loadInitialHistory(user.uid, { mode: galleryModeFilter, sortDir: gallerySortDir });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, galleryModeFilter, gallerySortDir]);
+
+  // A new result means a new (unknown) aspect ratio — clear it so the output
+  // frame falls back to its default shape until the new media reports its
+  // real dimensions, instead of briefly showing the previous result's frame.
+  useEffect(() => {
+    setResultAspect(null);
+  }, [resultUrl]);
 
   // Live credit balance — updates automatically the instant the NOWPayments
   // webhook credits a completed top-up, no manual refresh needed.
@@ -2238,7 +2250,10 @@ export default function App() {
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30 -z-10">
                 <div className="w-[85%] aspect-square rounded-full bg-cyan-500/10 blur-[100px]" />
               </div>
-              <div className="relative aspect-square sm:aspect-[4/3] bg-zinc-900/30 rounded-[2.5rem] overflow-hidden border border-zinc-800 shadow-xl flex items-center justify-center">
+              <div
+                className="relative w-full aspect-square sm:aspect-[4/3] bg-zinc-900/30 rounded-[2.5rem] overflow-hidden border border-zinc-800 shadow-xl flex items-center justify-center"
+                style={resultAspect ? { aspectRatio: resultAspect, maxHeight: '75vh' } : undefined}
+              >
               {resultUrl && (
                 <motion.div
                   key={`flash-${resultId}`}
@@ -2269,9 +2284,13 @@ export default function App() {
                           alt="Original" 
                           className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-50" 
                         />
-                        <img 
-                          src={resultUrl} 
-                          alt="Upscaled" 
+                        <img
+                          src={resultUrl}
+                          alt="Upscaled"
+                          onLoad={(e) => {
+                            const img = e.currentTarget;
+                            if (img.naturalWidth && img.naturalHeight) setResultAspect(img.naturalWidth / img.naturalHeight);
+                          }}
                           className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                           style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
                         />
@@ -2313,17 +2332,25 @@ export default function App() {
                         }}
                       >
                         {isVideoUrl(resultUrl) ? (
-                            <video 
+                            <video
                               key={resultUrl}
-                              src={resultUrl} 
+                              src={resultUrl}
                               autoPlay loop muted playsInline controls
-                              className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                              onLoadedMetadata={(e) => {
+                                const v = e.currentTarget;
+                                if (v.videoWidth && v.videoHeight) setResultAspect(v.videoWidth / v.videoHeight);
+                              }}
+                              className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]"
                             />
                         ) : (
-                            <img 
-                              src={resultUrl} 
-                              alt="Result" 
-                              className="w-full h-full object-cover rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]" 
+                            <img
+                              src={resultUrl}
+                              alt="Result"
+                              onLoad={(e) => {
+                                const img = e.currentTarget;
+                                if (img.naturalWidth && img.naturalHeight) setResultAspect(img.naturalWidth / img.naturalHeight);
+                              }}
+                              className="w-full h-full object-contain rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]"
                             />
                         )}
                         
