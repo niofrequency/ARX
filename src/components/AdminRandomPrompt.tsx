@@ -9,9 +9,22 @@ import { getFreshIdToken } from '../lib/firebase';
 import { setReference2File } from '../lib/setRef2';
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import {
-  deleteLibraryRef, deletePoseRef, listLibraryRefs, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
-  saveLibraryRef, savePoseRef, type LibraryRefMeta,
+  deleteLibraryRef, deletePoseRef, listLibraryCards, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
+  renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
 } from '../lib/poseRefStore';
+
+const POSE_NAMES: Record<string, string> = {
+  unknown: 'Unnamed pose', face_closeup: 'Face close-up', facial_closeup: 'Facial close-up', ahegao: 'Ahegao',
+  doggy: 'Doggystyle', ass: 'Ass shot', front_spread: 'Legs spread', front_body: 'Front body', front_pussy: 'Front pussy',
+  kneeling_chest: 'Kneeling / chest', kneeling_bj: 'Kneeling face', standing: 'Standing', spread: 'On back, spread',
+  missionary: 'Missionary', cowgirl: 'Cowgirl', reverse_cowgirl: 'Reverse cowgirl', titjob: 'Titjob', bent_over: 'Bent over',
+};
+
+function prettyPoseName(label?: string, fallback?: string) {
+  if (fallback && fallback.trim() && fallback !== 'unknown') return fallback.trim();
+  if (!label || label === 'unknown') return '';
+  return POSE_NAMES[label] || label.replace(/_/g, ' ');
+}
 
 interface Props {
   onApply: (prompt: string) => void;
@@ -20,18 +33,14 @@ interface Props {
 }
 
 const pill = (active: boolean) =>
-  `px-2.5 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest border transition-all ${
+  `px-3 py-2 sm:px-2.5 sm:py-1.5 rounded-lg text-[10px] sm:text-[9px] font-medium uppercase tracking-widest border transition-all min-h-[40px] sm:min-h-0 ${
     active ? 'bg-zinc-100 border-zinc-100 text-zinc-950' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-100'
   }`;
 
 export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage2 }: Props) {
   const [heldImage2, setHeldImage2] = useState<File | null>(null);
   const activeImage2 = currentImage2 || heldImage2;
-  const setImage2 = (file: File) => {
-    setHeldImage2(file);
-    onApplyImage2?.(file);
-    setReference2File(file);
-  };
+  const setImage2 = (file: File) => { setHeldImage2(file); onApplyImage2?.(file); setReference2File(file); };
   const [open, setOpen] = useState(true);
   const [shot, setShot] = useState<ShotType>('closeup');
   const [angle, setAngle] = useState<AngleType>('low');
@@ -52,10 +61,13 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const [family, setFamily] = useState<PoseFamily>('front');
   const [customPose, setCustomPose] = useState('');
   const [boundFamilies, setBoundFamilies] = useState<PoseFamily[]>([]);
-  const [library, setLibrary] = useState<LibraryRefMeta[]>([]);
+  const [library, setLibrary] = useState<(LibraryRefMeta & { previewUrl?: string })[]>([]);
   const [guess, setGuess] = useState<PoseGuess | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [refNote, setRefNote] = useState('');
+  const [poseName, setPoseName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
   const [last, setLast] = useState<ReturnType<typeof assembleAdminPrompt> | null>(null);
   const [copied, setCopied] = useState(false);
   const [filling, setFilling] = useState<'char' | 'pose' | null>(null);
@@ -65,7 +77,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const refreshBounds = async () => {
     try {
       setBoundFamilies(await listPoseRefFamilies());
-      setLibrary(await listLibraryRefs());
+      const cards = await listLibraryCards();
+      setLibrary((prev) => {
+        prev.forEach((item) => { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
+        return cards;
+      });
     } catch { /* ignore */ }
   };
   useEffect(() => { refreshBounds(); }, []);
@@ -74,7 +90,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
     const fromLib = library.find((item) => item.family === nextFamily);
     if (fromLib) {
       const file = await loadLibraryRef(fromLib.id);
-      if (file) { setImage2(file); setRefNote(`Image 2 → library ${fromLib.detectedLabel}`); return; }
+      if (file) { setImage2(file); setRefNote(`Image 2 → ${fromLib.name || fromLib.detectedLabel}`); return; }
     }
     const file = await loadPoseRef(nextFamily);
     if (file) { setImage2(file); setRefNote(`Image 2 → ${nextFamily} ref`); }
@@ -99,9 +115,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
       const next = await detectPoseFromFile(file);
       setGuess(next);
       setFamily(next.family);
+      const pretty = prettyPoseName(next.label);
+      if (pretty) setPoseName((current) => current.trim() ? current : pretty);
       const match = POSES.find((p) => p.id === next.label || p.family === next.family);
       if (match) { setPose(match); setLockPose(true); }
-      setRefNote(`Detected ${next.label} (${next.family}) · ${next.reason}`);
+      setRefNote(`Detected ${pretty || next.label}`);
       return next;
     } catch (err: any) {
       setRefNote(err.message || 'Pose detect failed');
@@ -110,10 +128,14 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   };
   const saveToLibrary = async (file: File, detected?: PoseGuess | null) => {
     const tagged = detected || guess || { family, label: pose.id, confidence: 0, reason: 'manual' };
-    await saveLibraryRef({ name: file.name || tagged.label, family: tagged.family, detectedLabel: tagged.label, type: file.type || 'image/jpeg', blob: file });
+    const count = library.filter((item) => item.family === tagged.family).length + 1;
+    const label = prettyPoseName(tagged.label, poseName) || prettyPoseName(tagged.label) || `Pose ${library.length + 1}`;
+    const name = poseName.trim() || (tagged.label === 'unknown' ? label : `${label} ${count}`);
+    await saveLibraryRef({ name, family: tagged.family, detectedLabel: tagged.label === 'unknown' ? name : tagged.label, type: file.type || 'image/jpeg', blob: file });
     await savePoseRef(tagged.family, file);
     await refreshBounds();
-    setRefNote(`Saved ${tagged.label} to library`);
+    setPoseName('');
+    setRefNote(`Saved ${name}`);
   };
   const addFilesToLibrary = async (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
@@ -123,14 +145,21 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
       await saveToLibrary(file, tagged);
     }
   };
-  const loadLibItem = async (id: string, itemFamily: PoseFamily, label: string) => {
-    const file = await loadLibraryRef(id);
+  const loadLibItem = async (item: LibraryRefMeta) => {
+    const file = await loadLibraryRef(item.id);
     if (!file) return;
     setImage2(file);
-    setFamily(itemFamily);
-    const match = POSES.find((p) => p.id === label) || POSES.find((p) => p.family === itemFamily);
+    setFamily(item.family);
+    const match = POSES.find((p) => p.id === item.detectedLabel) || POSES.find((p) => p.family === item.family);
     if (match) { setPose(match); setLockPose(true); }
-    setRefNote(`Image 2 ← ${label}`);
+    setRefNote(`Image 2 ← ${item.name || prettyPoseName(item.detectedLabel)}`);
+  };
+  const commitRename = async (id: string) => {
+    const next = editingName.trim();
+    setEditingId(null);
+    if (!next) return;
+    await renameLibraryRef(id, next);
+    await refreshBounds();
   };
 
   const fillChar = async () => {
@@ -162,15 +191,15 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   };
 
   return (
-    <div className="space-y-3 bg-emerald-500/5 p-4 border border-emerald-500/20 rounded-2xl">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between text-left">
+    <div className="space-y-3 bg-emerald-500/5 p-3 sm:p-4 border border-emerald-500/20 rounded-2xl">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between text-left min-h-[44px]">
         <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest">Admin · Scene</span>
         <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">{open ? 'Hide' : 'Show'}</span>
       </button>
       {open && (
         <div className="space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between gap-2 mb-2">
               <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Pose family</p>
               <button type="button" onClick={() => setLockPose((v) => !v)} className={pill(lockPose)}>{lockPose ? 'Pose locked' : 'Random pose'}</button>
             </div>
@@ -190,26 +219,38 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
                 <button type="button" onClick={fillPose} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'pose' ? 'Grok…' : 'Expand pose with Grok'}</button>
               </div>
             )}
-            <div className="mt-3 space-y-2 rounded-xl border border-zinc-800 p-3">
+            <div className="mt-3 space-y-3 rounded-xl border border-zinc-800 p-3">
               <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Pose library · Image 2</p>
-              <div className="flex flex-wrap gap-2">
-                <label className={`${pill(false)} cursor-pointer`}>Add pose photos<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
-                <button type="button" onClick={() => activeImage2 && runDetect(activeImage2)} className={pill(false)}>{detecting ? 'Detecting…' : 'Detect current Ref 2'}</button>
-                <button type="button" onClick={() => activeImage2 && saveToLibrary(activeImage2)} className={pill(false)}>Save current to library</button>
-                <button type="button" onClick={saveCurrentAsFamily} className={pill(false)}>Bind family default</button>
-                <button type="button" onClick={clearFamilyRef} className={pill(false)}>Clear family default</button>
+              <input value={poseName} onChange={(e) => setPoseName(e.target.value)} placeholder="Name this pose" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
+              <div className="grid grid-cols-2 gap-2">
+                <label className={`${pill(false)} cursor-pointer text-center`}>Add photos<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
+                <button type="button" onClick={() => activeImage2 && runDetect(activeImage2)} className={pill(false)}>{detecting ? 'Detecting…' : 'Detect Ref 2'}</button>
+                <button type="button" onClick={() => activeImage2 && saveToLibrary(activeImage2)} className={pill(false)}>Save Ref 2</button>
+                <button type="button" onClick={saveCurrentAsFamily} className={pill(false)}>Bind family</button>
               </div>
-              {guess && <p className="text-[10px] text-zinc-300">Guess: {guess.label} · {guess.family} · {Math.round(guess.confidence * 100)}% · {guess.reason}</p>}
-              {refNote && <p className="text-[10px] text-emerald-400">{refNote}</p>}
-              <div className="flex flex-wrap gap-2">
+              {guess && <p className="text-[10px] text-zinc-300">Guess: {prettyPoseName(guess.label) || guess.label}</p>}
+              {refNote && <p className="text-[10px] text-emerald-400 break-words">{refNote}</p>}
+              {library.length === 0 && <p className="text-[11px] text-zinc-500">Add photos, name them, tap a card to load Image 2.</p>}
+              <div className="grid grid-cols-2 gap-2">
                 {library.map((item) => (
-                  <button key={item.id} type="button" onClick={() => loadLibItem(item.id, item.family, item.detectedLabel)} className={pill(family === item.family)}>
-                    {item.detectedLabel}
-                    <span className="ml-1 opacity-50" onClick={(e) => { e.stopPropagation(); deleteLibraryRef(item.id).then(refreshBounds); }}>×</span>
-                  </button>
+                  <div key={item.id} className={`rounded-xl border overflow-hidden ${family === item.family ? 'border-emerald-500/50' : 'border-zinc-800'}`}>
+                    <button type="button" onClick={() => loadLibItem(item)} className="block w-full">
+                      {item.previewUrl ? <img src={item.previewUrl} alt={item.name} className="w-full aspect-[3/4] object-cover bg-zinc-950" /> : <div className="w-full aspect-[3/4] bg-zinc-950" />}
+                    </button>
+                    <div className="p-2 space-y-1.5">
+                      {editingId === item.id ? (
+                        <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)} onBlur={() => commitRename(item.id)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(item.id); }} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg text-[11px] text-zinc-100 px-2 py-1 outline-none" />
+                      ) : (
+                        <button type="button" onClick={() => { setEditingId(item.id); setEditingName(item.name || prettyPoseName(item.detectedLabel) || 'Unnamed pose'); }} className="w-full text-left text-[11px] text-zinc-100 truncate">{item.name || prettyPoseName(item.detectedLabel) || 'Unnamed pose'}</button>
+                      )}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[9px] uppercase tracking-widest text-zinc-500 truncate">{item.family}</span>
+                        <button type="button" onClick={() => deleteLibraryRef(item.id).then(refreshBounds)} className="text-[10px] text-zinc-500">Delete</button>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
-              <p className="text-[10px] text-zinc-500">Upload many pose photos. Click a name to load it as Reference 2. MediaPipe tags the pose on upload.</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -233,7 +274,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
               <button type="button" onClick={() => setThickCellulite((v) => !v)} className={pill(thickCellulite)}>Cellulite</button>
               <button type="button" onClick={() => setPlumpStomach((v) => !v)} className={pill(plumpStomach)}>Plump</button>
               <button type="button" onClick={() => setHairyPussy((v) => !v)} className={pill(hairyPussy)}>Hairy</button>
-              <button type="button" onClick={() => setFaceMess('clean')} className={pill(faceMess === 'clean')}>Clean face</button>
+              <button type="button" onClick={() => setFaceMess('clean')} className={pill(faceMess === 'clean')}>Clean</button>
               <button type="button" onClick={() => setFaceMess('drool')} className={pill(faceMess === 'drool')}>Drool</button>
               <button type="button" onClick={() => setFaceMess('face_only')} className={pill(faceMess === 'face_only')}>Face only</button>
               <button type="button" onClick={() => setFaceMess('bukkake')} className={pill(faceMess === 'bukkake')}>Bukkake</button>
@@ -263,7 +304,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
             )}
           </div>
           {fillError && <p className="text-[10px] text-rose-400">{fillError}</p>}
-          <button type="button" onClick={roll} className="w-full py-3 rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-emerald-400">
+          <button type="button" onClick={roll} className="w-full py-3.5 rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-emerald-400 min-h-[48px]">
             <Dices className="w-3.5 h-3.5" /> Generate and paste prompt
           </button>
           {last && (
