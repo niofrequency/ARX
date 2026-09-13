@@ -1,13 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
-const GREEN = '#22c55e';
+import { getBodySegmentMask, paintSlot, slotAt, type BodySegmentMask, type SegmentSlot } from '../lib/bodySegmentation';
 
 function findPreviewImg(): HTMLImageElement | null {
   const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
   const visible = imgs.filter((img) => {
-    if (img.closest('[data-arx-lib]')) return false;
-    if (img.closest('[data-arx-region-ui]')) return false;
+    if (img.closest('[data-arx-lib],[data-arx-region-ui]')) return false;
     const r = img.getBoundingClientRect();
     return r.width > 180 && r.height > 180 && r.bottom > 40 && r.top < window.innerHeight - 40;
   });
@@ -19,36 +17,29 @@ function findPreviewImg(): HTMLImageElement | null {
   return visible[0] || null;
 }
 
-function paintGreen(canvas: HTMLCanvasElement, nx: number, ny: number) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const x = nx * canvas.width;
-  const y = ny * canvas.height;
-  const r = Math.max(canvas.width, canvas.height) * 0.08;
-  ctx.beginPath();
-  ctx.strokeStyle = GREEN;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([]);
-  ctx.ellipse(x, y, r * 0.85, r * 0.65, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.fillStyle = 'rgba(34,197,94,0.18)';
-  ctx.ellipse(x, y, r * 0.85, r * 0.65, 0, 0, Math.PI * 2);
-  ctx.fill();
+const cache = new Map<string, BodySegmentMask | null>();
+
+async function maskFor(url: string) {
+  if (cache.has(url)) return cache.get(url) || null;
+  const m = await getBodySegmentMask(url);
+  cache.set(url, m);
+  return m;
 }
 
 export default function RegionEditRoot() {
   const hoverRef = useRef<HTMLCanvasElement | null>(null);
   const workRef = useRef<HTMLCanvasElement | null>(null);
-  const [src, setSrc] = useState('');
+  const [hovered, setHovered] = useState<SegmentSlot | null>(null);
   const [open, setOpen] = useState(false);
+  const [src, setSrc] = useState('');
   const [note, setNote] = useState('');
   const [portrait, setPortrait] = useState(true);
-  const last = useRef({ nx: 0.5, ny: 0.5 });
+  const [locked, setLocked] = useState<SegmentSlot>('clothes');
+  const maskRef = useRef<BodySegmentMask | null>(null);
+  const srcRef = useRef('');
 
   useEffect(() => {
-    const onMove = (e: PointerEvent) => {
+    const onMove = async (e: PointerEvent) => {
       if (open) return;
       const img = findPreviewImg();
       const canvas = hoverRef.current;
@@ -58,29 +49,36 @@ export default function RegionEditRoot() {
       canvas.style.top = `${rect.top}px`;
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
-      canvas.width = Math.max(1, Math.round(rect.width));
-      canvas.height = Math.max(1, Math.round(rect.height));
       const nx = (e.clientX - rect.left) / rect.width;
       const ny = (e.clientY - rect.top) / rect.height;
       if (nx < 0 || ny < 0 || nx > 1 || ny > 1) {
+        setHovered(null);
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
         return;
       }
-      last.current = { nx, ny };
-      paintGreen(canvas, nx, ny);
+      const url = img.currentSrc || img.src;
+      let mask = maskRef.current;
+      if (!mask || srcRef.current !== url) {
+        mask = await maskFor(url);
+        maskRef.current = mask;
+        srcRef.current = url;
+      }
+      if (!mask) return;
+      const slot = slotAt(mask, nx, ny);
+      setHovered(slot);
+      paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
     };
     const onClick = (e: PointerEvent) => {
       if (open) return;
       if ((e.target as HTMLElement).closest('[data-arx-region-ui]')) return;
       const img = findPreviewImg();
-      if (!img) return;
+      if (!img || !hovered) return;
       const rect = img.getBoundingClientRect();
       const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
       if (!inside) return;
-      const w = img.naturalWidth || rect.width;
-      const h = img.naturalHeight || rect.height;
-      setPortrait(h >= w);
       setSrc(img.currentSrc || img.src);
+      setPortrait((img.naturalHeight || rect.height) >= (img.naturalWidth || rect.width));
+      setLocked(hovered);
       setOpen(true);
     };
     window.addEventListener('pointermove', onMove, { passive: true });
@@ -89,62 +87,63 @@ export default function RegionEditRoot() {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onClick);
     };
-  }, [open]);
+  }, [open, hovered]);
 
-  const onWorkMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const wrap = e.currentTarget.querySelector('img');
+  const onWorkMove = async (e: React.PointerEvent<HTMLDivElement>) => {
+    const wrap = e.currentTarget.querySelector('img') as HTMLImageElement | null;
     const canvas = workRef.current;
     if (!wrap || !canvas) return;
     const rect = wrap.getBoundingClientRect();
-    canvas.style.left = '0px';
-    canvas.style.top = '0px';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    canvas.width = Math.max(1, Math.round(rect.width));
-    canvas.height = Math.max(1, Math.round(rect.height));
     const nx = (e.clientX - rect.left) / rect.width;
     const ny = (e.clientY - rect.top) / rect.height;
     if (nx < 0 || ny < 0 || nx > 1 || ny > 1) return;
-    last.current = { nx, ny };
-    paintGreen(canvas, nx, ny);
+    let mask = maskRef.current;
+    if (!mask) {
+      mask = await maskFor(src);
+      maskRef.current = mask;
+    }
+    if (!mask) return;
+    const slot = slotAt(mask, nx, ny);
+    setLocked(slot);
+    setHovered(slot);
+    paintSlot(canvas, mask, slot, Math.round(rect.width), Math.round(rect.height));
   };
 
   const applyPrompt = () => {
     if (!note.trim()) return;
-    const { nx, ny } = last.current;
-    const prompt = `Only edit the highlighted region around the selected spot (normalized ${nx.toFixed(2)}, ${ny.toFixed(2)}). Do not change anything outside that patch. ${note.trim()}`;
+    const prompt = `Only edit the ${locked} region of the subject. Follow the segmented ${locked} silhouette. Do not change any other region. ${note.trim()}`;
     const box = document.querySelector('textarea') as HTMLTextAreaElement | null;
     if (box) {
       box.value = prompt;
       box.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    toast.success('Region prompt pasted');
+    toast.success(`Editing ${locked}`);
     setOpen(false);
   };
-
-  const editor = (
-    <div className="flex flex-col gap-3 p-4 min-h-[220px]" data-arx-region-ui>
-      <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Edit highlighted patch only</p>
-      <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What to change in this spot" rows={4} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm text-zinc-100 px-3 py-2 outline-none" />
-      <div className="flex gap-2">
-        <button type="button" onClick={() => setOpen(false)} className="flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-[10px] uppercase tracking-widest text-zinc-400">Close</button>
-        <button type="button" onClick={applyPrompt} className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">Paste region prompt</button>
-      </div>
-    </div>
-  );
 
   return (
     <>
       <canvas ref={hoverRef} className="pointer-events-none fixed z-[80]" />
+      {hovered && !open && (
+        <div className="fixed z-[90] left-1/2 -translate-x-1/2 top-3 px-3 py-1 rounded-md bg-zinc-950/90 border border-emerald-500/40 text-[10px] font-bold uppercase tracking-widest text-emerald-400 pointer-events-none">
+          {hovered}
+        </div>
+      )}
       {open && (
-        <div data-arx-region-ui className="fixed inset-0 z-[10050] bg-black/85 flex items-stretch">
+        <div data-arx-region-ui className="fixed inset-0 z-[10050] bg-black/90 flex">
           <div className={`flex w-full h-full ${portrait ? 'flex-row' : 'flex-col'}`}>
             <div className={`relative bg-black flex items-center justify-center ${portrait ? 'flex-1 min-w-0' : 'flex-[1.4] min-h-0'}`} onPointerMove={onWorkMove}>
               {src && <img src={src} alt="" className="max-h-full max-w-full object-contain" />}
               <canvas ref={workRef} className="pointer-events-none absolute inset-0" />
             </div>
-            <div className={`${portrait ? 'w-[360px] max-w-[42vw] border-l' : 'w-full border-t'} border-zinc-800 bg-zinc-950 overflow-y-auto`}>
-              {editor}
+            <div className={`${portrait ? 'w-[340px] max-w-[42vw] border-l' : 'w-full border-t'} border-zinc-800 bg-zinc-950 p-4 space-y-3`}>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Selected: {locked}</p>
+              <p className="text-[11px] text-zinc-400">Hover paints the real MediaPipe class silhouette (hair, face, body skin, clothes, other, background). Not a circle.</p>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={`What to change on ${locked}`} rows={5} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm px-3 py-2 outline-none" />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOpen(false)} className="flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-[10px] uppercase tracking-widest text-zinc-400">Close</button>
+                <button type="button" onClick={applyPrompt} className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">Paste region prompt</button>
+              </div>
             </div>
           </div>
         </div>
