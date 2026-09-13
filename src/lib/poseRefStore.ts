@@ -6,7 +6,8 @@ import {
   getDocs,
   setDoc,
 } from 'firebase/firestore';
-import { auth, db, deleteFromFirebase, uploadToFirebase } from './firebase';
+import { getBlob, ref as storageRef } from 'firebase/storage';
+import { auth, db, deleteFromFirebase, storage, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
 
 export type RefSlot = 'face' | 'pose';
@@ -36,13 +37,13 @@ function uid(): string {
 const libraryCol = (userId: string) => collection(db, 'users', userId, 'refLibrary');
 const familyCol = (userId: string) => collection(db, 'users', userId, 'refFamilies');
 
-async function fileFromUrl(url: string, name: string, type: string): Promise<File | null> {
+async function fileFromStorage(path: string | undefined, name: string, type: string): Promise<File | null> {
+  if (!path) return null;
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
+    const blob = await getBlob(storageRef(storage, path));
     return new File([blob], name, { type: type || blob.type || 'image/jpeg' });
-  } catch {
+  } catch (err) {
+    console.error('Storage download failed', err);
     return null;
   }
 }
@@ -66,9 +67,8 @@ export async function loadPoseRef(family: PoseFamily): Promise<File | null> {
   const userId = uid();
   const snap = await getDoc(doc(familyCol(userId), family));
   if (!snap.exists()) return null;
-  const row = snap.data() as { url?: string; name?: string; type?: string };
-  if (!row.url) return null;
-  return fileFromUrl(row.url, row.name || `${family}.jpg`, row.type || 'image/jpeg');
+  const row = snap.data() as { storagePath?: string; name?: string; type?: string };
+  return fileFromStorage(row.storagePath, row.name || `${family}.jpg`, row.type || 'image/jpeg');
 }
 
 export async function listPoseRefFamilies(): Promise<PoseFamily[]> {
@@ -127,8 +127,7 @@ export async function loadLibraryRef(id: string): Promise<File | null> {
   const snap = await getDoc(doc(libraryCol(userId), id));
   if (!snap.exists()) return null;
   const row = { id: snap.id, ...(snap.data() as Omit<LibraryRefMeta, 'id'>) };
-  if (!row.url) return null;
-  return fileFromUrl(row.url, row.name || `${row.detectedLabel}.jpg`, row.type || 'image/jpeg');
+  return fileFromStorage(row.storagePath, row.name || `${row.detectedLabel}.jpg`, row.type || 'image/jpeg');
 }
 
 export async function deleteLibraryRef(id: string): Promise<void> {
