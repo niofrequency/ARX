@@ -5,9 +5,12 @@ const DB_VERSION = 2;
 const FAMILY_STORE = 'refs';
 const LIBRARY_STORE = 'library';
 
+export type RefSlot = 'face' | 'pose';
+
 export interface LibraryRefMeta {
   id: string;
   name: string;
+  slot: RefSlot;
   family: PoseFamily;
   detectedLabel: string;
   createdAt: number;
@@ -78,10 +81,11 @@ export async function deletePoseRef(family: PoseFamily): Promise<void> {
   db.close();
 }
 
-export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> & { id?: string }): Promise<LibraryRefMeta> {
+export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> & { id?: string; slot?: RefSlot }): Promise<LibraryRefMeta> {
   const row: LibraryRef = {
     id: item.id || crypto.randomUUID(),
     name: item.name,
+    slot: item.slot || 'pose',
     family: item.family,
     detectedLabel: item.detectedLabel,
     createdAt: Date.now(),
@@ -109,7 +113,7 @@ export async function listLibraryRefs(): Promise<LibraryRefMeta[]> {
     req.onerror = () => reject(req.error);
   });
   db.close();
-  return rows.map(({ blob, ...meta }) => meta).sort((a, b) => b.createdAt - a.createdAt);
+  return rows.map(({ blob, ...meta }) => ({ ...meta, slot: meta.slot || 'pose' })).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function loadLibraryRef(id: string): Promise<File | null> {
@@ -168,6 +172,7 @@ export async function listLibraryCards(): Promise<(LibraryRefMeta & { previewUrl
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(({ blob, ...meta }) => ({
       ...meta,
+      slot: meta.slot || 'pose',
       previewUrl: blob ? URL.createObjectURL(blob) : '',
     }));
 }
