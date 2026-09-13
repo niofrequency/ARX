@@ -52,16 +52,8 @@ Requirements:
 
     const data = await response.json();
     let generated = data.choices?.[0]?.message?.content?.trim();
-
-    if (!generated) {
-      throw new Error("Empty response from Grok API");
-    }
-
-    generated = generated
-      .replace(/^["']|["']$/g, '')
-      .replace(/\n/g, ' ')
-      .trim();
-
+    if (!generated) throw new Error("Empty response from Grok API");
+    generated = generated.replace(/^["']|["']$/g, '').replace(/\n/g, ' ').trim();
     return generated;
   } catch (error: any) {
     console.error("Grok Architect Error:", error);
@@ -75,12 +67,8 @@ export const expandCustomCharacter = async (
   hairHint = '',
   costumeHint = ''
 ): Promise<{ name: string; hair: string; costume: string }> => {
-  if (!idToken) {
-    throw new Error('You must be signed in to use Grok.');
-  }
-  if (!name.trim()) {
-    throw new Error('Enter a character name first.');
-  }
+  if (!idToken) throw new Error('You must be signed in to use Grok.');
+  if (!name.trim()) throw new Error('Enter a character name first.');
 
   const response = await fetch("/api/grok-proxy", {
     method: "POST",
@@ -93,16 +81,11 @@ export const expandCustomCharacter = async (
       messages: [
         {
           role: "system",
-          content: `You expand a fictional adult female character into image-prompt costume notes.
-Return ONLY valid JSON with keys name, hair, costume. No markdown.
-hair: short accurate hairstyle for that character.
-costume: wrecked/half-on tight signature outfit, one sentence, no identity/face change, no camera/pose.`,
+          content: `You expand a fictional adult female character into image-prompt costume notes.\nReturn ONLY valid JSON with keys name, hair, costume. No markdown.\nhair: short accurate hairstyle for that character.\ncostume: wrecked/half-on tight signature outfit, one sentence, no identity/face change, no camera/pose.`,
         },
         {
           role: "user",
-          content: `Character: ${name}
-Hair hint: ${hairHint || 'none'}
-Costume hint: ${costumeHint || 'none'}`,
+          content: `Character: ${name}\nHair hint: ${hairHint || 'none'}\nCostume hint: ${costumeHint || 'none'}`,
         },
       ],
       temperature: 0.4,
@@ -124,4 +107,37 @@ Costume hint: ${costumeHint || 'none'}`,
     hair: String(parsed.hair || hairHint).trim(),
     costume: String(parsed.costume || costumeHint).trim(),
   };
+};
+
+export const expandCustomPose = async (idToken: string, pose: string): Promise<string> => {
+  if (!idToken) throw new Error('You must be signed in to use Grok.');
+  if (!pose.trim()) throw new Error('Type a pose first.');
+
+  const response = await fetch("/api/grok-proxy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      model: "grok-4-1-fast",
+      messages: [
+        {
+          role: "system",
+          content: `Expand a short sex-pose note into one tight image-prompt sentence. Body position only. No name, no face identity, no clothing, no lighting essay. She looks at the viewer if the pose allows. Return plain text only.`,
+        },
+        { role: "user", content: pose },
+      ],
+      temperature: 0.35,
+      max_tokens: 120,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || errData.error || `HTTP Error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.choices?.[0]?.message?.content || pose).replace(/^["']|["']$/g, '').trim();
 };
