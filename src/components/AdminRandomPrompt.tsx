@@ -6,6 +6,7 @@ import {
 } from '../lib/adminPromptBuilder';
 import { expandCustomCharacter, expandCustomPose } from '../lib/grok';
 import { getFreshIdToken } from '../lib/firebase';
+import { setReference2File } from '../lib/setRef2';
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import {
   deleteLibraryRef, deletePoseRef, listLibraryRefs, listPoseRefFamilies, loadLibraryRef, loadPoseRef,
@@ -24,6 +25,13 @@ const pill = (active: boolean) =>
   }`;
 
 export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage2 }: Props) {
+  const [heldImage2, setHeldImage2] = useState<File | null>(null);
+  const activeImage2 = currentImage2 || heldImage2;
+  const setImage2 = (file: File) => {
+    setHeldImage2(file);
+    onApplyImage2?.(file);
+    setReference2File(file);
+  };
   const [open, setOpen] = useState(true);
   const [shot, setShot] = useState<ShotType>('closeup');
   const [angle, setAngle] = useState<AngleType>('low');
@@ -63,14 +71,13 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   useEffect(() => { refreshBounds(); }, []);
 
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
-    if (!onApplyImage2) return;
     const fromLib = library.find((item) => item.family === nextFamily);
     if (fromLib) {
       const file = await loadLibraryRef(fromLib.id);
-      if (file) { onApplyImage2(file); setRefNote(`Image 2 → library ${fromLib.detectedLabel}`); return; }
+      if (file) { setImage2(file); setRefNote(`Image 2 → library ${fromLib.detectedLabel}`); return; }
     }
     const file = await loadPoseRef(nextFamily);
-    if (file) { onApplyImage2(file); setRefNote(`Image 2 → ${nextFamily} ref`); }
+    if (file) { setImage2(file); setRefNote(`Image 2 → ${nextFamily} ref`); }
     else setRefNote(`No saved ${nextFamily} ref yet`);
   };
   const selectPose = async (next: PoseDef) => { setPose(next); setFamily(next.family); setLockPose(true); await applyFamilyRef(next.family); };
@@ -81,8 +88,8 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
     await applyFamilyRef(id);
   };
   const saveCurrentAsFamily = async () => {
-    if (!currentImage2) { setRefNote('Put a photo in Reference 2 first, then save it.'); return; }
-    await savePoseRef(family, currentImage2); await refreshBounds(); setRefNote(`Saved current Reference 2 as ${family}`);
+    if (!activeImage2) { setRefNote('Put a photo in Reference 2 first, then save it.'); return; }
+    await savePoseRef(family, activeImage2); await refreshBounds(); setRefNote(`Saved current Reference 2 as ${family}`);
   };
   const clearFamilyRef = async () => { await deletePoseRef(family); await refreshBounds(); setRefNote(`Cleared ${family} ref`); };
 
@@ -111,7 +118,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const addFilesToLibrary = async (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
-      onApplyImage2?.(file);
+      setImage2(file);
       const tagged = await runDetect(file);
       await saveToLibrary(file, tagged);
     }
@@ -119,7 +126,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
   const loadLibItem = async (id: string, itemFamily: PoseFamily, label: string) => {
     const file = await loadLibraryRef(id);
     if (!file) return;
-    onApplyImage2?.(file);
+    setImage2(file);
     setFamily(itemFamily);
     const match = POSES.find((p) => p.id === label) || POSES.find((p) => p.family === itemFamily);
     if (match) { setPose(match); setLockPose(true); }
@@ -187,8 +194,8 @@ export default function AdminRandomPrompt({ onApply, onApplyImage2, currentImage
               <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Pose library · Image 2</p>
               <div className="flex flex-wrap gap-2">
                 <label className={`${pill(false)} cursor-pointer`}>Add pose photos<input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
-                <button type="button" onClick={() => currentImage2 && runDetect(currentImage2)} className={pill(false)}>{detecting ? 'Detecting…' : 'Detect current Ref 2'}</button>
-                <button type="button" onClick={() => currentImage2 && saveToLibrary(currentImage2)} className={pill(false)}>Save current to library</button>
+                <button type="button" onClick={() => activeImage2 && runDetect(activeImage2)} className={pill(false)}>{detecting ? 'Detecting…' : 'Detect current Ref 2'}</button>
+                <button type="button" onClick={() => activeImage2 && saveToLibrary(activeImage2)} className={pill(false)}>Save current to library</button>
                 <button type="button" onClick={saveCurrentAsFamily} className={pill(false)}>Bind family default</button>
                 <button type="button" onClick={clearFamilyRef} className={pill(false)}>Clear family default</button>
               </div>
