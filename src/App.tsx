@@ -7,6 +7,7 @@ import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
 import { BrandMark, BrandLoader } from './components/BrandMark';
 import InstallAppButton from './components/InstallAppButton';
+import AdminRandomPrompt from './components/AdminRandomPrompt';
 import {
   saveFailedTaskSnapshot,
   deleteFailedTaskSnapshot,
@@ -1869,6 +1870,8 @@ export default function App() {
                     </div>
                   </div>
 
+                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
                       <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-seedance']}</span>
@@ -1971,6 +1974,8 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+
+                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
                   
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     <button onClick={() => setEditorModel('wan-2.6')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
