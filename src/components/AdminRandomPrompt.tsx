@@ -35,7 +35,7 @@ export default function AdminRandomPrompt({ onApply }: Props) {
   const [hairyPussy, setHairyPussy] = useState(false);
   const [faceMess, setFaceMess] = useState<FaceMess>('face_only');
   const [pussyCumPuddle, setPussyCumPuddle] = useState(true);
-  const [lockCharacter, setLockCharacter] = useState(false);
+  const [lockCharacter, setLockCharacter] = useState(true);
   const [lockPose, setLockPose] = useState(true);
   const [useCustom, setUseCustom] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -177,7 +177,7 @@ export default function AdminRandomPrompt({ onApply }: Props) {
                 <button type="button" onClick={fillChar} disabled={filling === 'char'} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400 hover:text-zinc-100">{filling === 'char' ? 'Grok filling…' : 'Fill hair + costume with Grok'}</button>
               </div>
             ) : (
-              <select value={character.id} onChange={(e) => { const found = CHARACTERS.find((c) => c.id === e.target.value); if (found) setCharacter(found); }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none">
+              <select value={character.id} onChange={(e) => { const found = CHARACTERS.find((c) => c.id === e.target.value); if (found) { setCharacter(found); setLockCharacter(true); } }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none">
                 {CHARACTERS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
