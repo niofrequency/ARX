@@ -1,0 +1,58 @@
+rules_version = '2';
+
+// ARX stores these things in Firestore, all scoped under users/{uid}:
+//   users/{uid}/history/{itemId}        - one doc per generated image/video
+//   users/{uid}/savedPrompts/{promptId} - one doc per saved prompt
+//   users/{uid}/wallet/main             - the user's credit balance
+//   users/{uid}/transactions/{orderId}  - a record of each completed top-up
+//   users/{uid}/refLibrary/{refId}      - Image 1 face / Image 2 pose library cards
+//   users/{uid}/refFamilies/{family}    - last pose-family default for Image 2
+//
+// Plus two short-lived, top-level "pending" collections that map a
+// server-side callback (from Wavespeed or NOWPayments) back to the user who
+// triggered it:
+//   pendingJobs/{taskId}
+//   pendingPayments/{orderId}
+//
+// wallet and transactions stay READ-ONLY for clients.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      match /history/{itemId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /savedPrompts/{promptId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /refLibrary/{refId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /refFamilies/{family} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /wallet/{document=**} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false;
+      }
+      match /transactions/{document=**} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    match /pendingJobs/{taskId} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    match /pendingPayments/{orderId} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
