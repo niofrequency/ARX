@@ -7,7 +7,11 @@ import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
 import { BrandMark, BrandLoader } from './components/BrandMark';
 import InstallAppButton from './components/InstallAppButton';
-import AdminRandomPrompt from './components/AdminRandomPrompt';
+// Admin-only (see isAdminUser below) and pulls in a fair amount on its
+// own — the full character/pose prompt tables, the pose-family detector
+// (@mediapipe/tasks-vision), the reference library store. Lazy-loaded so
+// the ordinary (non-admin) user's bundle never includes any of it.
+const AdminRandomPrompt = lazy(() => import('./components/AdminRandomPrompt'));
 import {
   saveFailedTaskSnapshot,
   deleteFailedTaskSnapshot,
@@ -30,10 +34,9 @@ import {
   deleteSavedPromptDoc,
   createPendingJob,
 } from './lib/userData';
-import { checkHandQuality } from './lib/handQuality';
 import { normalizeUploadedImage } from './lib/imagePrep';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, Download,
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
@@ -1679,7 +1682,10 @@ export default function App() {
     // auto-regenerates, never touches billing. Dropped if a newer
     // generation has already replaced this one by the time it resolves.
     if (!isVideo) {
-      checkHandQuality(displayUrl).then((res) => {
+      // Dynamically imported: this pulls in @mediapipe/tasks-vision's
+      // HandLandmarker, which every user would otherwise download upfront
+      // even though it's only ever exercised after a generation completes.
+      import('./lib/handQuality').then(({ checkHandQuality }) => checkHandQuality(displayUrl)).then((res) => {
         if (res.status === 'flagged' && latestResultIdRef.current === taskId) {
           setHandWarning(res.reason || 'Hand geometry looks off');
         }
@@ -1936,7 +1942,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
+                  {isAdminUser && (
+                    <Suspense fallback={null}>
+                      <AdminRandomPrompt onApply={setPrompt} />
+                    </Suspense>
+                  )}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
@@ -2041,7 +2051,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
+                  {isAdminUser && (
+                    <Suspense fallback={null}>
+                      <AdminRandomPrompt onApply={setPrompt} />
+                    </Suspense>
+                  )}
                   
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     <button onClick={() => setEditorModel('wan-2.6')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
