@@ -92,6 +92,18 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'maeve', name: 'Queen Maeve', hair: 'long dark hair', costume: 'torn gold-black The Boys armor' },
   { id: 'ladyD', name: 'Lady Dimitrescu', hair: 'black hair, hat off', costume: 'white blouse ripped open, black gloves still on' },
   { id: 'blackcat', name: 'Black Cat', hair: 'white hair, mask pushed up', costume: 'torn black latex with white fur trim' },
+  { id: 'jinx', name: 'Jinx (Arcane)', hair: 'long blue-black twin braids', costume: 'torn crop top and low-slung pants, belts undone, wrecked and half-on' },
+  { id: 'makima', name: 'Makima', hair: 'red hair in a low ponytail', costume: 'torn white dress shirt and tie, pulled open' },
+  { id: 'rebecca', name: 'Rebecca (Edgerunners)', hair: 'short choppy pink hair', costume: 'ripped tactical crop top and shorts, wrecked and half-on' },
+  { id: 'yennefer', name: 'Yennefer of Vengerberg', hair: 'long black curly hair', costume: 'torn black-and-white sorceress gown, obsidian star pendant' },
+  { id: 'triss', name: 'Triss Merigold', hair: 'long wavy auburn hair', costume: 'torn green corset dress, wrecked and half-on' },
+  { id: 'lara', name: 'Lara Croft', hair: 'long braided brown hair', costume: 'torn tank top and cargo shorts, gear straps hanging loose' },
+  { id: 'jill', name: 'Jill Valentine', hair: 'short brown bob', costume: 'torn blue tactical vest and tube top, wrecked and half-on' },
+  { id: 'bayonetta', name: 'Bayonetta', hair: 'long black hair, glasses off', costume: 'torn black bodysuit, peeled open at the chest' },
+  { id: 'morrigan', name: 'Morrigan Aensland', hair: 'short green hair', costume: 'torn purple succubus bodysuit, bat-wing collar askew' },
+  { id: 'shego', name: 'Shego', hair: 'short black hair', costume: 'torn green and black catsuit, zipper pulled down' },
+  { id: 'ahri', name: 'Ahri', hair: 'long white-blonde hair, fox ears', costume: 'torn silk hanbok-style outfit, tails visible, wrecked and half-on' },
+  { id: 'sailormoon', name: 'Sailor Moon', hair: 'long blonde twin-tail odango hair', costume: 'torn sailor fuku, tiara crooked, gloves still on' },
 ];
 
 export const POSES: PoseDef[] = [
@@ -116,6 +128,18 @@ export const POSES: PoseDef[] = [
   { id: 'bent_over', label: 'Bent over, tits hanging', family: 'tits', image2: 'Bent forward, tits hanging.', block: 'Bent over forward. Big tits hanging down. Looks at the viewer.' },
   { id: 'standing_wall', label: 'Standing against wall', family: 'other', image2: 'Standing one-leg-up wall ref.', block: 'Standing against a wall. One leg lifted or thighs apart. Looks at the viewer.' },
   { id: 'facesit', label: 'Facesitting', family: 'other', image2: 'Pussy over camera looking down.', block: 'Facesitting. Pussy and ass over the camera looking down at the viewer.' },
+  { id: 'legs_over_shoulders', label: 'Legs over shoulders', family: 'front', image2: 'Deep missionary, legs back.', block: 'Missionary with her legs pushed back over her shoulders, deep bend. Pussy toward the camera. Face still visible. Direct eye contact.' },
+  { id: 'side_lying', label: 'Side-lying, leg raised', family: 'front', image2: 'Side view, top leg raised.', block: 'She is lying on her side, top leg raised and pulled toward her chest. Pussy visible from the front. Looks back at the viewer.' },
+  { id: 'standing_split', label: 'Standing, leg up', family: 'front', image2: 'Standing, one leg propped up.', block: 'Standing, one leg propped up on a chair or ledge, pussy facing the camera. Looks at the viewer.' },
+  { id: 'bent_over_desk', label: 'Bent over a surface', family: 'rear', image2: 'Bent over desk/table edge, rear.', block: 'Bent forward over a desk or table edge, ass toward the camera, pussy visible from behind. Looks back over her shoulder.' },
+  { id: 'kneeling_rear', label: 'Kneeling, low rear angle', family: 'rear', image2: 'Kneeling, low rear angle.', block: 'Kneeling on the bed, low rear angle. Ass and pussy toward the camera. Looks back at the viewer.' },
+  { id: 'standing_carry_rear', label: 'Standing carry, rear', family: 'rear', image2: 'Standing carry, rear view.', block: 'Standing carry position from behind, one leg lifted. Ass toward the camera. Direct eye contact over her shoulder.' },
+  { id: 'pov_kissing', label: 'POV close, mouth toward camera', family: 'face', image2: 'POV close, mouth toward camera.', block: 'POV close-up, her mouth just in front of the camera as if about to kiss the viewer. Direct eye contact. Lips parted.' },
+  { id: 'side_face_profile', label: 'Side face profile', family: 'face', image2: 'Side profile face close-up.', block: 'Side profile close-up of her face, mouth open, wrecked expression. Looks toward the camera from the side.' },
+  { id: 'tits_pov', label: 'Tits POV, looking down', family: 'tits', image2: 'POV looking down at chest.', block: 'POV shot looking down at her chest. Big tits filling the lower frame. She looks up at the camera.' },
+  { id: 'leaning_forward_cleavage', label: 'Leaning forward, cleavage', family: 'tits', image2: 'Leaning forward, deep cleavage.', block: 'Leaning forward toward the camera, tits pushed together and hanging, deep cleavage. Looks at the viewer.' },
+  { id: 'mirror_shot', label: 'Mirror shot', family: 'other', image2: 'Standing in front of a mirror.', block: 'Standing in front of a mirror, body visible in the reflection. Looks at her own reflection or the viewer.' },
+  { id: 'shower_wet', label: 'Wet, in the shower', family: 'other', image2: 'Standing in the shower, wet.', block: 'Standing in a shower, water running down her body, hair wet. Looks at the viewer.' },
   { id: 'custom', label: 'Custom pose', family: 'custom', image2: 'Use a photo of that exact pose as Image 2.', block: '' },
 ];
 
