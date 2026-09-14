@@ -17,7 +17,7 @@ import {
 import { auth, db, deleteFromFirebase, getFreshIdToken, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
 
-/** face = Image 1, pose = Image 2, scene = Image 3 background/object, clothes = Image 3 outfit. */
+/** face = Image 1, pose = Image 2, scene = Image 3 background, clothes = Image 3 outfit. */
 export type RefSlot = 'face' | 'pose' | 'scene' | 'clothes';
 
 export interface LibraryRefMeta {
@@ -63,16 +63,10 @@ async function fileFromStorage(path: string | undefined, name: string, type: str
 
 export async function savePoseRef(family: PoseFamily, file: File): Promise<void> {
   const userId = uid();
-  const id = family;
-  const storagePath = `users/${userId}/refFamilies/${id}`;
+  const storagePath = `users/${userId}/refFamilies/${family}`;
   const url = await uploadToFirebase(file, storagePath);
-  await setDoc(doc(familyCol(userId), id), {
-    family,
-    name: file.name,
-    type: file.type || 'image/jpeg',
-    url,
-    storagePath,
-    createdAt: Date.now(),
+  await setDoc(doc(familyCol(userId), family), {
+    family, name: file.name, type: file.type || 'image/jpeg', url, storagePath, createdAt: Date.now(),
   });
 }
 
@@ -104,20 +98,12 @@ export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> 
   const id = item.id || crypto.randomUUID();
   const ext = (item.type || 'image/jpeg').includes('png') ? 'png' : 'jpg';
   const storagePath = `users/${userId}/refLibrary/${id}.${ext}`;
-  const blob = item.blob;
-  if (!blob) throw new Error('Missing image file.');
-  const url = await uploadToFirebase(blob, storagePath);
+  if (!item.blob) throw new Error('Missing image file.');
+  const url = await uploadToFirebase(item.blob, storagePath);
   const meta: LibraryRefMeta = {
-    id,
-    name: item.name,
-    nameLower: item.name.toLowerCase(),
-    slot: item.slot || 'pose',
-    family: item.family,
-    detectedLabel: item.detectedLabel,
-    createdAt: Date.now(),
-    type: item.type || 'image/jpeg',
-    url,
-    storagePath,
+    id, name: item.name, nameLower: item.name.toLowerCase(), slot: item.slot || 'pose',
+    family: item.family, detectedLabel: item.detectedLabel, createdAt: Date.now(),
+    type: item.type || 'image/jpeg', url, storagePath,
   };
   await setDoc(doc(libraryCol(userId), id), meta);
   return meta;
@@ -133,21 +119,13 @@ export interface LibraryPage {
 
 export async function fetchLibraryPage(cursor: QueryDocumentSnapshot<DocumentData> | null = null): Promise<LibraryPage> {
   const userId = uid();
-  const constraints = [
-    orderBy('createdAt', 'desc'),
-    ...(cursor ? [startAfter(cursor)] : []),
-    limit(LIBRARY_PAGE_SIZE),
-  ];
+  const constraints = [orderBy('createdAt', 'desc'), ...(cursor ? [startAfter(cursor)] : []), limit(LIBRARY_PAGE_SIZE)];
   const snap = await getDocs(query(libraryCol(userId), ...constraints));
   const items = snap.docs.map((d) => {
     const meta = { id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) };
     return { ...meta, previewUrl: meta.url || '' };
   });
-  return {
-    items,
-    lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
-    hasMore: snap.docs.length === LIBRARY_PAGE_SIZE,
-  };
+  return { items, lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null, hasMore: snap.docs.length === LIBRARY_PAGE_SIZE };
 }
 
 export async function loadLibraryRef(id: string): Promise<File | null> {
