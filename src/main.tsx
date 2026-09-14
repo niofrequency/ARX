@@ -5,7 +5,6 @@ import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './lib/AuthContext';
 import AuthGate from './components/AuthGate';
-import RegionEditRoot from './components/RegionEditRoot';
 import CommandPalette from './components/CommandPalette';
 
 createRoot(document.getElementById('root')!).render(
@@ -13,7 +12,6 @@ createRoot(document.getElementById('root')!).render(
     <AuthProvider>
       <AuthGate>
         <App />
-        <RegionEditRoot />
         <CommandPalette />
         <Toaster theme="dark" position="bottom-center" />
       </AuthGate>
