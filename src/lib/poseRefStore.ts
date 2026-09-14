@@ -17,7 +17,8 @@ import {
 import { auth, db, deleteFromFirebase, getFreshIdToken, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
 
-export type RefSlot = 'face' | 'pose';
+/** 'scene' = Image 3 — background, clothing, or an object reference; see adminPromptBuilder.ts's image3Role. */
+export type RefSlot = 'face' | 'pose' | 'scene';
 
 export interface LibraryRefMeta {
   id: string;

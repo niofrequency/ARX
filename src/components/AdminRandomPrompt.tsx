@@ -6,7 +6,7 @@ import {
 } from '../lib/adminPromptBuilder';
 import { expandCustomCharacter, expandCustomPose } from '../lib/grok';
 import { getFreshIdToken } from '../lib/firebase';
-import { setCanvasRefsHidden, setReference1File, setReference2File } from '../lib/setRef2';
+import { setCanvasRefsHidden, setReference1File, setReference2File, setReference3File } from '../lib/setRef2';
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
 import {
@@ -26,17 +26,25 @@ function prettyPoseName(label?: string, fallback?: string) {
   if (!label || label === 'unknown') return '';
   return POSE_NAMES[label] || label.replace(/_/g, ' ');
 }
-interface Props { onApply: (prompt: string) => void; onApplyImage1?: (file: File) => void; onApplyImage2?: (file: File) => void; currentImage2?: File | null; }
+interface Props { onApply: (prompt: string) => void; onApplyImage1?: (file: File) => void; onApplyImage2?: (file: File) => void; onApplyImage3?: (file: File) => void; currentImage2?: File | null; }
 const pill = (active: boolean) =>
   `px-3 py-2 rounded-lg text-[10px] font-medium uppercase tracking-widest border min-h-[44px] ${
     active ? 'bg-zinc-100 border-zinc-100 text-zinc-950' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400'
   }`;
 
-export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage2 }: Props) {
+export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage2, onApplyImage3 }: Props) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<'scene' | 'library'>('library');
   const [hideRefs, setHideRefs] = useState(false);
   const [faceName, setFaceName] = useState('');
+  const [sceneName, setSceneName] = useState('');
+  // What Image 3 should be used for in the generated prompt — see
+  // adminPromptBuilder.ts's image3Role. Unlike image 1 (always face) and
+  // image 2 (always pose/body), image 3's role varies per generation, so
+  // this is free text rather than a fixed slot property on the saved image
+  // itself: the same saved reference could be "background" in one
+  // generation and "her jacket" in another.
+  const [image3Role, setImage3Role] = useState('background');
   const [shot, setShot] = useState<ShotType>('closeup');
   const [angle, setAngle] = useState<AngleType>('low');
   const [titSize, setTitSize] = useState<TitSize>('big');
@@ -75,6 +83,8 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const facesEndRef = useRef<HTMLDivElement>(null);
   const posesScrollRef = useRef<HTMLDivElement>(null);
   const posesEndRef = useRef<HTMLDivElement>(null);
+  const scenesScrollRef = useRef<HTMLDivElement>(null);
+  const scenesEndRef = useRef<HTMLDivElement>(null);
   const [guess, setGuess] = useState<PoseGuess | null>(null);
   const [refNote, setRefNote] = useState('');
   const [poseName, setPoseName] = useState('');
@@ -86,10 +96,16 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [usingId, setUsingId] = useState<string | null>(null);
   const [libQuery, setLibQuery] = useState('');
   const familyPoses = POSES.filter((p) => p.family === family);
-  const faces = filterLibrary(library.filter((item) => (item.slot || 'pose') === 'face'), libQuery);
-  const poses = filterLibrary(library.filter((item) => (item.slot || 'pose') !== 'face'), libQuery);
+  // Explicit type argument: TS's inference for filterLibrary's generic
+  // otherwise collapses to its bare constraint type here (a pre-existing
+  // quirk, not specific to this call shape) rather than preserving the
+  // real element type, which then trips up every card(item) call below.
+  const faces = filterLibrary<LibraryRefMeta & { previewUrl?: string }>(library.filter((item) => (item.slot || 'pose') === 'face'), libQuery);
+  const poses = filterLibrary<LibraryRefMeta & { previewUrl?: string }>(library.filter((item) => (item.slot || 'pose') === 'pose'), libQuery);
+  const scenes = filterLibrary<LibraryRefMeta & { previewUrl?: string }>(library.filter((item) => item.slot === 'scene'), libQuery);
   const setImage2 = (file: File) => { onApplyImage2?.(file); setReference2File(file); };
   const setImage1 = (file: File) => { onApplyImage1?.(file); setReference1File(file); };
+  const setImage3 = (file: File) => { onApplyImage3?.(file); setReference3File(file); };
 
   // Merges a batch of items into `library` by id (later entries win),
   // shared by pagination and server-side search below so a name that's
@@ -167,6 +183,17 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMoreLibrary, isLoadingLibrary, libraryCursor]);
+  useEffect(() => {
+    const root = scenesScrollRef.current;
+    const el = scenesEndRef.current;
+    if (!root || !el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMoreLibrary();
+    }, { root, rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoreLibrary, isLoadingLibrary, libraryCursor]);
 
   // Server-side name search (debounced): the plain substring filter below
   // (faces/poses via filterLibrary) only ever sees what's already loaded
@@ -200,7 +227,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
     const fromLib = poses.find((item) => item.family === nextFamily);
     if (fromLib) {
-      const file = await loadLibraryFile(fromLib as LibraryRefMeta);
+      const file = await loadLibraryFile(fromLib);
       if (file) { setImage2(file); setRefNote(`Image 2 → ${fromLib.name}`); return; }
     }
     const file = await loadPoseRef(nextFamily);
@@ -256,12 +283,29 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
       setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
     }
   };
+  const saveScene = async (file: File) => {
+    const name = sceneName.trim() || `Scene ${scenes.length + 1}`;
+    const meta = await saveLibraryRef({ name, slot: 'scene', family: 'other', detectedLabel: 'scene', type: file.type || 'image/jpeg', blob: file });
+    setImage3(file);
+    setLibrary((prev) => [{ ...meta, previewUrl: meta.url || '' }, ...prev]);
+    setSceneName(''); setRefNote(`Saved ${name}`);
+  };
+  const addScenes = async (files: FileList | File[]) => {
+    for (const raw of Array.from(files)) {
+      if (!raw.type.startsWith('image/')) continue;
+      const prepared = await prepareRefImage(raw);
+      await saveScene(prepared.file);
+      setRefNote((n) => `${n} · ${formatBytes(prepared.beforeBytes)} → ${formatBytes(prepared.afterBytes)}`);
+    }
+  };
   const loadLibItem = async (item: LibraryRefMeta) => {
     setUsingId(item.id);
     try {
       const file = await loadLibraryFile(item);
       if (!file) throw new Error('Could not download that reference.');
-      if ((item.slot || 'pose') === 'face') { setImage1(file); setRefNote(`Using ${item.name || 'face'} as Image 1`); }
+      const slot = item.slot || 'pose';
+      if (slot === 'face') { setImage1(file); setRefNote(`Using ${item.name || 'face'} as Image 1`); }
+      else if (slot === 'scene') { setImage3(file); setRefNote(`Using ${item.name || 'scene'} as Image 3`); }
       else { setImage2(file); setFamily(item.family); setRefNote(`Using ${item.name || 'pose'} as Image 2`); }
     } catch (err: any) {
       setRefNote(err.message || 'Could not use that image.');
@@ -297,17 +341,18 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     if (!useCustom) setCharacter(nextChar);
     const nextPose = lockPose ? pose : pickRandomPose(pose.id);
     if (!lockPose) { setPose(nextPose); setFamily(nextPose.family); await applyFamilyRef(nextPose.family); }
-    const built = assembleAdminPrompt({ character: nextChar, poseId: nextPose.id, customPose, shot, angle, titSize, thickCellulite, plumpStomach, hairyPussy, faceMess, pussyCumPuddle });
+    const built = assembleAdminPrompt({ character: nextChar, poseId: nextPose.id, customPose, shot, angle, titSize, thickCellulite, plumpStomach, hairyPussy, faceMess, pussyCumPuddle, image3Role });
     setLast(built); onApply(built.prompt);
   };
   const card = (item: LibraryRefMeta & { previewUrl?: string }, square?: boolean) => {
-    const isFace = (item.slot || 'pose') === 'face';
+    const slot = item.slot || 'pose';
+    const useLabel = slot === 'face' ? 'Use as Image 1' : slot === 'scene' ? 'Use as Image 3' : 'Use as Image 2';
     return (
       <div key={item.id} className={`rounded-xl border overflow-hidden ${usingId === item.id ? 'border-emerald-400' : 'border-zinc-800'}`}>
         <button type="button" onClick={() => loadLibItem(item)} className="block w-full relative min-h-[44px] touch-manipulation">
           {item.previewUrl ? <img src={item.previewUrl} alt={item.name} draggable={false} loading="lazy" className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} object-cover bg-zinc-950 pointer-events-none`} /> : <div className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} bg-zinc-950`} />}
           <span className="absolute bottom-2 left-2 right-2 py-2 rounded-lg bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">
-            {usingId === item.id ? 'Loading…' : isFace ? 'Use as Image 1' : 'Use as Image 2'}
+            {usingId === item.id ? 'Loading…' : useLabel}
           </span>
         </button>
         <div className="p-2 space-y-1.5">
@@ -368,6 +413,16 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
                   <div ref={posesEndRef} className="h-px" />
                 </div>
               </div>
+              <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Scene / objects · Image 3 · {scenes.length} shown</p>
+                <p className="text-[10px] text-zinc-500">Background, clothing, a held/nearby object — whatever you want the generator to reference beyond her face and body. Set what it's used for on the Scene tab.</p>
+                <input value={sceneName} onChange={(e) => setSceneName(e.target.value)} placeholder="Name this reference" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
+                <label className={`${pill(false)} cursor-pointer text-center block`}>Add scene/object refs<input type="file" accept="image/*" multiple data-arx-lib="true" className="hidden" onChange={(e) => { if (e.target.files?.length) addScenes(e.target.files); e.target.value = ''; }} /></label>
+                <div ref={scenesScrollRef} className="max-h-[360px] overflow-y-auto -mx-1 px-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{scenes.map((item) => card(item, true))}</div>
+                  <div ref={scenesEndRef} className="h-px" />
+                </div>
+              </div>
               {/* Explicit fallback for anyone who'd rather click than
                   scroll — the two boxes above already auto-load on scroll. */}
               {hasMoreLibrary && (
@@ -421,6 +476,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
                 </select>
               )}
               <button type="button" onClick={() => setUseCustom((v) => !v)} className={pill(useCustom)}>Custom character</button>
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Image 3 is a reference for…</label>
+                <input value={image3Role} onChange={(e) => setImage3Role(e.target.value)} placeholder="background, her clothing, this object…" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
+                <p className="text-[9px] text-zinc-600">Only matters if you've set an Image 3 in the Library tab — ignored otherwise.</p>
+              </div>
             </div>
           )}
           {fillError && <p className="text-[10px] text-rose-400">{fillError}</p>}

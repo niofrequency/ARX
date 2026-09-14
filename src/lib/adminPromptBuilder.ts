@@ -10,6 +10,15 @@ export interface BuilderOptions {
   character: CharacterDef; poseId: string; customPose?: string; shot: ShotType; angle: AngleType;
   titSize: TitSize; thickCellulite: boolean; plumpStomach: boolean; hairyPussy: boolean;
   faceMess: FaceMess; pussyCumPuddle: boolean;
+  /**
+   * Free-text description of what Image 3 is being used for when it's
+   * attached — background, clothing, a held/nearby object, whatever the
+   * admin picked it for. There's no fixed enum for this on purpose: unlike
+   * image 1 (always face) and image 2 (always pose/body), image 3's role
+   * varies per generation, so the prompt just relays whatever was typed.
+   * Falls back to a generic description when left blank.
+   */
+  image3Role?: string;
 }
 
 export const POSE_FAMILIES: { id: PoseFamily; label: string }[] = [
@@ -119,11 +128,12 @@ export function pickRandomPose(excludeId?: string): PoseDef {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; image1: string; image2: string; summary: string } {
+export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; image1: string; image2: string; image3: string; summary: string } {
   const pose = POSES.find((p) => p.id === opts.poseId) ?? POSES[0];
   const poseBlock = pose.id === 'custom'
-    ? `Custom sex pose: ${opts.customPose?.trim() || 'use the pose in image 2'}. Follow that pose exactly. She looks at the viewer when the pose allows.`
+    ? `Custom sex pose: ${opts.customPose?.trim() || 'use the pose in image 2'}. Copy that exact pose and body positioning. She looks at the viewer when the pose allows.`
     : pose.block;
+  const image3Role = opts.image3Role?.trim() || 'background, clothing, or an object';
   const body: string[] = [TIT_LINE[opts.titSize]];
   if (opts.thickCellulite) body.push('Thick outer thighs with visible cellulite. Heavy natural thighs, not skinny.');
   if (opts.plumpStomach) body.push('A little plump stomach.');
@@ -137,16 +147,18 @@ export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; ima
   const prompt = [
     `Image 1 is the only identity/face reference. Keep her exact face details from image 1. Do not copy the face or identity of the woman in image 2 — image 2's own face and identity are irrelevant here.`,
     `Dress her as ${opts.character.name}. ${opts.character.hair}. ${opts.character.costume}. Accurate character clothing, wrecked and half-on.`,
-    `If Image 2 is present, use it for pose, camera, AND body reference — match the body shape, build, and proportions (frame, waist, hips, limb length) shown in image 2, combined with image 1's face. ${poseBlock}`,
+    `If Image 2 is present, copy the exact pose and body positioning shown in image 2 — same limb placement, same camera angle and framing — and also match her body shape, build, and proportions (frame, waist, hips, limb length) from image 2, combined with image 1's face. ${poseBlock}`,
+    `If Image 3 is present, use it only as a reference for: ${image3Role}. Do not take her face, identity, pose, or body proportions from image 3 — those still come from images 1 and 2 as described above.`,
     SHOT_LINE[opts.shot], ANGLE_LINE[opts.angle], body.join(' '),
     `Keep exact same skin color from image 1. Highly detailed photorealistic skin: visible pores, natural texture, fine peach fuzz.`,
     mess.join(' '),
-    `Photorealistic. Face and identity only from image 1. Body, pose, and camera from Image 2 (when present) and the chosen pose. Do not change identity, age, or face shape.`,
+    `Photorealistic. Face and identity only from image 1. Body, exact pose, and camera from Image 2 (when present) and the chosen pose. ${image3Role[0].toUpperCase()}${image3Role.slice(1)} from Image 3 (when present). Do not change identity, age, or face shape.`,
   ].join('\n\n');
   return {
     prompt,
     image1: 'Subject face / likeness only.',
-    image2: `${pose.image2} Also used as a body reference (shape/build/proportions).`,
+    image2: `${pose.image2} Exact pose/positioning + body reference (shape/build/proportions).`,
+    image3: `Reference for: ${image3Role}.`,
     summary: `${opts.character.name} · ${pose.label} · ${opts.shot}/${opts.angle} · ${opts.faceMess}`,
   };
 }
