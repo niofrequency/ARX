@@ -22,7 +22,6 @@ export default function CommandPalette() {
         <Command.List className="max-h-72 overflow-y-auto p-2 text-sm">
           <Command.Item className="px-3 py-2 rounded-lg data-[selected=true]:bg-cyan-400/15 cursor-pointer" onSelect={() => { document.querySelector('textarea')?.scrollIntoView({ behavior: 'smooth' }); setOpen(false); toast('Prompt box'); }}>Prompt box</Command.Item>
           <Command.Item className="px-3 py-2 rounded-lg data-[selected=true]:bg-cyan-400/15 cursor-pointer" onSelect={() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); setOpen(false); toast('Gallery'); }}>Gallery</Command.Item>
-          <Command.Item className="px-3 py-2 rounded-lg data-[selected=true]:bg-cyan-400/15 cursor-pointer" onSelect={() => { setOpen(false); toast('Hover a generated image, then click to lock a region'); }}>Region edit help</Command.Item>
         </Command.List>
       </Command>
     </div>
