@@ -10,8 +10,8 @@ import { setCanvasRefsHidden, setReference1File, setReference2File } from '../li
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
 import {
-  deleteLibraryRef, fetchLibraryPage, listPoseRefFamilies, loadLibraryFile, loadPoseRef,
-  renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
+  deleteLibraryRef, ensureNameLower, fetchLibraryPage, listPoseRefFamilies, loadLibraryFile, loadPoseRef,
+  renameLibraryRef, saveLibraryRef, savePoseRef, searchLibraryByName, type LibraryRefMeta,
 } from '../lib/poseRefStore';
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
@@ -65,6 +65,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [libraryCursor, setLibraryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreLibrary, setHasMoreLibrary] = useState(true);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  const [isSearchingServer, setIsSearchingServer] = useState(false);
   const libraryEndRef = useRef<HTMLDivElement>(null);
   const [guess, setGuess] = useState<PoseGuess | null>(null);
   const [refNote, setRefNote] = useState('');
@@ -82,6 +83,22 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const setImage2 = (file: File) => { onApplyImage2?.(file); setReference2File(file); };
   const setImage1 = (file: File) => { onApplyImage1?.(file); setReference1File(file); };
 
+  // Merges a batch of items into `library` by id (later entries win),
+  // shared by pagination and server-side search below so a name that's
+  // already loaded doesn't show up twice once search also finds it.
+  const mergeIntoLibrary = (incoming: (LibraryRefMeta & { previewUrl?: string })[]) => {
+    setLibrary((prev) => {
+      const merged = [...prev, ...incoming];
+      return Array.from(new Map(merged.map((item) => [item.id, item])).values());
+    });
+  };
+  // Self-healing backfill for legacy docs saved before nameLower existed
+  // (see ensureNameLower's doc comment) — fire-and-forget, never blocks
+  // rendering.
+  const backfillMissingNames = (items: LibraryRefMeta[]) => {
+    items.forEach((item) => { if (!item.nameLower) ensureNameLower(item); });
+  };
+
   const loadInitialLibrary = async () => {
     setIsLoadingLibrary(true);
     try {
@@ -90,6 +107,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
       setLibrary(items);
       setLibraryCursor(lastDoc);
       setHasMoreLibrary(hasMore);
+      backfillMissingNames(items);
     } catch (err: any) {
       setRefNote(err.message || 'Could not load library. Sign in first.');
     } finally {
@@ -101,12 +119,10 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     setIsLoadingLibrary(true);
     try {
       const { items, lastDoc, hasMore } = await fetchLibraryPage(libraryCursor);
-      setLibrary((prev) => {
-        const merged = [...prev, ...items];
-        return Array.from(new Map(merged.map((item) => [item.id, item])).values());
-      });
+      mergeIntoLibrary(items);
       setLibraryCursor(lastDoc);
       setHasMoreLibrary(hasMore);
+      backfillMissingNames(items);
     } catch (err: any) {
       setRefNote(err.message || 'Could not load more of the library.');
     } finally {
@@ -129,6 +145,35 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMoreLibrary, isLoadingLibrary, libraryCursor]);
+
+  // Server-side name search (debounced): the plain substring filter below
+  // (faces/poses via filterLibrary) only ever sees what's already loaded
+  // client-side. This reaches further back into a library that hasn't been
+  // fully paginated in yet — a Firestore prefix (starts-with) query against
+  // nameLower, so it's necessarily narrower than the substring-anywhere
+  // local filter (see searchLibraryByName's doc comment for why: no paid
+  // full-text index service, so prefix match is the free ceiling here).
+  // Purely additive — results merge into the same `library` list pagination
+  // already fills, so nothing about the existing local filtering changes.
+  useEffect(() => {
+    const q = libQuery.trim();
+    if (!q) return;
+    const timer = setTimeout(async () => {
+      setIsSearchingServer(true);
+      try {
+        const results = await searchLibraryByName(q);
+        mergeIntoLibrary(results);
+        backfillMissingNames(results);
+      } catch {
+        // Best-effort — the local substring filter over already-loaded
+        // items still works even if this fails (offline, signed out, ...).
+      } finally {
+        setIsSearchingServer(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libQuery]);
 
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
     const fromLib = poses.find((item) => item.family === nextFamily);
@@ -272,9 +317,12 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
           </div>
           {tab === 'library' && (
             <div className="space-y-4">
-              <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Search faces and poses" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
-              {libQuery.trim() && hasMoreLibrary && (
-                <p className="text-[10px] text-zinc-500 -mt-2">Searching the {library.length} loaded so far — load more below to search further back.</p>
+              <div className="relative">
+                <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Search faces and poses" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 pr-9 outline-none" />
+                {isSearchingServer && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2" />}
+              </div>
+              {libQuery.trim() && (
+                <p className="text-[10px] text-zinc-500 -mt-2">Matches by exact substring in what's loaded ({library.length}), plus names starting with "{libQuery.trim()}" pulled in from the rest of your library.</p>
               )}
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
                 <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1</p>

@@ -9,6 +9,8 @@ import {
   query,
   setDoc,
   startAfter,
+  updateDoc,
+  where,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
@@ -27,6 +29,16 @@ export interface LibraryRefMeta {
   type: string;
   url?: string;
   storagePath?: string;
+  /**
+   * Lowercased `name`, kept alongside it purely so searchLibraryByName()
+   * can do a server-side prefix query — Firestore range filters compare
+   * bytes, so there's no case-insensitive query without a duplicate,
+   * normalized field to query against. Optional because it wasn't tracked
+   * before this field existed: an older doc without it simply won't be
+   * found by server-side search until it's next saved/renamed (which
+   * always (re)writes it) or backfilled — see ensureNameLower.
+   */
+  nameLower?: string;
 }
 
 export interface LibraryRef extends LibraryRefMeta {
@@ -106,6 +118,7 @@ export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> 
   const meta: LibraryRefMeta = {
     id,
     name: item.name,
+    nameLower: item.name.toLowerCase(),
     slot: item.slot || 'pose',
     family: item.family,
     detectedLabel: item.detectedLabel,
@@ -202,5 +215,47 @@ export async function renameLibraryRef(id: string, name: string): Promise<void> 
   const refDoc = doc(libraryCol(userId), id);
   const snap = await getDoc(refDoc);
   if (!snap.exists()) throw new Error('Pose not found');
-  await setDoc(refDoc, { ...snap.data(), name: name.trim() || snap.data()?.name }, { merge: true });
+  const nextName = name.trim() || snap.data()?.name;
+  await setDoc(refDoc, { ...snap.data(), name: nextName, nameLower: (nextName as string).toLowerCase() }, { merge: true });
+}
+
+// Server-side name search — a prefix (starts-with) match on nameLower,
+// case-insensitive since it's compared against the lowercased field
+// rather than `name` itself. Firestore has no native substring/full-text
+// search without a paid third-party index (Algolia, Typesense, ...), so
+// this is the free option: a single-field range filter + matching orderBy
+// needs no composite index (unlike combining it with a `slot` equality
+// filter would — see fetchLibraryPage's comment), so faces and poses are
+// split client-side from one combined query result, same as pagination.
+// Deliberately separate from (and additive to) the plain substring filter
+// AdminRandomPrompt.tsx already runs over whatever's loaded locally: this
+// reaches further back into a library that hasn't been fully paginated in
+// yet, at the cost of being prefix-only instead of substring-anywhere.
+export async function searchLibraryByName(prefix: string, pageSize = LIBRARY_PAGE_SIZE): Promise<(LibraryRefMeta & { previewUrl: string })[]> {
+  const q = prefix.trim().toLowerCase();
+  if (!q) return [];
+  const userId = uid();
+  const snap = await getDocs(
+    query(libraryCol(userId), orderBy('nameLower'), where('nameLower', '>=', q), where('nameLower', '<=', q + ''), limit(pageSize)),
+  );
+  return snap.docs.map((d) => {
+    const meta = { id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) };
+    return { ...meta, previewUrl: meta.url || '' };
+  });
+}
+
+/**
+ * Backfills `nameLower` on a legacy doc that predates that field, so it
+ * becomes findable by searchLibraryByName() from here on. Fire-and-forget
+ * by design (callers don't await this) — a self-healing side effect of
+ * viewing an old item, not a blocking migration step; failure is silent
+ * and harmless; the doc just stays search-blind until it's renamed instead.
+ */
+export function ensureNameLower(item: LibraryRefMeta): void {
+  if (item.nameLower || !item.name) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  updateDoc(doc(libraryCol(userId), item.id), { nameLower: item.name.toLowerCase() }).catch(() => {
+    // Best-effort — see doc comment above.
+  });
 }
