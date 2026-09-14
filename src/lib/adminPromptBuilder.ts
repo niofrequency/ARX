@@ -3,6 +3,7 @@ export type AngleType = 'low' | 'eye' | 'high';
 export type TitSize = 'small' | 'medium' | 'big' | 'huge';
 export type FaceMess = 'clean' | 'drool' | 'face_only' | 'bukkake' | 'bukkake_drool';
 export type PoseFamily = 'front' | 'rear' | 'face' | 'tits' | 'other' | 'custom';
+export type WardrobeStage = 'dressed' | 'tease' | 'pulled' | 'half' | 'nude';
 
 export interface CharacterDef { id: string; name: string; costume: string; hair: string; }
 export interface PoseDef { id: string; label: string; family: PoseFamily; image2: string; block: string; }
@@ -10,28 +11,9 @@ export interface BuilderOptions {
   character: CharacterDef; poseId: string; customPose?: string; shot: ShotType; angle: AngleType;
   titSize: TitSize; thickCellulite: boolean; plumpStomach: boolean; hairyPussy: boolean;
   faceMess: FaceMess; pussyCumPuddle: boolean;
-  /**
-   * Whether to copy image 2's exact pose/positioning/camera framing, on
-   * top of always matching its body proportions (that part isn't
-   * toggleable — see the prompt text below). Off falls back to using the
-   * chosen pose description alone, still combined with image 2's body
-   * shape. Defaults to true when omitted.
-   */
+  wardrobe?: WardrobeStage;
   matchImage2Pose?: boolean;
-  /**
-   * Whether to keep her exact accessories (jewelry, glasses, piercings,
-   * hair accessories, etc.) from image 1 unchanged. Defaults to true when
-   * omitted.
-   */
   keepImage1Accessories?: boolean;
-  /**
-   * Free-text description of what Image 3 is being used for when it's
-   * attached — background, clothing, a held/nearby object, whatever the
-   * admin picked it for. There's no fixed enum for this on purpose: unlike
-   * image 1 (always face) and image 2 (always pose/body), image 3's role
-   * varies per generation, so the prompt just relays whatever was typed.
-   * Falls back to a generic description when left blank.
-   */
   image3Role?: string;
 }
 
@@ -104,6 +86,48 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'shego', name: 'Shego', hair: 'short black hair', costume: 'torn green and black catsuit, zipper pulled down' },
   { id: 'ahri', name: 'Ahri', hair: 'long white-blonde hair, fox ears', costume: 'torn silk hanbok-style outfit, tails visible, wrecked and half-on' },
   { id: 'sailormoon', name: 'Sailor Moon', hair: 'long blonde twin-tail odango hair', costume: 'torn sailor fuku, tiara crooked, gloves still on' },
+  { id: 'chel', name: 'Chel (The Road to El Dorado)', hair: 'long dark wavy hair, gold headband', costume: 'tiny teal-and-gold El Dorado wrap bikini ripped and hanging off, gold belt, arm cuffs, wrecked and half-on' },
+  { id: 'aerith', name: 'Aerith', hair: 'long brown hair with a pink ribbon', costume: 'pink dress shoved up, jacket off, wrecked and half-on' },
+  { id: 'yuffie', name: 'Yuffie Kisaragi', hair: 'short black ninja hair', costume: 'torn green ninja outfit, wrapping loose' },
+  { id: 'lightning', name: 'Lightning Farron', hair: 'rose-pink swept hair', costume: 'torn military coat and skirt, wrecked and half-on' },
+  { id: 'ciri', name: 'Ciri', hair: 'ash-blonde hair', costume: 'torn witcher leathers, wrecked and half-on' },
+  { id: 'dva', name: 'D.Va', hair: 'dark hair with pink mouse clips', costume: 'torn pink-and-blue bodysuit, zipper down' },
+  { id: 'mercy', name: 'Mercy', hair: 'blonde hair, halo crooked', costume: 'torn white-and-gold Valkyrie suit, peeled open' },
+  { id: 'tracer', name: 'Tracer', hair: 'short spiked brown hair', costume: 'torn orange bomber jacket and shorts, wrecked' },
+  { id: 'sombra', name: 'Sombra', hair: 'short purple-black hair', costume: 'torn purple cyber suit, peeled open' },
+  { id: 'kiriko', name: 'Kiriko', hair: 'fox-ear hood off, dark hair', costume: 'torn green-and-white shrine outfit, wrecked and half-on' },
+  { id: 'reyna', name: 'Reyna', hair: 'long dark hair with purple tips', costume: 'torn black-and-purple Valorant gear, unzipped' },
+  { id: 'sage', name: 'Sage', hair: 'dark hair in a tail falling loose', costume: 'torn white healer robes, pulled open' },
+  { id: 'jett', name: 'Jett', hair: 'short white hair', costume: 'torn teal-and-white duelist gear, wrecked' },
+  { id: 'evelynn', name: 'Evelynn', hair: 'long pink-lavender hair, horns', costume: 'torn dark succubus latex, straps hanging' },
+  { id: 'akali', name: 'Akali', hair: 'black-and-neon-pink k/da hair', costume: 'torn K/DA crop and shorts, wrecked and half-on' },
+  { id: 'katarina', name: 'Katarina', hair: 'long red assassin hair', costume: 'torn dark Noxian leathers, pulled open' },
+  { id: 'nami', name: 'Nami', hair: 'long orange hair', costume: 'torn orange bikini top and skirt, wrecked pirate look' },
+  { id: 'robin', name: 'Nico Robin', hair: 'long dark hair', costume: 'torn purple coat and bikini, wrecked and half-on' },
+  { id: 'boa', name: 'Boa Hancock', hair: 'long black hair', costume: 'torn red cheongsam, pulled open' },
+  { id: 'hinata', name: 'Hinata', hair: 'long dark hair, shy bangs', costume: 'torn lavender jacket and shorts, wrecked' },
+  { id: 'tsunade', name: 'Tsunade', hair: 'long blonde hair with a crown jewel', costume: 'torn green haori and grey top, wrecked and half-on' },
+  { id: 'yor', name: 'Yor Forger', hair: 'long black hair, red-thorn headband', costume: 'torn black gold-rose dress, pulled open' },
+  { id: 'powercsm', name: 'Power', hair: 'long blonde messy hair, small red horns', costume: 'torn white shirt, red long-sleeves, wrecked' },
+  { id: 'himeno', name: 'Himeno', hair: 'short dark hair', costume: 'torn white shirt and slacks, wrecked and half-on' },
+  { id: 'lucyedge', name: 'Lucy (Edgerunners)', hair: 'short silver-white hair', costume: 'torn black jacket and shorts, wrecked netrunner look' },
+  { id: 'misty', name: 'Misty', hair: 'short orange hair', costume: 'torn yellow crop and shorts, suspenders down' },
+  { id: 'cheer', name: 'Cheerleader', hair: 'high ponytail', costume: 'tiny wrecked cheer top and skirt, yanked aside' },
+  { id: 'secretary', name: 'Secretary', hair: 'sleek office bun falling out', costume: 'tight blouse ripped open, pencil skirt hiked' },
+  { id: 'flight', name: 'Flight attendant', hair: 'neat airline updo falling', costume: 'tight uniform dress unzipped, scarf still on' },
+  { id: 'bunny', name: 'Bunny girl', hair: 'styled updo, bunny ears crooked', costume: 'torn black bunny leotard, fishnets, tail still on' },
+  { id: 'latexdoll', name: 'Latex doll', hair: 'slicked wet-look hair', costume: 'ripped shiny black latex, peeled open' },
+  { id: 'gothslut', name: 'Goth slut', hair: 'black hair with blunt bangs', costume: 'torn mesh top, choker, tiny skirt yanked aside' },
+  { id: 'idol', name: 'Wrecked idol', hair: 'idol curls falling apart', costume: 'ripped stage costume, sparkle fabric hanging off' },
+  { id: 'cowgirlfit', name: 'Cowgirl', hair: 'messy western waves', costume: 'tied flannel open, tiny denim shorts yanked aside, boots on' },
+];
+
+export const WARDROBE_STAGES: { id: WardrobeStage; label: string; block: string }[] = [
+  { id: 'dressed', label: '1 Dressed', block: 'Fully dressed in accurate character clothing, fitted and on properly, not wrecked. No nudity. No nipples. No pussy. No ass crack. Teasing tightness only. This is the first frame of a strip sequence.' },
+  { id: 'tease', label: '2 Tease', block: 'Still mostly dressed. She is teasing: pulling one strap down, tugging a neckline, hiking a hem. Partial cleavage or a sliver of underboob or hip, but nipples and pussy stay covered. Clothes still on. Second frame of a strip sequence.' },
+  { id: 'pulled', label: '3 Pulled', block: 'Clothes pulled down or aside, not off. One or both tits out, or ass exposed while the outfit is still hanging on her body. She is mid-undress. Pussy may peek but the costume is still the outfit, just yanked. Third frame of a strip sequence.' },
+  { id: 'half', label: '4 Half-nude', block: 'Half nude. Costume bunched at the waist, around one arm, or off the tits. Tits out. Ass or pussy visible depending on the pose. She still wears part of the character outfit. Fourth frame of a strip sequence.' },
+  { id: 'nude', label: '5 Nude', block: 'Fully nude. Costume off or only leftover fabric on the floor or around an ankle/wrist. Body fully visible. Last frame of a strip sequence.' },
 ];
 
 export const POSES: PoseDef[] = [
@@ -120,7 +144,7 @@ export const POSES: PoseDef[] = [
   { id: 'prone_bone', label: 'Prone bone', family: 'rear', image2: 'Face down, ass up.', block: 'Prone bone. Face down, ass up. Pussy visible from behind. Looks back if the crop allows.' },
   { id: 'standing_doggy', label: 'Standing doggy', family: 'rear', image2: 'Standing bent, ass toward camera.', block: 'Standing doggystyle. Bent at the waist, ass toward the camera. Looks back at the viewer.' },
   { id: 'face_closeup', label: 'Face close-up', family: 'face', image2: 'Tight face close-up.', block: 'Extreme face close-up. Face fills the frame. Looks directly at the viewer. Mouth open, wrecked slutty expression.' },
-  { id: 'facial_closeup', label: 'Facial close-up', family: 'face', image2: 'Tight face close-up for a facial.', block: 'Extreme face close-up. Face fills the frame. Looks directly at the viewer. Mouth open. Face full of cum. This is a face shot, not a body shot.' },
+  { id: 'facial_closeup', label: 'Facial close-up', family: 'face', image2: 'Tight face close-up for a facial.', block: 'Extreme face close-up. Face fills the frame. Looks directly at the viewer. Mouth open. This is a face shot, not a body shot.' },
   { id: 'ahegao', label: 'Ahegao face close-up', family: 'face', image2: 'Tight wrecked face close-up.', block: 'Extreme face close-up. Face fills the frame. Ahegao wrecked expression, tongue out. Still looks at the viewer.' },
   { id: 'kneeling_bj', label: 'Kneeling, face forward', family: 'face', image2: 'Kneeling looking up.', block: 'She is kneeling facing the viewer. Face and chest toward camera. Looks up at the viewer. Mouth open.' },
   { id: 'bj_pov', label: 'Blowjob POV', family: 'face', image2: 'Mouth toward camera, looking up.', block: 'Blowjob POV. Kneeling. Camera is the viewer. Mouth toward the camera, looking up. Direct eye contact.' },
@@ -140,6 +164,11 @@ export const POSES: PoseDef[] = [
   { id: 'leaning_forward_cleavage', label: 'Leaning forward, cleavage', family: 'tits', image2: 'Leaning forward, deep cleavage.', block: 'Leaning forward toward the camera, tits pushed together and hanging, deep cleavage. Looks at the viewer.' },
   { id: 'mirror_shot', label: 'Mirror shot', family: 'other', image2: 'Standing in front of a mirror.', block: 'Standing in front of a mirror, body visible in the reflection. Looks at her own reflection or the viewer.' },
   { id: 'shower_wet', label: 'Wet, in the shower', family: 'other', image2: 'Standing in the shower, wet.', block: 'Standing in a shower, water running down her body, hair wet. Looks at the viewer.' },
+  { id: 'pull_top', label: 'Pulling top down', family: 'tits', image2: 'Hands pulling top down.', block: 'Standing or kneeling facing the viewer. Both hands pulling her top down to flash her tits. Outfit still on. Direct eye contact.' },
+  { id: 'one_tit', label: 'One tit out', family: 'tits', image2: 'One breast exposed, clothes on.', block: 'Mostly dressed. One tit pulled out of the costume. Other side still covered. Looks at the viewer.' },
+  { id: 'hike_skirt', label: 'Hiking skirt / flashing', family: 'front', image2: 'Skirt hiked, flashing.', block: 'Standing. She hikes her skirt or shorts aside to flash her pussy, clothes otherwise on. Looks at the viewer.' },
+  { id: 'peel_ass', label: 'Peeling clothes off ass', family: 'rear', image2: 'Hands peeling bottoms down.', block: 'Rear view. She peels shorts, skirt, or leotard down over her ass. Looks back at the viewer.' },
+  { id: 'undress_look', label: 'Looking back, undressing', family: 'rear', image2: 'Look-back while undressing.', block: 'She looks back over her shoulder while pulling clothes off. Mid-undress. Direct eye contact.' },
   { id: 'custom', label: 'Custom pose', family: 'custom', image2: 'Use a photo of that exact pose as Image 2.', block: '' },
 ];
 
@@ -177,13 +206,24 @@ export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; ima
   const body: string[] = [TIT_LINE[opts.titSize]];
   if (opts.thickCellulite) body.push('Thick outer thighs with visible cellulite. Heavy natural thighs, not skinny.');
   if (opts.plumpStomach) body.push('A little plump stomach.');
-  body.push(opts.hairyPussy ? 'Hairy pussy. Visible pubic hair.' : 'Naked pussy exposed.');
+  const wardrobe: WardrobeStage = opts.wardrobe || 'half';
+  const wardrobeLine = (WARDROBE_STAGES.find((w) => w.id === wardrobe) ?? WARDROBE_STAGES[3]).block;
+  const showGenitals = wardrobe === 'half' || wardrobe === 'nude';
+  if (showGenitals) body.push(opts.hairyPussy ? 'Hairy pussy. Visible pubic hair.' : 'Naked pussy exposed.');
+  else body.push('Keep genitals covered unless the wardrobe stage below explicitly flashes them.');
+  const wantCum = opts.faceMess !== 'clean' && opts.faceMess !== 'drool';
   const mess: string[] = [];
-  if (opts.faceMess === 'clean') mess.push('No bukkake. Keep her face clean.');
-  else if (opts.faceMess === 'drool') mess.push('No bukkake. Mouth open, spit and drool running down her chin.');
-  else if (opts.faceMess === 'face_only') mess.push('Bukkake face only. Face full of cum. Thick white sticky semen on forehead, eyes, nose, cheeks, lips, chin. Face only, not the whole body.');
-  else mess.push(`Heavy messy bukkake. Face full of cum. Thick white sticky semen on face and tits. Fat ropes, not a thin glaze${opts.faceMess === 'bukkake_drool' ? ', spit mixed with cum' : ''}.`);
-  if (opts.pussyCumPuddle) mess.push('Pussy full of cum, dripping out. A puddle of cum and squirt on the floor under her.');
+  if (opts.faceMess === 'clean') {
+    mess.push('NO SEMEN. NO BUKKAKE. Keep her face and body clean. Do not add cum, semen, ropes, glaze, or a facial. Do not copy any cum from image 2 even if the pose reference has it. Ignore semen in the reference photos.');
+  } else if (opts.faceMess === 'drool') {
+    mess.push('NO SEMEN. NO BUKKAKE. Mouth open, spit and drool running down her chin only. Do not add cum. Do not copy cum from image 2.');
+  } else if (opts.faceMess === 'face_only') {
+    mess.push('Bukkake face only. Face full of cum. Thick white sticky semen on forehead, eyes, nose, cheeks, lips, chin. Face only, not the whole body.');
+  } else {
+    mess.push(`Heavy messy bukkake. Face full of cum. Thick white sticky semen on face and tits. Fat ropes, not a thin glaze${opts.faceMess === 'bukkake_drool' ? ', spit mixed with cum' : ''}.`);
+  }
+  if (opts.pussyCumPuddle && wantCum) mess.push('Pussy full of cum, dripping out. A puddle of cum and squirt on the floor under her.');
+  else if (!wantCum) mess.push('No cum puddle. No creampie overlay.');
   const image2Line = matchPose
     ? `If Image 2 is present, copy the exact pose and body positioning shown in image 2 — same limb placement, same camera angle and framing — and also match her body shape, build, and proportions (frame, waist, hips, limb length) from image 2, combined with image 1's face. ${poseBlock}`
     : `If Image 2 is present, use it only to match her body shape, build, and proportions (frame, waist, hips, limb length) from image 2, combined with image 1's face — do not copy its pose or camera framing; use the pose described below instead. ${poseBlock}`;
@@ -193,7 +233,7 @@ export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; ima
   const prompt = [
     `Image 1 is the only identity/face reference. Keep her exact face details from image 1. Do not copy the face or identity of the woman in image 2 — image 2's own face and identity are irrelevant here.`,
     accessoriesLine,
-    `Dress her as ${opts.character.name}. ${opts.character.hair}. ${opts.character.costume}. Accurate character clothing, wrecked and half-on.`,
+    `Dress her as ${opts.character.name}. ${opts.character.hair}. ${opts.character.costume}. ${wardrobeLine}`,
     image2Line,
     `If Image 3 is present, use it only as a reference for: ${image3Role}. Do not take her face, identity, pose, or body proportions from image 3 — those still come from images 1 and 2 as described above.`,
     SHOT_LINE[opts.shot], ANGLE_LINE[opts.angle], body.join(' '),
@@ -206,6 +246,6 @@ export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; ima
     image1: 'Subject face / likeness only.',
     image2: `${pose.image2} Body reference (shape/build/proportions)${matchPose ? ' + exact pose/positioning' : ''}.`,
     image3: `Reference for: ${image3Role}.`,
-    summary: `${opts.character.name} · ${pose.label} · ${opts.shot}/${opts.angle} · ${opts.faceMess}${matchPose ? '' : ' · own pose'}${keepAccessories ? '' : ' · no acc. lock'}`,
+    summary: `${opts.character.name} · ${wardrobe} · ${pose.label} · ${opts.shot}/${opts.angle} · ${opts.faceMess}${matchPose ? '' : ' · own pose'}${keepAccessories ? '' : ' · no acc. lock'}`,
   };
 }
