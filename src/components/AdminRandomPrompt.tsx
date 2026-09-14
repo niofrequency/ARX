@@ -53,6 +53,11 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [hairyPussy, setHairyPussy] = useState(false);
   const [faceMess, setFaceMess] = useState<FaceMess>('face_only');
   const [pussyCumPuddle, setPussyCumPuddle] = useState(true);
+  // See adminPromptBuilder.ts's matchImage2Pose/keepImage1Accessories —
+  // both default on; either can be turned off per-generation instead of
+  // being all-or-nothing baked into the prompt.
+  const [matchImage2Pose, setMatchImage2Pose] = useState(true);
+  const [keepImage1Accessories, setKeepImage1Accessories] = useState(true);
   const [lockCharacter, setLockCharacter] = useState(true);
   const [lockPose, setLockPose] = useState(true);
   const [useCustom, setUseCustom] = useState(false);
@@ -341,7 +346,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     if (!useCustom) setCharacter(nextChar);
     const nextPose = lockPose ? pose : pickRandomPose(pose.id);
     if (!lockPose) { setPose(nextPose); setFamily(nextPose.family); await applyFamilyRef(nextPose.family); }
-    const built = assembleAdminPrompt({ character: nextChar, poseId: nextPose.id, customPose, shot, angle, titSize, thickCellulite, plumpStomach, hairyPussy, faceMess, pussyCumPuddle, image3Role });
+    const built = assembleAdminPrompt({ character: nextChar, poseId: nextPose.id, customPose, shot, angle, titSize, thickCellulite, plumpStomach, hairyPussy, faceMess, pussyCumPuddle, image3Role, matchImage2Pose, keepImage1Accessories });
     setLast(built); onApply(built.prompt);
   };
   const card = (item: LibraryRefMeta & { previewUrl?: string }, square?: boolean) => {
@@ -464,6 +469,10 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
                 <button type="button" onClick={() => setFaceMess('face_only')} className={pill(faceMess === 'face_only')}>Face only</button>
                 <button type="button" onClick={() => setFaceMess('bukkake')} className={pill(faceMess === 'bukkake')}>Bukkake</button>
                 <button type="button" onClick={() => setPussyCumPuddle((v) => !v)} className={pill(pussyCumPuddle)}>Puddle</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setMatchImage2Pose((v) => !v)} className={pill(matchImage2Pose)} title="Copy image 2's exact pose/positioning/camera, on top of always matching its body proportions. Off falls back to the chosen pose description alone.">Match Image 2 pose</button>
+                <button type="button" onClick={() => setKeepImage1Accessories((v) => !v)} className={pill(keepImage1Accessories)} title="Keep jewelry, glasses, piercings, and other accessories from Image 1 unchanged.">Keep Image 1 accessories</button>
               </div>
               {useCustom ? (
                 <div className="space-y-2">
