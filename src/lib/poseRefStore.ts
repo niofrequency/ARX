@@ -4,7 +4,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
+  query,
   setDoc,
+  startAfter,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { auth, db, deleteFromFirebase, getFreshIdToken, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
@@ -112,17 +118,42 @@ export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> 
   return meta;
 }
 
-export async function listLibraryRefs(): Promise<LibraryRefMeta[]> {
-  const userId = uid();
-  const snap = await getDocs(libraryCol(userId));
-  return snap.docs
-    .map((d) => ({ id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) }))
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+// One page of a user's reference library, newest first — a library with
+// hundreds of saved faces/poses used to be fetched and rendered all at
+// once (listLibraryRefs/listLibraryCards, since removed), which got
+// slower and heavier the larger it grew. Paginated the same way
+// userData.ts's fetchHistoryPage already paginates the main gallery:
+// orderBy + startAfter(cursor) + limit, single-field order so no extra
+// composite Firestore index is needed. Faces and poses share one cursor
+// stream over the same collection (split client-side by `slot`) rather
+// than two independently-filtered queries, specifically to avoid a
+// `where(slot==) + orderBy(createdAt)` compound query, which WOULD need a
+// composite index provisioned in the Firebase console before it could run.
+export const LIBRARY_PAGE_SIZE = 40;
+
+export interface LibraryPage {
+  items: (LibraryRefMeta & { previewUrl: string })[];
+  lastDoc: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
 }
 
-export async function listLibraryCards(): Promise<(LibraryRefMeta & { previewUrl: string })[]> {
-  const rows = await listLibraryRefs();
-  return rows.map((meta) => ({ ...meta, previewUrl: meta.url || '' }));
+export async function fetchLibraryPage(cursor: QueryDocumentSnapshot<DocumentData> | null = null): Promise<LibraryPage> {
+  const userId = uid();
+  const constraints = [
+    orderBy('createdAt', 'desc'),
+    ...(cursor ? [startAfter(cursor)] : []),
+    limit(LIBRARY_PAGE_SIZE),
+  ];
+  const snap = await getDocs(query(libraryCol(userId), ...constraints));
+  const items = snap.docs.map((d) => {
+    const meta = { id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) };
+    return { ...meta, previewUrl: meta.url || '' };
+  });
+  return {
+    items,
+    lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+    hasMore: snap.docs.length === LIBRARY_PAGE_SIZE,
+  };
 }
 
 export async function loadLibraryRef(id: string): Promise<File | null> {
