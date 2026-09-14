@@ -2340,17 +2340,24 @@ export default function App() {
               )}
               <AnimatePresence mode="wait">
                 {resultUrl ? (
-                  <motion.div 
-                    key="result" 
-                    initial={{ opacity: 0, scale: 1.05 }} 
-                    animate={{ opacity: 1, scale: 1 }} 
-                    className="w-full h-full p-2 sm:p-4"
+                  <motion.div
+                    key="result"
+                    initial={{ opacity: 0, scale: 1.05 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    // No padding here: the frame's aspect-ratio (see
+                    // resultAspect above) is computed from the raw image,
+                    // so any padding on this box would shrink the content
+                    // area unevenly (unless the image happens to be
+                    // square) — object-contain would then letterbox to
+                    // fit that now-mismatched box, showing as a dark gap
+                    // between the image and the frame around it.
+                    className="w-full h-full"
                   >
                     {mode === 'upscaler' && previewUrl && !selectedHistoryItem && !isVideoUrl(resultUrl) ? (
                       /* --- INTERACTIVE BEFORE/AFTER SLIDER FOR UPSCALER --- */
                       <div 
                         ref={sliderContainerRef}
-                        className="relative w-full h-full cursor-ew-resize select-none rounded-[2rem] overflow-hidden group/result"
+                        className="relative w-full h-full cursor-ew-resize select-none rounded-[2.5rem] overflow-hidden group/result"
                         onMouseMove={handleSliderMove}
                         onTouchMove={handleSliderMove}
                       >
@@ -2415,7 +2422,7 @@ export default function App() {
                                 const v = e.currentTarget;
                                 if (v.videoWidth && v.videoHeight) setResultAspect(v.videoWidth / v.videoHeight);
                               }}
-                              className="w-full h-full object-contain rounded-[2rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]"
+                              className="w-full h-full object-contain rounded-[2.5rem] shadow-xl bg-black transition-transform duration-500 group-hover/result:scale-[1.01]"
                             />
                         ) : (
                             <img
@@ -2425,7 +2432,7 @@ export default function App() {
                                 const img = e.currentTarget;
                                 if (img.naturalWidth && img.naturalHeight) setResultAspect(img.naturalWidth / img.naturalHeight);
                               }}
-                              className="w-full h-full object-contain rounded-[2rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]"
+                              className="w-full h-full object-contain rounded-[2.5rem] shadow-xl transition-transform duration-500 group-hover/result:scale-[1.01]"
                             />
                         )}
                         
