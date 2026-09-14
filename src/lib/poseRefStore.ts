@@ -17,8 +17,8 @@ import {
 import { auth, db, deleteFromFirebase, getFreshIdToken, uploadToFirebase } from './firebase';
 import type { PoseFamily } from './adminPromptBuilder';
 
-/** 'scene' = Image 3 — background, clothing, or an object reference; see adminPromptBuilder.ts's image3Role. */
-export type RefSlot = 'face' | 'pose' | 'scene';
+/** face = Image 1, pose = Image 2, scene = Image 3 background/object, clothes = Image 3 outfit. */
+export type RefSlot = 'face' | 'pose' | 'scene' | 'clothes';
 
 export interface LibraryRefMeta {
   id: string;
@@ -30,15 +30,6 @@ export interface LibraryRefMeta {
   type: string;
   url?: string;
   storagePath?: string;
-  /**
-   * Lowercased `name`, kept alongside it purely so searchLibraryByName()
-   * can do a server-side prefix query — Firestore range filters compare
-   * bytes, so there's no case-insensitive query without a duplicate,
-   * normalized field to query against. Optional because it wasn't tracked
-   * before this field existed: an older doc without it simply won't be
-   * found by server-side search until it's next saved/renamed (which
-   * always (re)writes it) or backfilled — see ensureNameLower.
-   */
   nameLower?: string;
 }
 
@@ -132,17 +123,6 @@ export async function saveLibraryRef(item: Omit<LibraryRef, 'id' | 'createdAt'> 
   return meta;
 }
 
-// One page of a user's reference library, newest first — a library with
-// hundreds of saved faces/poses used to be fetched and rendered all at
-// once (listLibraryRefs/listLibraryCards, since removed), which got
-// slower and heavier the larger it grew. Paginated the same way
-// userData.ts's fetchHistoryPage already paginates the main gallery:
-// orderBy + startAfter(cursor) + limit, single-field order so no extra
-// composite Firestore index is needed. Faces and poses share one cursor
-// stream over the same collection (split client-side by `slot`) rather
-// than two independently-filtered queries, specifically to avoid a
-// `where(slot==) + orderBy(createdAt)` compound query, which WOULD need a
-// composite index provisioned in the Firebase console before it could run.
 export const LIBRARY_PAGE_SIZE = 40;
 
 export interface LibraryPage {
@@ -178,15 +158,6 @@ export async function loadLibraryRef(id: string): Promise<File | null> {
   return fileFromStorage(row.storagePath, row.name || `${row.detectedLabel}.jpg`, row.type || 'image/jpeg');
 }
 
-/**
- * Turns an already-loaded library card straight into a File by fetching its
- * known download URL directly — the same URL the card's thumbnail already
- * used, so this is typically a single (often browser-cached) request. Skips
- * the extra Firestore read and the authenticated /api/ref-file relay that
- * loadLibraryRef() needs when all it has is an id. Falls back to that
- * slower, fully-authenticated path only if the card has no direct URL (an
- * older record) or the direct fetch fails.
- */
 export async function loadLibraryFile(item: LibraryRefMeta): Promise<File | null> {
   if (item.url) {
     try {
@@ -195,9 +166,7 @@ export async function loadLibraryFile(item: LibraryRefMeta): Promise<File | null
         const blob = await res.blob();
         return new File([blob], item.name || `${item.detectedLabel || 'ref'}.jpg`, { type: item.type || blob.type || 'image/jpeg' });
       }
-    } catch {
-      // Direct fetch failed (CORS, expired token, offline …) — fall back below.
-    }
+    } catch {}
   }
   return loadLibraryRef(item.id);
 }
@@ -220,24 +189,12 @@ export async function renameLibraryRef(id: string, name: string): Promise<void> 
   await setDoc(refDoc, { ...snap.data(), name: nextName, nameLower: (nextName as string).toLowerCase() }, { merge: true });
 }
 
-// Server-side name search — a prefix (starts-with) match on nameLower,
-// case-insensitive since it's compared against the lowercased field
-// rather than `name` itself. Firestore has no native substring/full-text
-// search without a paid third-party index (Algolia, Typesense, ...), so
-// this is the free option: a single-field range filter + matching orderBy
-// needs no composite index (unlike combining it with a `slot` equality
-// filter would — see fetchLibraryPage's comment), so faces and poses are
-// split client-side from one combined query result, same as pagination.
-// Deliberately separate from (and additive to) the plain substring filter
-// AdminRandomPrompt.tsx already runs over whatever's loaded locally: this
-// reaches further back into a library that hasn't been fully paginated in
-// yet, at the cost of being prefix-only instead of substring-anywhere.
 export async function searchLibraryByName(prefix: string, pageSize = LIBRARY_PAGE_SIZE): Promise<(LibraryRefMeta & { previewUrl: string })[]> {
   const q = prefix.trim().toLowerCase();
   if (!q) return [];
   const userId = uid();
   const snap = await getDocs(
-    query(libraryCol(userId), orderBy('nameLower'), where('nameLower', '>=', q), where('nameLower', '<=', q + ''), limit(pageSize)),
+    query(libraryCol(userId), orderBy('nameLower'), where('nameLower', '>=', q), where('nameLower', '<=', q + '\uf8ff'), limit(pageSize)),
   );
   return snap.docs.map((d) => {
     const meta = { id: d.id, ...(d.data() as Omit<LibraryRefMeta, 'id'>) };
@@ -245,18 +202,9 @@ export async function searchLibraryByName(prefix: string, pageSize = LIBRARY_PAG
   });
 }
 
-/**
- * Backfills `nameLower` on a legacy doc that predates that field, so it
- * becomes findable by searchLibraryByName() from here on. Fire-and-forget
- * by design (callers don't await this) — a self-healing side effect of
- * viewing an old item, not a blocking migration step; failure is silent
- * and harmless; the doc just stays search-blind until it's renamed instead.
- */
 export function ensureNameLower(item: LibraryRefMeta): void {
   if (item.nameLower || !item.name) return;
   const userId = auth.currentUser?.uid;
   if (!userId) return;
-  updateDoc(doc(libraryCol(userId), item.id), { nameLower: item.name.toLowerCase() }).catch(() => {
-    // Best-effort — see doc comment above.
-  });
+  updateDoc(doc(libraryCol(userId), item.id), { nameLower: item.name.toLowerCase() }).catch(() => {});
 }
