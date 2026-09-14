@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Dices } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dices, Loader2 } from 'lucide-react';
 import {
   CHARACTERS, POSES, POSE_FAMILIES, assembleAdminPrompt, pickRandomCharacter, pickRandomPose,
   type ShotType, type AngleType, type TitSize, type FaceMess, type CharacterDef, type PoseDef, type PoseFamily,
@@ -10,9 +10,10 @@ import { setCanvasRefsHidden, setReference1File, setReference2File } from '../li
 import { detectPoseFromFile, type PoseGuess } from '../lib/poseDetect';
 import { filterLibrary, formatBytes, prepareRefImage } from '../lib/prepareRefImage';
 import {
-  deleteLibraryRef, listLibraryCards, listPoseRefFamilies, loadLibraryFile, loadPoseRef,
-  renameLibraryRef, saveLibraryRef, savePoseRef, type LibraryRefMeta,
+  deleteLibraryRef, ensureNameLower, fetchLibraryPage, listPoseRefFamilies, loadLibraryFile, loadPoseRef,
+  renameLibraryRef, saveLibraryRef, savePoseRef, searchLibraryByName, type LibraryRefMeta,
 } from '../lib/poseRefStore';
+import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
 const POSE_NAMES: Record<string, string> = {
   unknown: 'Unnamed pose', face_closeup: 'Face close-up', facial_closeup: 'Facial close-up', ahegao: 'Ahegao',
@@ -54,7 +55,18 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [pose, setPose] = useState<PoseDef>(POSES[0]);
   const [family, setFamily] = useState<PoseFamily>('front');
   const [customPose, setCustomPose] = useState('');
+  // Library grid — paginated (see fetchLibraryPage in poseRefStore.ts)
+  // rather than fetching every saved face/pose at once, which got slower
+  // and heavier to render the larger someone's library grew. `library`
+  // holds everything loaded SO FAR (both faces and poses are split back
+  // out of this one accumulated list below), grown a page at a time by
+  // scrolling or the "Load more" button.
   const [library, setLibrary] = useState<(LibraryRefMeta & { previewUrl?: string })[]>([]);
+  const [libraryCursor, setLibraryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreLibrary, setHasMoreLibrary] = useState(true);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  const [isSearchingServer, setIsSearchingServer] = useState(false);
+  const libraryEndRef = useRef<HTMLDivElement>(null);
   const [guess, setGuess] = useState<PoseGuess | null>(null);
   const [refNote, setRefNote] = useState('');
   const [poseName, setPoseName] = useState('');
@@ -71,16 +83,97 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const setImage2 = (file: File) => { onApplyImage2?.(file); setReference2File(file); };
   const setImage1 = (file: File) => { onApplyImage1?.(file); setReference1File(file); };
 
-  const refreshBounds = async () => {
+  // Merges a batch of items into `library` by id (later entries win),
+  // shared by pagination and server-side search below so a name that's
+  // already loaded doesn't show up twice once search also finds it.
+  const mergeIntoLibrary = (incoming: (LibraryRefMeta & { previewUrl?: string })[]) => {
+    setLibrary((prev) => {
+      const merged = [...prev, ...incoming];
+      return Array.from(new Map(merged.map((item) => [item.id, item])).values());
+    });
+  };
+  // Self-healing backfill for legacy docs saved before nameLower existed
+  // (see ensureNameLower's doc comment) — fire-and-forget, never blocks
+  // rendering.
+  const backfillMissingNames = (items: LibraryRefMeta[]) => {
+    items.forEach((item) => { if (!item.nameLower) ensureNameLower(item); });
+  };
+
+  const loadInitialLibrary = async () => {
+    setIsLoadingLibrary(true);
     try {
-      await listPoseRefFamilies();
-      setLibrary(await listLibraryCards());
+      await listPoseRefFamilies().catch(() => {}); // unrelated per-family lookups — a failure here shouldn't block the library grid
+      const { items, lastDoc, hasMore } = await fetchLibraryPage(null);
+      setLibrary(items);
+      setLibraryCursor(lastDoc);
+      setHasMoreLibrary(hasMore);
+      backfillMissingNames(items);
     } catch (err: any) {
       setRefNote(err.message || 'Could not load library. Sign in first.');
+    } finally {
+      setIsLoadingLibrary(false);
     }
   };
-  useEffect(() => { refreshBounds(); }, []);
+  const loadMoreLibrary = async () => {
+    if (isLoadingLibrary || !hasMoreLibrary) return;
+    setIsLoadingLibrary(true);
+    try {
+      const { items, lastDoc, hasMore } = await fetchLibraryPage(libraryCursor);
+      mergeIntoLibrary(items);
+      setLibraryCursor(lastDoc);
+      setHasMoreLibrary(hasMore);
+      backfillMissingNames(items);
+    } catch (err: any) {
+      setRefNote(err.message || 'Could not load more of the library.');
+    } finally {
+      setIsLoadingLibrary(false);
+    }
+  };
+  useEffect(() => { loadInitialLibrary(); }, []);
   useEffect(() => { setCanvasRefsHidden(hideRefs); }, [hideRefs]);
+
+  // Infinite-scroll: auto-load the next library page once the sentinel at
+  // the bottom of the grid scrolls into view — same pattern as the main
+  // history gallery's loadMoreHistory/loadMoreSentinelRef in App.tsx.
+  useEffect(() => {
+    const el = libraryEndRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMoreLibrary();
+    }, { rootMargin: '400px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoreLibrary, isLoadingLibrary, libraryCursor]);
+
+  // Server-side name search (debounced): the plain substring filter below
+  // (faces/poses via filterLibrary) only ever sees what's already loaded
+  // client-side. This reaches further back into a library that hasn't been
+  // fully paginated in yet — a Firestore prefix (starts-with) query against
+  // nameLower, so it's necessarily narrower than the substring-anywhere
+  // local filter (see searchLibraryByName's doc comment for why: no paid
+  // full-text index service, so prefix match is the free ceiling here).
+  // Purely additive — results merge into the same `library` list pagination
+  // already fills, so nothing about the existing local filtering changes.
+  useEffect(() => {
+    const q = libQuery.trim();
+    if (!q) return;
+    const timer = setTimeout(async () => {
+      setIsSearchingServer(true);
+      try {
+        const results = await searchLibraryByName(q);
+        mergeIntoLibrary(results);
+        backfillMissingNames(results);
+      } catch {
+        // Best-effort — the local substring filter over already-loaded
+        // items still works even if this fails (offline, signed out, ...).
+      } finally {
+        setIsSearchingServer(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libQuery]);
 
   const applyFamilyRef = async (nextFamily: PoseFamily) => {
     const fromLib = poses.find((item) => item.family === nextFamily);
@@ -110,8 +203,12 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const saveToLibrary = async (file: File, detected?: PoseGuess | null) => {
     const tagged = detected || guess || { family, label: pose.id, confidence: 0, reason: 'manual' };
     const name = poseName.trim() || prettyPoseName(tagged.label) || `Pose ${poses.length + 1}`;
-    await saveLibraryRef({ name, slot: 'pose', family: tagged.family, detectedLabel: tagged.label === 'unknown' ? name : tagged.label, type: file.type || 'image/jpeg', blob: file });
-    await savePoseRef(tagged.family, file); await refreshBounds(); setPoseName(''); setRefNote(`Saved ${name}`);
+    const meta = await saveLibraryRef({ name, slot: 'pose', family: tagged.family, detectedLabel: tagged.label === 'unknown' ? name : tagged.label, type: file.type || 'image/jpeg', blob: file });
+    await savePoseRef(tagged.family, file);
+    // Newest first, so it belongs at the front of the already-loaded list —
+    // no need to re-fetch the whole (possibly large, paginated) library.
+    setLibrary((prev) => [{ ...meta, previewUrl: meta.url || '' }, ...prev]);
+    setPoseName(''); setRefNote(`Saved ${name}`);
   };
   const addFilesToLibrary = async (files: FileList | File[]) => {
     for (const raw of Array.from(files)) {
@@ -124,8 +221,10 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   };
   const saveFace = async (file: File) => {
     const name = faceName.trim() || `Face ${faces.length + 1}`;
-    await saveLibraryRef({ name, slot: 'face', family: 'face', detectedLabel: 'face', type: file.type || 'image/jpeg', blob: file });
-    setImage1(file); await refreshBounds(); setFaceName(''); setRefNote(`Saved face ${name}`);
+    const meta = await saveLibraryRef({ name, slot: 'face', family: 'face', detectedLabel: 'face', type: file.type || 'image/jpeg', blob: file });
+    setImage1(file);
+    setLibrary((prev) => [{ ...meta, previewUrl: meta.url || '' }, ...prev]);
+    setFaceName(''); setRefNote(`Saved face ${name}`);
   };
   const addFaces = async (files: FileList | File[]) => {
     for (const raw of Array.from(files)) {
@@ -149,7 +248,8 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const commitRename = async (id: string) => {
     const next = editingName.trim(); setEditingId(null);
     if (!next) return;
-    await renameLibraryRef(id, next); await refreshBounds();
+    await renameLibraryRef(id, next);
+    setLibrary((prev) => prev.map((item) => (item.id === id ? { ...item, name: next } : item)));
   };
   const fillChar = async () => {
     if (!customName.trim()) return;
@@ -183,7 +283,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
     return (
       <div key={item.id} className={`rounded-xl border overflow-hidden ${usingId === item.id ? 'border-emerald-400' : 'border-zinc-800'}`}>
         <button type="button" onClick={() => loadLibItem(item)} className="block w-full relative min-h-[44px] touch-manipulation">
-          {item.previewUrl ? <img src={item.previewUrl} alt={item.name} draggable={false} className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} object-cover bg-zinc-950 pointer-events-none`} /> : <div className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} bg-zinc-950`} />}
+          {item.previewUrl ? <img src={item.previewUrl} alt={item.name} draggable={false} loading="lazy" className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} object-cover bg-zinc-950 pointer-events-none`} /> : <div className={`w-full ${square ? 'aspect-square' : 'aspect-[3/4]'} bg-zinc-950`} />}
           <span className="absolute bottom-2 left-2 right-2 py-2 rounded-lg bg-emerald-500 text-zinc-950 text-[10px] font-semibold uppercase tracking-widest">
             {usingId === item.id ? 'Loading…' : isFace ? 'Use as Image 1' : 'Use as Image 2'}
           </span>
@@ -194,7 +294,7 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
           ) : (
             <button type="button" onClick={() => { setEditingId(item.id); setEditingName(item.name || 'Untitled'); }} className="w-full text-left text-[11px] text-zinc-100 truncate min-h-[32px]">{item.name || prettyPoseName(item.detectedLabel) || 'Untitled'}</button>
           )}
-          <button type="button" onClick={() => deleteLibraryRef(item.id).then(refreshBounds)} className="text-[10px] text-zinc-500 min-h-[32px]">Delete</button>
+          <button type="button" onClick={() => deleteLibraryRef(item.id).then(() => setLibrary((prev) => prev.filter((x) => x.id !== item.id)))} className="text-[10px] text-zinc-500 min-h-[32px]">Delete</button>
         </div>
       </div>
     );
@@ -217,7 +317,13 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
           </div>
           {tab === 'library' && (
             <div className="space-y-4">
-              <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Search faces and poses" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
+              <div className="relative">
+                <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Search faces and poses" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 pr-9 outline-none" />
+                {isSearchingServer && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2" />}
+              </div>
+              {libQuery.trim() && (
+                <p className="text-[10px] text-zinc-500 -mt-2">Matches by exact substring in what's loaded ({library.length}), plus names starting with "{libQuery.trim()}" pulled in from the rest of your library.</p>
+              )}
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
                 <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1</p>
                 <input value={faceName} onChange={(e) => setFaceName(e.target.value)} placeholder="Name this face" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
@@ -232,6 +338,21 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
                 {refNote && <p className="text-[10px] text-emerald-400 break-words">{refNote}</p>}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{poses.map((item) => card(item))}</div>
               </div>
+              {/* Pagination sentinel (auto-loads on scroll, same pattern as
+                  the main history gallery) plus an explicit button for
+                  anyone who'd rather click than scroll. */}
+              <div ref={libraryEndRef} />
+              {hasMoreLibrary && (
+                <button
+                  type="button"
+                  onClick={loadMoreLibrary}
+                  disabled={isLoadingLibrary}
+                  className="w-full flex items-center justify-center gap-2 min-h-[44px] rounded-xl border border-zinc-800 text-[10px] font-mono uppercase tracking-widest text-zinc-400 disabled:opacity-50"
+                >
+                  {isLoadingLibrary ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {isLoadingLibrary ? 'Loading…' : 'Load more'}
+                </button>
+              )}
             </div>
           )}
           {tab === 'scene' && (
