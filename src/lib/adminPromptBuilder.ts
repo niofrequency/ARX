@@ -135,13 +135,18 @@ export function assembleAdminPrompt(opts: BuilderOptions): { prompt: string; ima
   else mess.push(`Heavy messy bukkake. Face full of cum. Thick white sticky semen on face and tits. Fat ropes, not a thin glaze${opts.faceMess === 'bukkake_drool' ? ', spit mixed with cum' : ''}.`);
   if (opts.pussyCumPuddle) mess.push('Pussy full of cum, dripping out. A puddle of cum and squirt on the floor under her.');
   const prompt = [
-    `Image 1 is the only identity reference. Keep her exact face details from image 1. Do not copy the woman from image 2.`,
+    `Image 1 is the only identity/face reference. Keep her exact face details from image 1. Do not copy the face or identity of the woman in image 2 — image 2's own face and identity are irrelevant here.`,
     `Dress her as ${opts.character.name}. ${opts.character.hair}. ${opts.character.costume}. Accurate character clothing, wrecked and half-on.`,
-    `If Image 2 is present, use it only for pose and camera. ${poseBlock}`,
+    `If Image 2 is present, use it for pose, camera, AND body reference — match the body shape, build, and proportions (frame, waist, hips, limb length) shown in image 2, combined with image 1's face. ${poseBlock}`,
     SHOT_LINE[opts.shot], ANGLE_LINE[opts.angle], body.join(' '),
     `Keep exact same skin color from image 1. Highly detailed photorealistic skin: visible pores, natural texture, fine peach fuzz.`,
     mess.join(' '),
-    `Photorealistic. Identity only from image 1. Pose from Image 2 and the chosen pose. Do not change identity, age, or face shape.`,
+    `Photorealistic. Face and identity only from image 1. Body, pose, and camera from Image 2 (when present) and the chosen pose. Do not change identity, age, or face shape.`,
   ].join('\n\n');
-  return { prompt, image1: 'Subject face / likeness.', image2: pose.image2, summary: `${opts.character.name} · ${pose.label} · ${opts.shot}/${opts.angle} · ${opts.faceMess}` };
+  return {
+    prompt,
+    image1: 'Subject face / likeness only.',
+    image2: `${pose.image2} Also used as a body reference (shape/build/proportions).`,
+    summary: `${opts.character.name} · ${pose.label} · ${opts.shot}/${opts.angle} · ${opts.faceMess}`,
+  };
 }

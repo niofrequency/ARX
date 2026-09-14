@@ -66,7 +66,15 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   const [hasMoreLibrary, setHasMoreLibrary] = useState(true);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [isSearchingServer, setIsSearchingServer] = useState(false);
-  const libraryEndRef = useRef<HTMLDivElement>(null);
+  // Each grid (Faces / Poses) scrolls in its own small, fixed-height box
+  // rather than letting the whole admin panel grow tall as the library
+  // grows — browsing a large library then only ever needs a short scroll
+  // inside that one box, not "scroll all the way down the page and back
+  // up" past every other control to get back to where you were.
+  const facesScrollRef = useRef<HTMLDivElement>(null);
+  const facesEndRef = useRef<HTMLDivElement>(null);
+  const posesScrollRef = useRef<HTMLDivElement>(null);
+  const posesEndRef = useRef<HTMLDivElement>(null);
   const [guess, setGuess] = useState<PoseGuess | null>(null);
   const [refNote, setRefNote] = useState('');
   const [poseName, setPoseName] = useState('');
@@ -132,15 +140,29 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
   useEffect(() => { loadInitialLibrary(); }, []);
   useEffect(() => { setCanvasRefsHidden(hideRefs); }, [hideRefs]);
 
-  // Infinite-scroll: auto-load the next library page once the sentinel at
-  // the bottom of the grid scrolls into view — same pattern as the main
-  // history gallery's loadMoreHistory/loadMoreSentinelRef in App.tsx.
+  // Infinite-scroll within each grid's own scroll box: auto-load the next
+  // (shared) library page once that box's own end-sentinel scrolls into
+  // view — same idea as the main history gallery's loadMoreSentinelRef,
+  // but scoped to the small nested scroll container (`root`) instead of
+  // the whole page, since scrolling here should never move the page.
   useEffect(() => {
-    const el = libraryEndRef.current;
-    if (!el) return;
+    const root = facesScrollRef.current;
+    const el = facesEndRef.current;
+    if (!root || !el) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) loadMoreLibrary();
-    }, { rootMargin: '400px' });
+    }, { root, rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoreLibrary, isLoadingLibrary, libraryCursor]);
+  useEffect(() => {
+    const root = posesScrollRef.current;
+    const el = posesEndRef.current;
+    if (!root || !el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMoreLibrary();
+    }, { root, rootMargin: '200px' });
     observer.observe(el);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -325,23 +347,29 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
                 <p className="text-[10px] text-zinc-500 -mt-2">Matches by exact substring in what's loaded ({library.length}), plus names starting with "{libQuery.trim()}" pulled in from the rest of your library.</p>
               )}
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
-                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1</p>
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Faces · Image 1 · {faces.length} shown</p>
                 <input value={faceName} onChange={(e) => setFaceName(e.target.value)} placeholder="Name this face" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
                 <label className={`${pill(false)} cursor-pointer text-center block`}>Add faces<input type="file" accept="image/*" multiple data-arx-lib="true" className="hidden" onChange={(e) => { if (e.target.files?.length) addFaces(e.target.files); e.target.value = ''; }} /></label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{faces.map((item) => card(item, true))}</div>
+                {/* Its own small, fixed-height scroll box — browsing a
+                    large library scrolls this box only, not the page. */}
+                <div ref={facesScrollRef} className="max-h-[360px] overflow-y-auto -mx-1 px-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{faces.map((item) => card(item, true))}</div>
+                  <div ref={facesEndRef} className="h-px" />
+                </div>
               </div>
               <div className="space-y-3 rounded-xl border border-zinc-800 p-3">
-                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Poses · Image 2</p>
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Poses · Image 2 · {poses.length} shown</p>
                 <input value={poseName} onChange={(e) => setPoseName(e.target.value)} placeholder="Name this pose" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100 px-3 py-2.5 outline-none" />
                 <label className={`${pill(false)} cursor-pointer text-center block`}>Add poses<input type="file" accept="image/*" multiple data-arx-lib="true" className="hidden" onChange={(e) => { if (e.target.files?.length) addFilesToLibrary(e.target.files); e.target.value = ''; }} /></label>
                 {guess && <p className="text-[10px] text-zinc-300">Guess: {prettyPoseName(guess.label) || guess.label}</p>}
                 {refNote && <p className="text-[10px] text-emerald-400 break-words">{refNote}</p>}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{poses.map((item) => card(item))}</div>
+                <div ref={posesScrollRef} className="max-h-[360px] overflow-y-auto -mx-1 px-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{poses.map((item) => card(item))}</div>
+                  <div ref={posesEndRef} className="h-px" />
+                </div>
               </div>
-              {/* Pagination sentinel (auto-loads on scroll, same pattern as
-                  the main history gallery) plus an explicit button for
-                  anyone who'd rather click than scroll. */}
-              <div ref={libraryEndRef} />
+              {/* Explicit fallback for anyone who'd rather click than
+                  scroll — the two boxes above already auto-load on scroll. */}
               {hasMoreLibrary && (
                 <button
                   type="button"
