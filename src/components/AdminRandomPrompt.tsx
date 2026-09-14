@@ -444,49 +444,75 @@ export default function AdminRandomPrompt({ onApply, onApplyImage1, onApplyImage
             </div>
           )}
           {tab === 'scene' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">{POSE_FAMILIES.map((f) => (<button key={f.id} type="button" onClick={() => selectFamily(f.id)} className={pill(family === f.id)}>{f.label}</button>))}</div>
-              <div className="flex flex-wrap gap-2">{familyPoses.map((p) => (<button key={p.id} type="button" onClick={() => selectPose(p)} className={pill(pose.id === p.id)}>{p.label}</button>))}</div>
-              {pose.id === 'custom' && (
-                <div className="space-y-2">
-                  <textarea value={customPose} onChange={(e) => setCustomPose(e.target.value)} placeholder="Custom pose" rows={2} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
-                  <button type="button" onClick={fillPose} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'pose' ? 'Grok…' : 'Expand pose with Grok'}</button>
+            <div className="space-y-3">
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Pose</p>
+                <div className="flex flex-wrap gap-2">{POSE_FAMILIES.map((f) => (<button key={f.id} type="button" onClick={() => selectFamily(f.id)} className={pill(family === f.id)}>{f.label}</button>))}</div>
+                <div className="flex flex-wrap gap-2">{familyPoses.map((p) => (<button key={p.id} type="button" onClick={() => selectPose(p)} className={pill(pose.id === p.id)}>{p.label}</button>))}</div>
+                {pose.id === 'custom' && (
+                  <div className="space-y-2 pt-1">
+                    <textarea value={customPose} onChange={(e) => setCustomPose(e.target.value)} placeholder="Custom pose" rows={2} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
+                    <button type="button" onClick={fillPose} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'pose' ? 'Grok…' : 'Expand pose with Grok'}</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Shot &amp; angle</p>
+                <div className="flex flex-wrap gap-2">{(['closeup', 'medium', 'far'] as ShotType[]).map((s) => (<button key={s} type="button" onClick={() => setShot(s)} className={pill(shot === s)}>{s}</button>))}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setAngle('low')} className={pill(angle === 'low')}>Low</button>
+                  <button type="button" onClick={() => setAngle('eye')} className={pill(angle === 'eye')}>Eye</button>
+                  <button type="button" onClick={() => setAngle('high')} className={pill(angle === 'high')}>High</button>
                 </div>
-              )}
-              <div className="flex flex-wrap gap-2">{(['closeup', 'medium', 'far'] as ShotType[]).map((s) => (<button key={s} type="button" onClick={() => setShot(s)} className={pill(shot === s)}>{s}</button>))}</div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setAngle('low')} className={pill(angle === 'low')}>Low</button>
-                <button type="button" onClick={() => setAngle('eye')} className={pill(angle === 'eye')}>Eye</button>
-                <button type="button" onClick={() => setAngle('high')} className={pill(angle === 'high')}>High</button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(['small', 'medium', 'big', 'huge'] as TitSize[]).map((t) => (<button key={t} type="button" onClick={() => setTitSize(t)} className={pill(titSize === t)}>{t}</button>))}
-                <button type="button" onClick={() => setThickCellulite((v) => !v)} className={pill(thickCellulite)}>Cellulite</button>
-                <button type="button" onClick={() => setPlumpStomach((v) => !v)} className={pill(plumpStomach)}>Plump</button>
-                <button type="button" onClick={() => setHairyPussy((v) => !v)} className={pill(hairyPussy)}>Hairy</button>
-                <button type="button" onClick={() => setFaceMess('clean')} className={pill(faceMess === 'clean')}>Clean</button>
-                <button type="button" onClick={() => setFaceMess('drool')} className={pill(faceMess === 'drool')}>Drool</button>
-                <button type="button" onClick={() => setFaceMess('face_only')} className={pill(faceMess === 'face_only')}>Face only</button>
-                <button type="button" onClick={() => setFaceMess('bukkake')} className={pill(faceMess === 'bukkake')}>Bukkake</button>
-                <button type="button" onClick={() => setPussyCumPuddle((v) => !v)} className={pill(pussyCumPuddle)}>Puddle</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setMatchImage2Pose((v) => !v)} className={pill(matchImage2Pose)} title="Copy image 2's exact pose/positioning/camera, on top of always matching its body proportions. Off falls back to the chosen pose description alone.">Match Image 2 pose</button>
-                <button type="button" onClick={() => setKeepImage1Accessories((v) => !v)} className={pill(keepImage1Accessories)} title="Keep jewelry, glasses, piercings, and other accessories from Image 1 unchanged.">Keep Image 1 accessories</button>
-              </div>
-              {useCustom ? (
-                <div className="space-y-2">
-                  <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Character name" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
-                  <button type="button" onClick={fillChar} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'char' ? 'Grok…' : 'Fill with Grok'}</button>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Body</p>
+                <div className="flex flex-wrap gap-2">{(['small', 'medium', 'big', 'huge'] as TitSize[]).map((t) => (<button key={t} type="button" onClick={() => setTitSize(t)} className={pill(titSize === t)}>{t}</button>))}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setThickCellulite((v) => !v)} className={pill(thickCellulite)}>Cellulite</button>
+                  <button type="button" onClick={() => setPlumpStomach((v) => !v)} className={pill(plumpStomach)}>Plump</button>
+                  <button type="button" onClick={() => setHairyPussy((v) => !v)} className={pill(hairyPussy)}>Hairy</button>
                 </div>
-              ) : (
-                <select value={character.id} onChange={(e) => { const found = CHARACTERS.find((c) => c.id === e.target.value); if (found) { setCharacter(found); setLockCharacter(true); } }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none">
-                  {CHARACTERS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              )}
-              <button type="button" onClick={() => setUseCustom((v) => !v)} className={pill(useCustom)}>Custom character</button>
-              <div className="space-y-1">
-                <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Image 3 is a reference for…</label>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Face finish</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setFaceMess('clean')} className={pill(faceMess === 'clean')}>Clean</button>
+                  <button type="button" onClick={() => setFaceMess('drool')} className={pill(faceMess === 'drool')}>Drool</button>
+                  <button type="button" onClick={() => setFaceMess('face_only')} className={pill(faceMess === 'face_only')}>Face only</button>
+                  <button type="button" onClick={() => setFaceMess('bukkake')} className={pill(faceMess === 'bukkake')}>Bukkake</button>
+                  <button type="button" onClick={() => setPussyCumPuddle((v) => !v)} className={pill(pussyCumPuddle)}>Puddle</button>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Reference behavior</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setMatchImage2Pose((v) => !v)} className={pill(matchImage2Pose)} title="Copy image 2's exact pose/positioning/camera, on top of always matching its body proportions. Off falls back to the chosen pose description alone.">Match Image 2 pose</button>
+                  <button type="button" onClick={() => setKeepImage1Accessories((v) => !v)} className={pill(keepImage1Accessories)} title="Keep jewelry, glasses, piercings, and other accessories from Image 1 unchanged.">Keep Image 1 accessories</button>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Character</p>
+                {useCustom ? (
+                  <div className="space-y-2">
+                    <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Character name" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
+                    <button type="button" onClick={fillChar} className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">{filling === 'char' ? 'Grok…' : 'Fill with Grok'}</button>
+                  </div>
+                ) : (
+                  <select value={character.id} onChange={(e) => { const found = CHARACTERS.find((c) => c.id === e.target.value); if (found) { setCharacter(found); setLockCharacter(true); } }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none">
+                    {CHARACTERS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
+                <button type="button" onClick={() => setUseCustom((v) => !v)} className={pill(useCustom)}>Custom character</button>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+                <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Image 3 is a reference for…</p>
                 <input value={image3Role} onChange={(e) => setImage3Role(e.target.value)} placeholder="background, her clothing, this object…" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 px-3 py-2 outline-none" />
                 <p className="text-[9px] text-zinc-600">Only matters if you've set an Image 3 in the Library tab — ignored otherwise.</p>
               </div>

@@ -1,6 +1,3 @@
-import { orientation as readExifOrientation } from 'exifr';
-import imageCompression from 'browser-image-compression';
-
 /**
  * ==========================================
  * UPLOAD NORMALIZATION — orientation + compression
@@ -32,10 +29,19 @@ import imageCompression from 'browser-image-compression';
  * Fails open: if anything here throws (corrupt file, decode failure,
  * worker unavailable), the ORIGINAL file is returned untouched rather than
  * blocking the upload — same fail-open contract as this app's MediaPipe
- * helpers (bodySegmentation.ts, etc.).
+ * helpers.
+ *
+ * Both dependencies are dynamically imported (only fetched the first time
+ * this actually runs, i.e. not until a generation is submitted) rather
+ * than bundled into the app's initial chunk that every visitor downloads
+ * upfront.
  */
 export async function normalizeUploadedImage(file: File, maxWidthOrHeight = 1536): Promise<File> {
   try {
+    const [{ orientation: readExifOrientation }, { default: imageCompression }] = await Promise.all([
+      import('exifr'),
+      import('browser-image-compression'),
+    ]);
     const orientation = await readExifOrientation(file).catch(() => undefined);
     return await imageCompression(file, {
       maxWidthOrHeight,

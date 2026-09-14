@@ -7,7 +7,11 @@ import { uploadToFirebase, getFreshIdToken } from './lib/firebase';
 import { useAuth } from './lib/AuthContext';
 import { BrandMark, BrandLoader } from './components/BrandMark';
 import InstallAppButton from './components/InstallAppButton';
-import AdminRandomPrompt from './components/AdminRandomPrompt';
+// Admin-only (see isAdminUser below) and pulls in a fair amount on its
+// own — the full character/pose prompt tables, the pose-family detector
+// (@mediapipe/tasks-vision), the reference library store. Lazy-loaded so
+// the ordinary (non-admin) user's bundle never includes any of it.
+const AdminRandomPrompt = lazy(() => import('./components/AdminRandomPrompt'));
 import {
   saveFailedTaskSnapshot,
   deleteFailedTaskSnapshot,
@@ -30,10 +34,9 @@ import {
   deleteSavedPromptDoc,
   createPendingJob,
 } from './lib/userData';
-import { checkHandQuality } from './lib/handQuality';
 import { normalizeUploadedImage } from './lib/imagePrep';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { 
   Upload, Sparkles, Settings, Loader2, Download,
   Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
@@ -85,18 +88,24 @@ const urlToBlob = async (url: string): Promise<Blob> => {
 };
 
 // --- Reusable Components ---
-const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload }: any) => {
+const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upload, slot }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   return (
-    <div 
+    <div
       onClick={() => !file && fileInputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onProcess(f); }}
-      className={`relative group cursor-pointer border transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] rounded-2xl ${
+      // Focusable + tagged with its own slot so the global paste handler
+      // (see the 'paste' listener below) can tell which of Image 1/2/3
+      // was actually clicked into, instead of always routing every paste
+      // to Image 1 regardless of which zone the user meant.
+      tabIndex={0}
+      data-upload-slot={slot}
+      className={`relative group cursor-pointer border transition-all duration-300 overflow-hidden h-full flex flex-col items-center justify-center min-h-[140px] rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 ${
         isDragging ? 'border-zinc-400 bg-zinc-800/50 scale-[1.02] p-4' : file ? 'bg-zinc-900 border-zinc-800/80 p-0' : 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600 p-4 sm:p-6'
       }`}
     >
@@ -605,6 +614,14 @@ export default function App() {
     }
   };
 
+  // Kept fresh every render (not just on mount) so the stable-below paste
+  // listener always dispatches to the current versions of these — same
+  // pattern as pasteHandlersRef existing for exactly this reason.
+  const pasteHandlersRef = useRef<Record<number, (file: File) => void>>({});
+  useEffect(() => {
+    pasteHandlersRef.current = { 1: handleFileProcess, 2: handleFile2Process, 3: handleFile3Process };
+  });
+
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -612,7 +629,16 @@ export default function App() {
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
-          if (file) { handleFileProcess(file); break; }
+          if (file) {
+            // Route to whichever Image 1/2/3 zone is actually focused
+            // (clicked into) — defaults to Image 1 when nothing is, same
+            // as the previous always-Image-1 behavior.
+            const active = document.activeElement as HTMLElement | null;
+            const slotAttr = active?.closest('[data-upload-slot]')?.getAttribute('data-upload-slot');
+            const slot = slotAttr ? Number(slotAttr) : 1;
+            (pasteHandlersRef.current[slot] || pasteHandlersRef.current[1])(file);
+            break;
+          }
         }
       }
     };
@@ -1656,7 +1682,10 @@ export default function App() {
     // auto-regenerates, never touches billing. Dropped if a newer
     // generation has already replaced this one by the time it resolves.
     if (!isVideo) {
-      checkHandQuality(displayUrl).then((res) => {
+      // Dynamically imported: this pulls in @mediapipe/tasks-vision's
+      // HandLandmarker, which every user would otherwise download upfront
+      // even though it's only ever exercised after a generation completes.
+      import('./lib/handQuality').then(({ checkHandQuality }) => checkHandQuality(displayUrl)).then((res) => {
         if (res.status === 'flagged' && latestResultIdRef.current === taskId) {
           setHandWarning(res.reason || 'Hand geometry looks off');
         }
@@ -1800,12 +1829,13 @@ export default function App() {
             </div>
             
             <div className={`grid gap-4 ${mode === 'editor' && (editorModel === 'qwen-2.0' || editorModel === 'seedream') ? 'grid-cols-1 sm:grid-cols-3 h-[420px] sm:h-[160px]' : 'grid-cols-1 h-[200px]'}`}>
-              <UploadZone 
+              <UploadZone
                 label="Primary Image"
-                file={selectedFile} 
-                preview={previewUrl} 
-                onClear={() => { setSelectedFile(null); setPreviewUrl(null); }} 
-                onProcess={(f: File) => handleFileProcess(f)} 
+                file={selectedFile}
+                preview={previewUrl}
+                onClear={() => { setSelectedFile(null); setPreviewUrl(null); }}
+                onProcess={(f: File) => handleFileProcess(f)}
+                slot={1}
               />
               {mode === 'editor' && (editorModel === 'qwen-2.0' || editorModel === 'seedream') && (
                 <>
@@ -1815,6 +1845,7 @@ export default function App() {
                     preview={previewUrl2}
                     onClear={() => { setSelectedFile2(null); setPreviewUrl2(null); }}
                     onProcess={(f: File) => handleFile2Process(f)}
+                    slot={2}
                   />
                   <UploadZone
                     label="Reference 3"
@@ -1822,6 +1853,7 @@ export default function App() {
                     preview={previewUrl3}
                     onClear={() => { setSelectedFile3(null); setPreviewUrl3(null); }}
                     onProcess={(f: File) => handleFile3Process(f)}
+                    slot={3}
                   />
                 </>
               )}
@@ -1910,7 +1942,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
+                  {isAdminUser && (
+                    <Suspense fallback={null}>
+                      <AdminRandomPrompt onApply={setPrompt} />
+                    </Suspense>
+                  )}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
@@ -2015,7 +2051,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {isAdminUser && <AdminRandomPrompt onApply={setPrompt} />}
+                  {isAdminUser && (
+                    <Suspense fallback={null}>
+                      <AdminRandomPrompt onApply={setPrompt} />
+                    </Suspense>
+                  )}
                   
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     <button onClick={() => setEditorModel('wan-2.6')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${editorModel === 'wan-2.6' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
