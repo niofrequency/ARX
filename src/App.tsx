@@ -233,6 +233,22 @@ const isVideoUrl = (url?: string | null) => {
          url.includes('video/mp4');
 };
 
+// Exact on-screen pixel size for a lightbox carousel card given its
+// media's natural dimensions — replicates the max-w-[90vw]/sm:max-w-[85vw]
+// + max-h-[85vh] caps the card used to apply via CSS alone, but computed
+// in JS so the box can be sized to this EXACT number instead of hoping a
+// w-fit/h-fit chain through nested motion/absolute-positioned layers
+// shrinks to match (that chain doesn't always resolve cleanly — see the
+// call site's comment). Caps at scale 1 so a small image is shown at its
+// native size rather than upscaled to fill the available space.
+const fitLightboxCardSize = (natW: number, natH: number): { w: number; h: number } => {
+  if (!natW || !natH) return { w: 0, h: 0 };
+  const maxW = (window.innerWidth >= 640 ? 0.85 : 0.9) * window.innerWidth;
+  const maxH = 0.85 * window.innerHeight;
+  const scale = Math.min(maxW / natW, maxH / natH, 1);
+  return { w: Math.round(natW * scale), h: Math.round(natH * scale) };
+};
+
 const base64ToBlob = (base64Data: string, contentType: string = 'image/png'): Blob => {
   const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
   const byteCharacters = atob(base64String);
@@ -348,6 +364,24 @@ export default function App() {
   const [isDeletingAllHistory, setIsDeletingAllHistory] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
+  // Natural media dimensions for each lightbox carousel card, keyed by
+  // history item id, populated as each image/video's metadata loads. The
+  // card's actual on-screen box is computed from these (see
+  // fitLightboxCardSize) instead of relying on CSS shrink-to-fit through
+  // the flip card's motion/absolute-positioned layers, which could leave
+  // the card wider or taller than the media itself — visible as black
+  // background (bg-zinc-950) letterboxed around the image.
+  const [lightboxNaturalSizes, setLightboxNaturalSizes] = useState<Record<string, { w: number; h: number }>>({});
+  // Recomputes fitLightboxCardSize's vw/vh-relative caps after a resize —
+  // the sizes themselves are derived at render time, this just forces that
+  // recalculation to happen again with the new window dimensions.
+  const [, bumpLightboxResizeTick] = useState(0);
+  useEffect(() => {
+    if (!selectedHistoryItem) return;
+    const onResize = () => bumpLightboxResizeTick((t) => t + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [selectedHistoryItem]);
   
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [showLoadPrompt, setShowLoadPrompt] = useState(false);
@@ -2621,6 +2655,8 @@ export default function App() {
                   
                   const isCenter = offset === 0;
                   const isVisible = Math.abs(offset) <= 2;
+                  const nat = lightboxNaturalSizes[img.id];
+                  const fitted = nat ? fitLightboxCardSize(nat.w, nat.h) : null;
 
                   return (
                     <div
@@ -2634,7 +2670,24 @@ export default function App() {
                         transformStyle: 'preserve-3d'
                       }}
                     >
-                      <div className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col" style={{ perspective: '2000px', touchAction: 'none' }}>
+                      <div
+                        className="relative w-fit max-w-[90vw] sm:max-w-[85vw] h-fit max-h-[85vh] flex flex-col"
+                        style={{
+                          perspective: '2000px',
+                          touchAction: 'none',
+                          // Once the media's natural size is known, size
+                          // this wrapper to it exactly (see
+                          // fitLightboxCardSize) rather than leaving it to
+                          // the w-fit/h-fit classes above to shrink-wrap
+                          // through the flip card's motion/absolute-
+                          // positioned front/back layers below — that
+                          // shrink-to-fit doesn't reliably resolve through
+                          // a `width: 100%` layer nested inside it, and a
+                          // wrapper left wider/taller than the media shows
+                          // as black (bg-zinc-950) letterboxing around it.
+                          ...(fitted ? { width: `${fitted.w}px`, height: `${fitted.h}px` } : {}),
+                        }}
+                      >
                         {/* Close/Delete controls live OUTSIDE the rotating 3D card, in a
                             stable non-transformed layer, so they behave identically and
                             reliably whether the front or back face is showing — no more
@@ -2678,21 +2731,33 @@ export default function App() {
                         >
                           
                           {/* --- FRONT OF CARD --- */}
-                          <div 
-                            className="relative w-full h-fit max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center" 
+                          <div
+                            className="relative w-full h-full max-h-[85vh] rounded-[2rem] overflow-hidden bg-zinc-950 flex justify-center items-center"
                             style={{ backfaceVisibility: 'hidden' }}
                           >
                             {isVideoUrl(img.url) ? (
-                                <video 
-                                  src={img.url} 
+                                <video
+                                  src={img.url}
                                   autoPlay loop muted playsInline controls={isCenter}
-                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block bg-black" 
+                                  onLoadedMetadata={(e) => {
+                                    const v = e.currentTarget;
+                                    if (v.videoWidth && v.videoHeight) {
+                                      setLightboxNaturalSizes((prev) => ({ ...prev, [img.id]: { w: v.videoWidth, h: v.videoHeight } }));
+                                    }
+                                  }}
+                                  className="w-full h-full object-contain block bg-black"
                                 />
                             ) : (
-                                <img 
-                                  src={img.url} 
-                                  alt="History Entry" 
-                                  className="w-auto h-auto max-w-[90vw] sm:max-w-[85vw] max-h-[85vh] object-contain block" 
+                                <img
+                                  src={img.url}
+                                  alt="History Entry"
+                                  onLoad={(e) => {
+                                    const el = e.currentTarget;
+                                    if (el.naturalWidth && el.naturalHeight) {
+                                      setLightboxNaturalSizes((prev) => ({ ...prev, [img.id]: { w: el.naturalWidth, h: el.naturalHeight } }));
+                                    }
+                                  }}
+                                  className="w-full h-full object-contain block"
                                 />
                             )}
                           </div>
