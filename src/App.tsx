@@ -1893,7 +1893,7 @@ export default function App() {
                       <span>Horizontal Rotation (Azimuth)</span>
                       <span className="text-zinc-100">{horizontalAngle}°</span>
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {horizontalOptions.map((opt) => (
                         <button key={`h-${opt.v}`} onClick={() => setHorizontalAngle(opt.v)} className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${horizontalAngle === opt.v ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>{opt.l}</button>
                       ))}
@@ -1905,7 +1905,7 @@ export default function App() {
                         <span>Vertical Tilt</span>
                         <span className="text-zinc-100">{verticalAngle}°</span>
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {verticalOptions.map((opt) => (
                           <button key={`v-${opt.v}`} onClick={() => setVerticalAngle(opt.v)} className={`py-2 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all border ${verticalAngle === opt.v ? 'bg-zinc-100 border-zinc-100 text-zinc-900 shadow-sm' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>{opt.l}</button>
                         ))}
