@@ -218,13 +218,19 @@ interface FailedTask {
 }
 interface ActiveLora { id: string; name: string; strength: number; }
 
+// Qwen-Image only accepts `size` as one of its own documented aspect-ratio
+// buckets (it trains/generates at fixed resolution buckets, not arbitrary
+// WxH) -- these are its published 1:1/16:9/9:16/4:3/3:4 presets. The old
+// values here (1024*1024, 720*1280, ...) aren't members of that bucket list,
+// which is why Nova (qwen-2.0) rejected every request with "Invalid
+// parameter value" regardless of which ratio was selected.
 const RATIO_OPTIONS = [
-  { label: '1:1', qwen: '1024*1024', seedream: '1:1' },
-  { label: '9:16', qwen: '720*1280', seedream: '9:16' },
-  { label: '16:9', qwen: '1280*720', seedream: '16:9' },
-  { label: '4:3', qwen: '1024*768', seedream: '4:3' },
-  { label: '3:4', qwen: '768*1024', seedream: '3:4' },
-  { label: '21:9', qwen: '1280*720', seedream: '21:9' }
+  { label: '1:1', qwen: '1328*1328', seedream: '1:1' },
+  { label: '9:16', qwen: '928*1664', seedream: '9:16' },
+  { label: '16:9', qwen: '1664*928', seedream: '16:9' },
+  { label: '4:3', qwen: '1472*1140', seedream: '4:3' },
+  { label: '3:4', qwen: '1140*1472', seedream: '3:4' },
+  { label: '21:9', qwen: '1664*928', seedream: '21:9' }
 ];
 
 const horizontalOptions = [ { v: 0, l: 'Front' }, { v: 45, l: '3/4 Right' }, { v: 90, l: 'Side' }, { v: 135, l: '3/4 Left' }];
