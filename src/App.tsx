@@ -320,7 +320,9 @@ export default function App() {
   const [selectedRatio, setSelectedRatio] = useState<string>('16:9');
 
   const [activeLoras, setActiveLoras] = useState<ActiveLora[]>([]);
-  
+  const [loraDraftPath, setLoraDraftPath] = useState('');
+  const [loraDraftStrength, setLoraDraftStrength] = useState('1');
+
   const [videoSeed, setVideoSeed] = useState<number>(-1);
   const [apiVideoDuration, setApiVideoDuration] = useState<number>(5);
   const [apiVideoResolution, setApiVideoResolution] = useState<'480p' | '720p' | '1080p'>('720p');
@@ -562,10 +564,8 @@ export default function App() {
     }
     
     setEditorModel((localStorage.getItem('arx_editor_model') as EditorModel) || 'wan-2.7');
-    // No longer loading a saved LoRA chain from localStorage — there's no UI
-    // left to view/edit it, so silently resurrecting an old list would just
-    // be confusing. activeLoras now only ever comes from a failed-task retry
-    // snapshot, and is otherwise always empty.
+    // Deliberately not persisting activeLoras to localStorage — it's re-entered
+    // per session via the LoRA UI (or restored from a failed-task retry snapshot).
   }, []);
 
   useEffect(() => { localStorage.setItem('arx_mode', mode); }, [mode]);
@@ -1224,8 +1224,8 @@ export default function App() {
       body: JSON.stringify(payload)
     });
 
-    const triggerData = await triggerResponse.json();
-    if (!triggerResponse.ok) throw new Error(`Failed to trigger Wavespeed edit: ${triggerData.message || 'Unknown Error'}`);
+    const triggerData = await triggerResponse.json().catch(() => ({}));
+    if (!triggerResponse.ok) throw new Error(`Failed to trigger Wavespeed edit: ${triggerData.message || triggerData.error || triggerData.detail || `HTTP ${triggerResponse.status}`}`);
 
     const id = triggerData.id || triggerData.request_id || triggerData.job_id || triggerData.task_id || triggerData.prediction_id || triggerData.uuid || triggerData.prediction?.id || triggerData.data?.id || triggerData.data?.request_id;
     if (!id) throw new Error(`Server responded successfully but no ID was found.`);
@@ -1354,6 +1354,11 @@ export default function App() {
 
     if (!selectedFile) {
       setError('Please upload a primary image to process.');
+      return;
+    }
+
+    if (mode === 'editor' && editorModel === 'qwen-lora' && activeLoras.length === 0) {
+      setError('Add at least one LoRA before generating with Lumen.');
       return;
     }
 
@@ -2107,6 +2112,80 @@ export default function App() {
                     <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest text-center -mt-2 mb-2">
                       Output matches your uploaded image's aspect ratio
                     </p>
+                  )}
+
+                  {editorModel === 'qwen-lora' && (
+                    <div className="space-y-3 bg-zinc-950 p-4 border border-zinc-800 rounded-xl">
+                      <label className="block text-[10px] font-mono text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-zinc-400" /> LoRA Style Layers
+                      </label>
+
+                      {activeLoras.length > 0 && (
+                        <div className="space-y-2">
+                          {activeLoras.map((lora, idx) => (
+                            <div key={`${lora.id}-${idx}`} className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-zinc-100 truncate">{lora.name || lora.id}</div>
+                                <div className="text-[9px] font-mono text-zinc-600 truncate">{lora.id} · strength {lora.strength}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveLoras(prev => prev.filter((_, i) => i !== idx))}
+                                className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors shrink-0"
+                                title="Remove LoRA"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          value={loraDraftPath}
+                          onChange={(e) => setLoraDraftPath(e.target.value)}
+                          placeholder="LoRA path (e.g. author/lora-name)"
+                          className="flex-1 min-w-0 px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-zinc-500"
+                        />
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          max="2"
+                          value={loraDraftStrength}
+                          onChange={(e) => setLoraDraftStrength(e.target.value)}
+                          className="w-full sm:w-20 px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-zinc-500"
+                          title="Strength"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const path = loraDraftPath.trim();
+                            if (!path) return;
+                            const strength = parseFloat(loraDraftStrength);
+                            setActiveLoras(prev => [...prev, {
+                              id: path,
+                              name: path.split('/').pop() || path,
+                              strength: Number.isFinite(strength) ? strength : 1,
+                            }]);
+                            setLoraDraftPath('');
+                            setLoraDraftStrength('1');
+                          }}
+                          disabled={!loraDraftPath.trim()}
+                          className="px-3 py-2 bg-zinc-100 text-zinc-950 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add
+                        </button>
+                      </div>
+
+                      {activeLoras.length === 0 && (
+                        <p className="text-[9px] font-mono text-amber-500/80 uppercase tracking-widest">
+                          Add at least one LoRA above — Lumen needs one to generate.
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   <div className="relative">
