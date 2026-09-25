@@ -155,7 +155,7 @@ const UploadZone = ({ label, file, preview, onClear, onProcess, icon: Icon = Upl
 type AppMode = 'editor' | 'upscaler' | 'angles' | 'video';
 type EditorModel = 'wan-2.6' | 'wan-2.7' | 'qwen-2.0' | 'qwen-lora' | 'seedream';
 type Resolution = '2k' | '4k' | '8k';
-type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance';
+type VideoEngine = 'wavespeed-wan' | 'wavespeed-wan2i2v' | 'wavespeed-pruna' | 'wavespeed-seedance' | 'wavespeed-wan3-prime';
 
 // What we charge the user per generation — set at 2x Wavespeed's own cost
 // for every model, so margin scales correctly no matter what mix of
@@ -172,6 +172,11 @@ const VIDEO_ENGINE_PRICES: Record<VideoEngine, number> = {
   'wavespeed-pruna': 0.20,
   'wavespeed-wan2i2v': 0.10,
   'wavespeed-wan': 0.10,
+  // Placeholder -- Wavespeed's actual per-second cost for this new flagship
+  // model isn't confirmed yet. Set above the current top price (Magnum,
+  // $0.20) as a rough flagship-tier estimate; adjust once real billing data
+  // comes back from Wavespeed for this model.
+  'wavespeed-wan3-prime': 0.25,
 };
 const ANGLES_PRICE = 0.05;
 const UPSCALE_PRICE = 0.02;
@@ -192,6 +197,7 @@ const VIDEO_ENGINE_DISPLAY_NAMES: Record<VideoEngine, string> = {
   'wavespeed-wan': 'Motus',
   'wavespeed-seedance': 'Fluxus',
   'wavespeed-pruna': 'Magnum',
+  'wavespeed-wan3-prime': 'Primus',
 };
 const ANGLES_DISPLAY_NAME = 'Prisma';
 const UPSCALE_DISPLAY_NAME = 'Amplus';
@@ -1001,6 +1007,16 @@ export default function App() {
       endpoint = "/api/wavespeed/wavespeed-ai/wan-2.2/i2v-480p-ultra-fast";
       modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan2i2v'];
       payload.duration = apiVideoDuration >= 8 ? 8 : 5;
+    } else if (videoEngine === 'wavespeed-wan3-prime') {
+      endpoint = "/api/wavespeed/alibaba/wan-3.0-prime/reference-to-video";
+      modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan3-prime'];
+      // "Reference-to-video" takes one or more reference images in an
+      // `images` array rather than the single `image` field the other
+      // (plain image-to-video) engines above use.
+      delete payload.image;
+      payload.images = [cdnUrl];
+      payload.duration = apiVideoDuration > 10 ? 10 : apiVideoDuration < 5 ? 5 : apiVideoDuration;
+      payload.resolution = apiVideoResolution === '480p' ? '720p' : apiVideoResolution;
     }
 
     const triggerResponse = await fetch(attachWebhook(endpoint), {
@@ -1959,7 +1975,7 @@ export default function App() {
                     </Suspense>
                   )}
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     <button onClick={() => setVideoEngine('wavespeed-seedance')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-seedance' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
                       <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-seedance']}</span>
                       <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-seedance'].toFixed(2)}</span>
@@ -1975,6 +1991,10 @@ export default function App() {
                     <button onClick={() => setVideoEngine('wavespeed-wan')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
                       <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan']}</span>
                       <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-wan'].toFixed(2)}</span>
+                    </button>
+                    <button onClick={() => setVideoEngine('wavespeed-wan3-prime')} className={`py-2.5 rounded-xl text-[10px] font-medium uppercase tracking-widest transition-all ${videoEngine === 'wavespeed-wan3-prime' ? 'bg-zinc-100 text-zinc-950 shadow-sm scale-105' : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600'}`}>
+                      <span className="block">{VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan3-prime']}</span>
+                      <span className="block text-[8px] normal-case font-mono mt-0.5 text-zinc-600">${VIDEO_ENGINE_PRICES['wavespeed-wan3-prime'].toFixed(2)}</span>
                     </button>
                   </div>
 
@@ -1992,24 +2012,24 @@ export default function App() {
                     <div className="absolute bottom-4 right-4 text-[9px] font-mono text-zinc-500 uppercase tracking-widest pointer-events-none">Positive Prompt</div>
                   </div>
 
-                  {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v') && (
+                  {(videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan2i2v' || videoEngine === 'wavespeed-wan3-prime') && (
                     <div className="space-y-4 pt-4 border-t border-zinc-800/50">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                            Duration <span>{videoEngine === 'wavespeed-wan2i2v' ? (apiVideoDuration >= 8 ? 8 : 5) : apiVideoDuration}s</span>
+                            Duration <span>{videoEngine === 'wavespeed-wan2i2v' ? (apiVideoDuration >= 8 ? 8 : 5) : videoEngine === 'wavespeed-wan3-prime' ? (apiVideoDuration > 10 ? 10 : apiVideoDuration < 5 ? 5 : apiVideoDuration) : apiVideoDuration}s</span>
                           </label>
-                          <input 
-                            type="range" 
-                            min={videoEngine === 'wavespeed-seedance' ? "2" : videoEngine === 'wavespeed-wan2i2v' ? "5" : "1"} 
-                            max={videoEngine === 'wavespeed-seedance' ? "12" : videoEngine === 'wavespeed-wan2i2v' ? "8" : "20"} 
-                            step={videoEngine === 'wavespeed-wan2i2v' ? "3" : "1"} 
-                            value={apiVideoDuration} 
-                            onChange={(e) => setApiVideoDuration(Number(e.target.value))} 
-                            className="w-full accent-zinc-100" 
+                          <input
+                            type="range"
+                            min={videoEngine === 'wavespeed-seedance' ? "2" : videoEngine === 'wavespeed-wan2i2v' ? "5" : videoEngine === 'wavespeed-wan3-prime' ? "5" : "1"}
+                            max={videoEngine === 'wavespeed-seedance' ? "12" : videoEngine === 'wavespeed-wan2i2v' ? "8" : videoEngine === 'wavespeed-wan3-prime' ? "10" : "20"}
+                            step={videoEngine === 'wavespeed-wan2i2v' ? "3" : "1"}
+                            value={apiVideoDuration}
+                            onChange={(e) => setApiVideoDuration(Number(e.target.value))}
+                            className="w-full accent-zinc-100"
                           />
                         </div>
-                        {(videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-pruna') && (
+                        {(videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-pruna' || videoEngine === 'wavespeed-wan3-prime') && (
                           <div>
                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Resolution</label>
                             <div className="flex gap-2">
