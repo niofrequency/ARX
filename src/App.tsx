@@ -814,7 +814,7 @@ export default function App() {
   const addVideoExtraRefs = (files: FileList | File[]) => {
     const imgFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (imgFiles.length === 0) return;
-    setVideoExtraRefs((prev) => [...prev, ...imgFiles.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
+    setVideoExtraRefs((prev) => [...prev, ...imgFiles.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))].slice(0, 9));
   };
 
   const removeVideoExtraRef = (idx: number) => {
@@ -1036,15 +1036,17 @@ export default function App() {
     } else if (videoEngine === 'wavespeed-wan3-prime') {
       endpoint = "/api/wavespeed/alibaba/wan-3.0-prime/reference-to-video";
       modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan3-prime'];
-      // "Reference-to-video" takes one or more reference images in an
-      // `images` array rather than the single `image` field the other
-      // (plain image-to-video) engines above use -- upload every extra
-      // reference alongside the primary one and send them all.
+      // Per Wavespeed's published schema for this model: reference images go
+      // in `reference_images` (up to 10, not the `image`/`images` fields the
+      // other engines above use), duration is an integer 2-30s, resolution
+      // includes 480p, and audio generation defaults on.
       delete payload.image;
-      const extraCdnUrls = await Promise.all(extraRefFiles.map((f) => uploadVideoAsset(f)));
-      payload.images = [cdnUrl, ...extraCdnUrls];
-      payload.duration = apiVideoDuration > 10 ? 10 : apiVideoDuration < 5 ? 5 : apiVideoDuration;
-      payload.resolution = apiVideoResolution === '480p' ? '720p' : apiVideoResolution;
+      const extraCdnUrls = await Promise.all(extraRefFiles.slice(0, 9).map((f) => uploadVideoAsset(f)));
+      payload.reference_images = [cdnUrl, ...extraCdnUrls];
+      payload.duration = Math.min(30, Math.max(2, apiVideoDuration));
+      payload.resolution = apiVideoResolution;
+      payload.aspect_ratio = selectedRatio === '21:9' ? '16:9' : selectedRatio;
+      payload.enable_audio = true;
     }
 
     const triggerResponse = await fetch(attachWebhook(endpoint), {
@@ -1926,7 +1928,7 @@ export default function App() {
             {mode === 'video' && videoEngine === 'wavespeed-wan3-prime' && (
               <div className="mt-4">
                 <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">
-                  Additional Reference Images <span className="text-zinc-700 normal-case">— optional, add as many as you like</span>
+                  Additional Reference Images <span className="text-zinc-700 normal-case">— optional, {videoExtraRefs.length}/9 (10 total with the primary image)</span>
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {videoExtraRefs.map((ref, idx) => (
@@ -1942,17 +1944,19 @@ export default function App() {
                       </button>
                     </div>
                   ))}
-                  <label className="aspect-square rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600 cursor-pointer flex flex-col items-center justify-center gap-1.5 text-zinc-500 hover:text-zinc-100 transition-all">
-                    <Plus className="w-4 h-4" />
-                    <span className="text-[9px] font-mono uppercase tracking-widest">Add</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => { if (e.target.files) addVideoExtraRefs(e.target.files); e.target.value = ''; }}
-                    />
-                  </label>
+                  {videoExtraRefs.length < 9 && (
+                    <label className="aspect-square rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600 cursor-pointer flex flex-col items-center justify-center gap-1.5 text-zinc-500 hover:text-zinc-100 transition-all">
+                      <Plus className="w-4 h-4" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest">Add</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => { if (e.target.files) addVideoExtraRefs(e.target.files); e.target.value = ''; }}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
             )}
@@ -2088,12 +2092,12 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">
-                            Duration <span>{videoEngine === 'wavespeed-wan2i2v' ? (apiVideoDuration >= 8 ? 8 : 5) : videoEngine === 'wavespeed-wan3-prime' ? (apiVideoDuration > 10 ? 10 : apiVideoDuration < 5 ? 5 : apiVideoDuration) : apiVideoDuration}s</span>
+                            Duration <span>{videoEngine === 'wavespeed-wan2i2v' ? (apiVideoDuration >= 8 ? 8 : 5) : apiVideoDuration}s</span>
                           </label>
                           <input
                             type="range"
-                            min={videoEngine === 'wavespeed-seedance' ? "2" : videoEngine === 'wavespeed-wan2i2v' ? "5" : videoEngine === 'wavespeed-wan3-prime' ? "5" : "1"}
-                            max={videoEngine === 'wavespeed-seedance' ? "12" : videoEngine === 'wavespeed-wan2i2v' ? "8" : videoEngine === 'wavespeed-wan3-prime' ? "10" : "20"}
+                            min={videoEngine === 'wavespeed-seedance' ? "2" : videoEngine === 'wavespeed-wan2i2v' ? "5" : videoEngine === 'wavespeed-wan3-prime' ? "2" : "1"}
+                            max={videoEngine === 'wavespeed-seedance' ? "12" : videoEngine === 'wavespeed-wan2i2v' ? "8" : videoEngine === 'wavespeed-wan3-prime' ? "30" : "20"}
                             step={videoEngine === 'wavespeed-wan2i2v' ? "3" : "1"}
                             value={apiVideoDuration}
                             onChange={(e) => setApiVideoDuration(Number(e.target.value))}
@@ -2104,7 +2108,7 @@ export default function App() {
                           <div>
                             <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Resolution</label>
                             <div className="flex gap-2">
-                                {videoEngine === 'wavespeed-seedance' && (
+                                {(videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan3-prime') && (
                                   <button onClick={() => setApiVideoResolution('480p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${apiVideoResolution === '480p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>480p</button>
                                 )}
                                 <button onClick={() => setApiVideoResolution('720p')} className={`flex-1 py-1.5 rounded-lg text-[9px] font-medium uppercase tracking-widest transition-all ${apiVideoResolution === '720p' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'}`}>720p</button>
@@ -2113,12 +2117,12 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      
-                      {videoEngine === 'wavespeed-seedance' && (
+
+                      {(videoEngine === 'wavespeed-seedance' || videoEngine === 'wavespeed-wan3-prime') && (
                         <div>
                           <label className="block text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-2 flex justify-between">Aspect Ratio</label>
                           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                            {RATIO_OPTIONS.map((opt) => (
+                            {RATIO_OPTIONS.filter(opt => videoEngine !== 'wavespeed-wan3-prime' || opt.label !== '21:9').map((opt) => (
                               <button
                                 key={`vid-ratio-${opt.label}`}
                                 onClick={() => setSelectedRatio(opt.label)}
