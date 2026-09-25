@@ -44,6 +44,8 @@ export interface FailedTaskSnapshot {
   ref2Name?: string;
   ref3Blob?: Blob;
   ref3Name?: string;
+  // Primus (reference-to-video)'s open-ended extra reference images.
+  extraRefBlobs?: { blob: Blob; name: string }[];
   createdAt: number;
 }
 

@@ -345,7 +345,14 @@ export default function App() {
   const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
   const [selectedFile3, setSelectedFile3] = useState<File | null>(null);
   const [previewUrl3, setPreviewUrl3] = useState<string | null>(null);
-  
+
+  // Primus (reference-to-video) takes as many reference images as the
+  // primary upload zone's one slot can't hold -- an open-ended list rather
+  // than a fixed Image 1/2/3 set, since Wavespeed doesn't publish a hard cap
+  // for this model. The primary image above is always images[0]; these are
+  // appended after it.
+  const [videoExtraRefs, setVideoExtraRefs] = useState<{ file: File; preview: string }[]>([]);
+
   const [queue, setQueue] = useState<QueueTask[]>([]);
   const [queueBatchTotal, setQueueBatchTotal] = useState(0);
   const [failedTasks, setFailedTasks] = useState<FailedTask[]>([]);
@@ -800,8 +807,22 @@ export default function App() {
       URL.revokeObjectURL(previewUrl3);
     }
     const url = URL.createObjectURL(file);
-    setSelectedFile3(file); 
-    setPreviewUrl3(url); 
+    setSelectedFile3(file);
+    setPreviewUrl3(url);
+  };
+
+  const addVideoExtraRefs = (files: FileList | File[]) => {
+    const imgFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imgFiles.length === 0) return;
+    setVideoExtraRefs((prev) => [...prev, ...imgFiles.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
+  };
+
+  const removeVideoExtraRef = (idx: number) => {
+    setVideoExtraRefs((prev) => {
+      const target = prev[idx];
+      if (target && target.preview.startsWith('blob:')) URL.revokeObjectURL(target.preview);
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   // Normalizes (EXIF-orientation-corrected, resized, recompressed — see
@@ -961,20 +982,25 @@ export default function App() {
     }
   };
 
-  const triggerWavespeedVideo = async (file: File, internalTaskId: string, priceUsd: number) => {
+  const uploadVideoAsset = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
 
     const uploadRes = await fetch("/api/wavespeed/media/upload/binary", {
       method: "POST",
       headers: { "Authorization": `Bearer ${wavespeedKey}` },
-      body: formData 
+      body: formData
     });
 
     if (!uploadRes.ok) throw new Error('Asset upload failed for video generation.');
     const uploadData = await uploadRes.json();
     const cdnUrl = uploadData.data?.download_url || uploadData.url;
     if (!cdnUrl) throw new Error('Failed to retrieve CDN URL after upload.');
+    return cdnUrl;
+  };
+
+  const triggerWavespeedVideo = async (file: File, extraRefFiles: File[], internalTaskId: string, priceUsd: number) => {
+    const cdnUrl = await uploadVideoAsset(file);
 
     let activePrompt = prompt.trim();
     if (!activePrompt) {
@@ -1012,9 +1038,11 @@ export default function App() {
       modelName = VIDEO_ENGINE_DISPLAY_NAMES['wavespeed-wan3-prime'];
       // "Reference-to-video" takes one or more reference images in an
       // `images` array rather than the single `image` field the other
-      // (plain image-to-video) engines above use.
+      // (plain image-to-video) engines above use -- upload every extra
+      // reference alongside the primary one and send them all.
       delete payload.image;
-      payload.images = [cdnUrl];
+      const extraCdnUrls = await Promise.all(extraRefFiles.map((f) => uploadVideoAsset(f)));
+      payload.images = [cdnUrl, ...extraCdnUrls];
       payload.duration = apiVideoDuration > 10 ? 10 : apiVideoDuration < 5 ? 5 : apiVideoDuration;
       payload.resolution = apiVideoResolution === '480p' ? '720p' : apiVideoResolution;
     }
@@ -1307,6 +1335,14 @@ export default function App() {
       setPreviewUrl3(URL.createObjectURL(f3));
     }
 
+    videoExtraRefs.forEach(r => { if (r.preview.startsWith('blob:')) URL.revokeObjectURL(r.preview); });
+    setVideoExtraRefs(
+      (snapshot.extraRefBlobs || []).map((r, i) => {
+        const f = new File([r.blob], r.name || `reference${i + 2}.png`, { type: r.blob.type });
+        return { file: f, preview: URL.createObjectURL(f) };
+      })
+    );
+
     setMode(snapshot.mode as AppMode);
     setEditorModel(snapshot.editorModel as EditorModel);
     setVideoEngine(snapshot.videoEngine as VideoEngine);
@@ -1489,6 +1525,7 @@ export default function App() {
             ref2Name: selectedFile2?.name,
             ref3Blob: selectedFile3 || undefined,
             ref3Name: selectedFile3?.name,
+            extraRefBlobs: videoExtraRefs.length > 0 ? videoExtraRefs.map(r => ({ blob: r.file, name: r.file.name || 'reference.png' })) : undefined,
             createdAt: Date.now(),
           });
         }
@@ -1502,7 +1539,7 @@ export default function App() {
         } else if (mode === 'angles') {
           triggerResult = await triggerWavespeedAngles(selectedFile, taskId, priceUsd);
         } else if (mode === 'video') {
-          triggerResult = await triggerWavespeedVideo(selectedFile, taskId, priceUsd);
+          triggerResult = await triggerWavespeedVideo(selectedFile, videoExtraRefs.map(r => r.file), taskId, priceUsd);
         } else {
           const base64ImageRaw = await fileToBase64(selectedFile);
           let base64ImageRaw2 = null;
@@ -1885,6 +1922,40 @@ export default function App() {
                 </>
               )}
             </div>
+
+            {mode === 'video' && videoEngine === 'wavespeed-wan3-prime' && (
+              <div className="mt-4">
+                <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">
+                  Additional Reference Images <span className="text-zinc-700 normal-case">— optional, add as many as you like</span>
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {videoExtraRefs.map((ref, idx) => (
+                    <div key={ref.preview} className="relative aspect-square rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 group">
+                      <img src={ref.preview} alt={`Reference ${idx + 2}`} className="absolute inset-0 w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeVideoExtraRef(idx)}
+                        className="absolute top-1.5 right-1.5 p-1.5 bg-zinc-900/90 text-zinc-400 hover:text-red-400 hover:bg-red-950/50 rounded-full border border-zinc-700/50 transition-all shadow-lg opacity-0 group-hover:opacity-100"
+                        title="Remove reference image"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <label className="aspect-square rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 hover:border-zinc-600 cursor-pointer flex flex-col items-center justify-center gap-1.5 text-zinc-500 hover:text-zinc-100 transition-all">
+                    <Plus className="w-4 h-4" />
+                    <span className="text-[9px] font-mono uppercase tracking-widest">Add</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { if (e.target.files) addVideoExtraRefs(e.target.files); e.target.value = ''; }}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </section>
 
           <section>
